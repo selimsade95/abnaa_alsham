@@ -1,0 +1,117 @@
+{
+  "theme": "Light theme only, RTL (Right-to-Left) Arabic layout.",
+  "typography": {
+    "font_family": "Tajawal, sans-serif",
+    "headings": {
+      "font_weight": "700",
+      "h1": "text-3xl md:text-4xl text-gray-900 tracking-tight",
+      "h2": "text-2xl md:text-3xl text-gray-900 tracking-tight",
+      "h3": "text-xl md:text-2xl text-gray-900",
+      "h4": "text-lg md:text-xl text-gray-900 font-medium"
+    },
+    "body": {
+      "font_weight": "400",
+      "base": "text-base text-gray-700",
+      "small": "text-sm text-gray-500",
+      "tiny": "text-xs text-gray-400 uppercase tracking-widest"
+    },
+    "instructions_to_main_agent": "Ensure the document dir='rtl' attribute is set on the HTML tag. Import Tajawal from Google Fonts in index.html or global CSS. Use logical CSS properties in Tailwind (e.g., ms-, me-, ps-, pe-, text-start, text-end) to guarantee RTL compatibility natively without writing negative margins. Avoid Inter or generic fonts; Tajawal adds the required professional Arabic touch."
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#04CDF9",
+      "foreground": "#FFFFFF",
+      "hover": "#03A9D1",
+      "light": "#E0F9FF"
+    },
+    "background": {
+      "app": "#F8FAFC",
+      "card": "#FFFFFF",
+      "overlay": "rgba(17, 24, 39, 0.4)"
+    },
+    "text": {
+      "primary": "#111827",
+      "secondary": "#6B7280",
+      "muted": "#9CA3AF"
+    },
+    "border": {
+      "DEFAULT": "#E5E7EB",
+      "focus": "#04CDF9"
+    },
+    "status": {
+      "success": "#16A34A",
+      "warning": "#F59E0B",
+      "error": "#DC2626",
+      "info": "#2563EB"
+    },
+    "instructions_to_main_agent": "User explicitly requested to NOT make the entire UI cyan. The primary color #04CDF9 should ONLY be used for primary buttons, active navigation states, selected checkboxes/radios, and small visual accents (like a thin border-top on a card). Use background.app for page background and background.card for containers."
+  },
+  "layouts": {
+    "sidebar": "Fixed on the right side (RTL). Desktop: w-64, bg-white, border-l border-gray-200. Mobile: hidden behind a hamburger menu (Sheet component from shadcn). Includes the IQRA logo at the top.",
+    "header": "Sticky at the top, h-16, bg-white, border-b border-gray-200, flex items-center justify-between px-4 sm:px-6. Contains user profile dropdown and mobile menu toggle.",
+    "page_container": "Flex-1 flex flex-col overflow-hidden. Content wrapper: p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6.",
+    "dashboard_grid": "Grid of 4 Stat Cards: grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6.",
+    "instructions_to_main_agent": "Ensure the sidebar uses border-l (or border-e in RTL) to separate from main content. Add padding to avoid overlapping. Provide plenty of whitespace inside cards (p-6). Use subtle roundness (rounded-xl) and small shadows (shadow-sm)."
+  },
+  "components": {
+    "cards": {
+      "style": "bg-white border border-gray-200 rounded-xl shadow-sm p-6",
+      "hover": "hover:shadow-md transition-shadow duration-200"
+    },
+    "buttons": {
+      "primary": "bg-[#04CDF9] text-white hover:bg-[#03A9D1] rounded-lg px-4 py-2 font-medium transition-colors focus:ring-2 focus:ring-[#04CDF9] focus:ring-offset-2",
+      "secondary": "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 rounded-lg px-4 py-2 font-medium transition-colors"
+    },
+    "inputs": {
+      "style": "bg-white border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#04CDF9] focus:border-transparent transition-all",
+      "labels": "block text-sm font-medium text-gray-700 mb-1"
+    },
+    "tables": {
+      "style": "w-full text-sm text-right rtl:text-right text-gray-500",
+      "header": "text-xs text-gray-700 uppercase bg-gray-50 border-b border-gray-200",
+      "row": "bg-white border-b hover:bg-gray-50 transition-colors"
+    },
+    "tabs_or_accordions": {
+      "usage": "Use for the multi-section student registration form to prevent cognitive overload. Vertical tabs are preferred for desktop, accordion for mobile."
+    },
+    "instructions_to_main_agent": "Use Shadcn UI for inputs, buttons, tables, and dialogs. Strip any dark mode classes. Use logical classes for paddings and margins to support RTL properly."
+  },
+  "specific_views": {
+    "login": "Two-column layout on desktop: Left (or right in RTL) column with a beautiful geometric Islamic pattern image or school building, and a white card centered in the other column. Minimal form, IQRA logo at the top.",
+    "student_registration_form": "Complex form. Group into logical sections: 1. Student Info, 2. Siblings (Dynamic Table), 3. Father, 4. Mother, 5. General Info, 6. Previous Education (Dynamic Table), 7. Islamic Legal Education, 8. Best Achievement, 9. Other Info/Notes, 10. Signing section. Since it's huge, consider a stepper or stacked card layout with clear anchor links or vertical tabs.",
+    "print_a4_view": {
+      "css": "@media print { body { background: white; } .no-print { display: none !important; } .print-only { display: block !important; } .page-break { page-break-before: always; } @page { size: A4; margin: 20mm; } }",
+      "layout": "Must look like an official A4 document. Remove all shadows and rounded corners for print. Use standard black/gray text. Include the IQRA logo in the header and formal signature lines at the bottom."
+    }
+  },
+  "visual_enhancers": {
+    "borders": "Use subtle 1px borders (border-gray-200) instead of heavy shadows to define areas.",
+    "whitespace": "Generous spacing. Use gap-6 or gap-8 between major sections. Cards should have p-6 minimum.",
+    "icons": "Use lucide-react. They must visually balance the Arabic typography. Remember to flip directional icons (like chevrons) when in RTL.",
+    "interactions": "Hover states on all buttons and table rows. Focus rings on all inputs."
+  },
+  "image_urls": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1573765727997-e02883182ba7?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjV8MHwxfHNlYXJjaHwyfHxpc2xhbWljJTIwZ2VvbWV0cmljJTIwcGF0dGVybnxlbnwwfHx8fDE3ODc1NzIzMzB8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Intricate blue and yellow geometric tile mosaic on a domed ceiling. Use as a side cover image for the login page."
+    },
+    "student_placeholder": {
+      "url": "https://images.pexels.com/photos/38245944/pexels-photo-38245944.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "A young schoolboy in uniform. Use as avatar placeholder in student detail views."
+    }
+  },
+  "accessibility_and_testing": {
+    "testing": "All interactive and key informational elements MUST include a 'data-testid' attribute. Format: kebab-case, role-based. e.g., data-testid='login-submit-button', data-testid='add-sibling-btn'.",
+    "accessibility": "Ensure contrast ratios for the #04CDF9 primary color. For white text on #04CDF9, ensure the font is bold/large enough, or slightly darken the cyan for hover states to improve contrast. Support standard keyboard navigation."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You are building a production-ready, minimal but polished app in Arabic ONLY.",
+    "RTL configuration is CRITICAL. You must set dir='rtl' on the HTML/root element and use Tailwind's logical properties (start/end) instead of left/right where applicable. Shadcn components might need minor manual RTL tweaking (like margin-left vs margin-right on icons).",
+    "Use 'Tajawal' font for a professional look. Import it via Google Fonts.",
+    "Do NOT overuse the primary cyan color. Keep the app white/slate, using cyan only for primary actions.",
+    "Ensure the Print view strictly follows A4 dimensions and hides the UI elements (sidebar, buttons).",
+    "Do NOT use transparent backgrounds for overlays, dropdowns, or modals. Use bg-white with shadow-lg.",
+    "Use purely .js files (with React + Tailwind), no TypeScript.",
+    "Add data-testid to every actionable element."
+  ]
+}
