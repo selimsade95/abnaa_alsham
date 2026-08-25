@@ -2,6 +2,9 @@ export const emptyStudent = () => ({
   student: {
     orphan: false,
     orphanOf: "",
+    orphanDocType: "",
+    orphanDocDescription: "",
+    registrationPath: "خاص",
     previousClass: "",
     newClass: "",
     status: "resident",
@@ -21,25 +24,20 @@ export const emptyStudent = () => ({
   siblings: [],
   father: { name: "", alive: true, phone: "", address: "", profession: "", whatsapp: "", telegram: "" },
   mother: { name: "", alive: true, phone: "", address: "", profession: "", whatsapp: "", telegram: "" },
-  general: {
-    whatsappGroupPhone: "",
-    emergencyContact: { name: "", relation: "", phone: "" },
-  },
+  general: { whatsappGroupPhone: "", emergencyContact: { name: "", relation: "", phone: "" } },
   previousEducation: [],
   islamicLegalEducation: "",
   bestAchievement: "",
   otherInfo: { familySmokers: false, transportation: "", notes: "" },
   signing: { parentName: "", relationToStudent: "" },
+  fees: { academicYear: "", totalPayable: 0 },
+  initialPayment: { amount: 0, semester: "full_year", paymentDate: "" },
 });
 
 export const LANGUAGES = ["العربية", "التركية", "الإنجليزية", "الكردية", "أخرى"];
-
-export const STATUS_LABELS = {
-  immigrant: "مهاجر",
-  displaced: "نازح",
-  resident: "مقيم",
-};
-
+export const STATUS_LABELS = { immigrant: "مهاجر", displaced: "نازح", resident: "مقيم" };
 export const GENDER_LABELS = { male: "ذكر", female: "أنثى" };
-
 export const ORPHAN_OF_LABELS = { mother: "الأم", father: "الأب", both: "كلاهما" };
+export const REGISTRATION_PATHS = ["خاص", "القرية", "الايتام"];
+export const ORPHAN_DOC_TYPES = ["شهادة وفاة", "دفتر عائلة", "وثيقة محكمة", "أخرى"];
+export const SEMESTER_LABELS = { first: "الفصل الأول", second: "الفصل الثاني", full_year: "السنة كاملة" };

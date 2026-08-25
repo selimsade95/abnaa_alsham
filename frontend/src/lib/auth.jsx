@@ -12,12 +12,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const token = localStorage.getItem("iqra_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    api
-      .get("/auth/me")
+    if (!token) { setLoading(false); return; }
+    api.get("/auth/me")
       .then((res) => {
         setUser(res.data);
         localStorage.setItem("iqra_user", JSON.stringify(res.data));
@@ -37,20 +33,23 @@ export function AuthProvider({ children }) {
     setUser(res.data.user);
     return res.data.user;
   };
-
   const logout = () => {
     localStorage.removeItem("iqra_token");
     localStorage.removeItem("iqra_user");
     setUser(null);
   };
+  const has = (perm) => (user?.permissions || []).includes(perm);
+  const hasAny = (list) => (list || []).some((p) => has(p));
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, has, hasAny }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
+export function useAuth() { return useContext(AuthContext); }
+export function usePermission(perm) {
+  const { has } = useAuth();
+  return has(perm);
 }
