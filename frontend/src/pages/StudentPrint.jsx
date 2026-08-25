@@ -56,6 +56,9 @@ export default function StudentPrint() {
 
         <Section title="معلومات الطالب">
           <div className="grid grid-cols-2 gap-x-4">
+            <Row label="كود الطالب" value={data.code} />
+            <Row label="الصف الحالي" value={data.currentClass?.name ? `${data.currentClass.name}${data.currentClass.section ? " — " + data.currentClass.section : ""}` : s.newClass} />
+            <Row label="المعلم" value={data.currentTeacher} />
             <Row label="الاسم الكامل" value={s.fullName} />
             <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
             <Row label="مكان الميلاد" value={s.birthPlace} />

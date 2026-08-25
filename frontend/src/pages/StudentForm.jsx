@@ -29,14 +29,20 @@ export default function StudentForm({ mode }) {
   const [saving, setSaving] = useState(false);
   const [hobbiesInput, setHobbiesInput] = useState("");
   const [errors, setErrors] = useState({});
+  const [classes, setClasses] = useState([]);
+  const [showFullInfo, setShowFullInfo] = useState(false);
+
+  useEffect(() => { api.get("/classes", { params: { limit: 500 } }).then((r) => setClasses(r.data.data)).catch(() => {}); }, []);
 
   useEffect(() => {
     if (mode === "edit" && id) {
       api.get(`/students/${id}`).then((r) => {
         const d = r.data;
         if (d.student?.birthdate) d.student.birthdate = d.student.birthdate.slice(0, 10);
-        const merged = { ...emptyStudent(), ...d, student: { ...emptyStudent().student, ...d.student } };
-        // fees can arrive with computed fields; keep only academicYear + totalPayable
+        const merged = { ...emptyStudent(), ...d,
+          student: { ...emptyStudent().student, ...d.student },
+          fullInfo: { ...emptyStudent().fullInfo, ...(d.fullInfo || {}) },
+          currentClassId: d.currentClassId || "" };
         merged.fees = { academicYear: d.fees?.academicYear || "", totalPayable: d.fees?.totalPayable || 0 };
         setData(merged);
         setHobbiesInput((d.student?.hobbies || []).join("، "));
@@ -142,7 +148,17 @@ export default function StudentForm({ mode }) {
           </Field>
           <Field label="الصف السابق"><input className={inputCls} value={s.previousClass} onChange={(e) => update("student.previousClass", e.target.value)} /></Field>
           <Field label="الصف الجديد" required>
-            <input data-testid="input-newClass" className={inputCls} value={s.newClass} onChange={(e) => update("student.newClass", e.target.value)} />
+            {classes.length > 0 ? (
+              <>
+                <select data-testid="select-currentClass" className={inputCls} value={data.currentClassId || ""} onChange={(e) => { const cid = e.target.value; update("currentClassId", cid); const c = classes.find((x) => x.id === cid); if (c) update("student.newClass", c.name); }}>
+                  <option value="">— اختر صفاً —</option>
+                  {classes.map((c) => <option key={c.id} value={c.id}>{c.name}{c.section ? ` — ${c.section}` : ""}{c.academicYear ? ` — ${c.academicYear}` : ""}</option>)}
+                </select>
+                <input data-testid="input-newClass" className={inputCls + " mt-2"} value={s.newClass} onChange={(e) => update("student.newClass", e.target.value)} placeholder="أو اكتب الصف يدوياً" />
+              </>
+            ) : (
+              <input data-testid="input-newClass" className={inputCls} value={s.newClass} onChange={(e) => update("student.newClass", e.target.value)} />
+            )}
             {errors.newClass && <p className="text-xs text-red-600 mt-1">{errors.newClass}</p>}
           </Field>
           <Field label="الوضع" required>
@@ -327,6 +343,51 @@ export default function StudentForm({ mode }) {
 
       <Section title="التعليم الشرعي"><textarea rows={4} className={inputCls} value={data.islamicLegalEducation} onChange={(e) => update("islamicLegalEducation", e.target.value)} /></Section>
       <Section title="أفضل إنجاز للطالب"><textarea rows={4} className={inputCls} value={data.bestAchievement} onChange={(e) => update("bestAchievement", e.target.value)} /></Section>
+
+      {/* Full Information (Excel-based) — collapsible */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <button type="button" onClick={() => setShowFullInfo((v) => !v)} className="w-full flex items-center justify-between p-6 text-right" data-testid="toggle-fullinfo-btn">
+          <span className="text-lg font-semibold text-gray-900">معلومات إضافية (سجل تفصيلي)</span>
+          <span className="text-sm text-[#036A87]">{showFullInfo ? "إخفاء" : "إظهار"}</span>
+        </button>
+        {showFullInfo && (
+          <div className="px-6 pb-6 border-t border-gray-100 pt-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                ["fullInfo.serial", "م"], ["fullInfo.classSerial", "تسلسل صفي"], ["fullInfo.serial2", "م2"],
+                ["fullInfo.department", "القسم"], ["fullInfo.generalRegNumber", "رقم السجل العام"], ["fullInfo.ministerialNumber", "الرقم الوزاري"],
+                ["fullInfo.fatherFirstName", "اسم الأب"], ["fullInfo.familyName", "النسبة"], ["fullInfo.secondName", "الاسم الثاني"],
+                ["fullInfo.tripleName", "الاسم الثلاثي"], ["fullInfo.motherTripleName", "اسم الأم الثلاثي"], ["fullInfo.grandfatherName", "اسم الجد"],
+                ["fullInfo.ageYears", "العمر بالسنوات"], ["fullInfo.nationality", "الجنسية"], ["fullInfo.familyStatus", "حالة الطالب الأسرية"],
+                ["fullInfo.primaryLanguage", "لغة الطالب"], ["fullInfo.distinctiveMarks", "علامات مميزة"], ["fullInfo.bloodType", "زمرة الدم"],
+                ["fullInfo.familySize", "عدد أفراد العائلة"], ["fullInfo.siblingsInSchool", "عدد الإخوة في المدرسة"], ["fullInfo.livesWith", "مع من يسكن الطالب"],
+                ["fullInfo.housingGovernorate", "المحافظة"], ["fullInfo.housingRegion", "المنطقة"], ["fullInfo.housingDistrict", "الناحية"],
+                ["fullInfo.housingTown", "البلدة"], ["fullInfo.recordNumber", "رقم المحضر"], ["fullInfo.housingType", "نوع المسكن"],
+                ["fullInfo.housingOwnership", "ملكية السكن (ملك/إيجار)"],
+                ["fullInfo.fatherMaritalStatus", "الحالة الاجتماعية للأب"], ["fullInfo.fatherSpecialty", "اختصاص الأب في مهنته"],
+                ["fullInfo.motherMaritalStatus", "الحالة الاجتماعية للأم"], ["fullInfo.motherSpecialty", "اختصاص الأم في مهنتها"],
+                ["fullInfo.originalGovernorate", "المحافظة الأصلية"], ["fullInfo.registrationAmana", "الأمانة"],
+                ["fullInfo.registrationPlace", "مكان القيد"], ["fullInfo.registrationNumber", "رقم القيد"],
+                ["fullInfo.enrollmentDate", "تاريخ الالتحاق بالمدرسة"], ["fullInfo.enrollmentClass", "صف الالتحاق"], ["fullInfo.branch", "الفرع"],
+                ["fullInfo.class2", "الصف2"],
+                ["fullInfo.height", "قياس الطول"], ["fullInfo.width", "قياس العرض"], ["fullInfo.footSize", "قياس القدم"],
+                ["fullInfo.uniformSize", "قياس الثوب"], ["fullInfo.weight", "الوزن"],
+              ].map(([path, label]) => (
+                <Field key={path} label={label}>
+                  <input className={inputCls} value={path.split(".").reduce((o, k) => o?.[k] ?? "", data)} onChange={(e) => update(path, e.target.value)} />
+                </Field>
+              ))}
+              <Field label="أبناء كادر">
+                <div className="flex items-center gap-6 pt-2">
+                  <Radio name="staffChildren" checked={!data.fullInfo?.staffChildren} onChange={() => update("fullInfo.staffChildren", false)} label="لا" />
+                  <Radio name="staffChildren" checked={!!data.fullInfo?.staffChildren} onChange={() => update("fullInfo.staffChildren", true)} label="نعم" />
+                </div>
+              </Field>
+            </div>
+          </div>
+        )}
+      </div>
+
       <Section title="معلومات أخرى">
         <Field label="هل يوجد مدخنون في أسرة الطالب؟">
           <div className="flex items-center gap-6 pt-2">

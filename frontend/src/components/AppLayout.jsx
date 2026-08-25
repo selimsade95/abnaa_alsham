@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { LayoutDashboard, Users as UsersIcon, GraduationCap, LogOut, Menu, X, ShieldCheck, Wallet } from "lucide-react";
+import { LayoutDashboard, Users as UsersIcon, GraduationCap, LogOut, Menu, X, ShieldCheck, Wallet, BookOpen, Presentation, Settings as SettingsIcon } from "lucide-react";
 
 export default function AppLayout() {
   const { user, logout, has } = useAuth();
@@ -11,9 +11,12 @@ export default function AppLayout() {
   const NAV = [
     { to: "/dashboard", label: "الرئيسية", icon: LayoutDashboard, testid: "nav-dashboard", show: true },
     { to: "/students", label: "الطلاب", icon: GraduationCap, testid: "nav-students", show: has("students.view") },
+    { to: "/teachers", label: "المعلمون", icon: Presentation, testid: "nav-teachers", show: has("teachers.view") },
+    { to: "/classes", label: "الصفوف", icon: BookOpen, testid: "nav-classes", show: has("classes.view") },
     { to: "/payments", label: "المدفوعات", icon: Wallet, testid: "nav-payments", show: has("payments.view") },
     { to: "/users", label: "المستخدمون", icon: UsersIcon, testid: "nav-users", show: has("users.view") },
     { to: "/roles", label: "الأدوار", icon: ShieldCheck, testid: "nav-roles", show: has("roles.view") },
+    { to: "/settings", label: "الإعدادات", icon: SettingsIcon, testid: "nav-settings", show: has("settings.codeGeneration.view") },
   ];
 
   const handleLogout = () => { logout(); navigate("/login"); };

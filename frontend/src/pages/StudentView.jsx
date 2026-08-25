@@ -131,9 +131,12 @@ export default function StudentView() {
         <div>
           <button onClick={() => nav("/students")} className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"><ArrowRight className="h-4 w-4" /> رجوع</button>
           <h1 className="text-3xl font-bold text-gray-900">{s.fullName}</h1>
-          <p className="text-sm text-gray-500 mt-1">{GENDER_LABELS[s.gender]} • {STATUS_LABELS[s.status]} • مسار: {s.registrationPath || "—"}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            كود: <span className="font-mono">{data.code || "—"}</span> • {GENDER_LABELS[s.gender]} • {STATUS_LABELS[s.status]} • مسار: {s.registrationPath || "—"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          {has("students.fullInformation.view") && <button onClick={() => nav(`/students/${id}/full-information`)} data-testid="view-fullinfo-btn" className="inline-flex items-center gap-2 rounded-lg border border-[#04CDF9] bg-brand-light text-[#036A87] px-3 py-2 text-sm hover:bg-brand-light/70">المعلومات الكاملة</button>}
           {has("students.print") && <button onClick={() => window.open(`/students/${id}/print`, "_blank")} data-testid="view-print-btn" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><Printer className="h-4 w-4" /> طباعة</button>}
           {has("students.update") && <button onClick={() => nav(`/students/${id}/edit`)} data-testid="view-edit-btn" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><Pencil className="h-4 w-4" /> تعديل</button>}
           {has("students.delete") && <button onClick={() => setConfirm(true)} data-testid="view-delete-btn" className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm hover:bg-red-100"><Trash2 className="h-4 w-4" /> حذف</button>}
