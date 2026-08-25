@@ -47,7 +47,7 @@ export default function StudentFullInfo() {
           <p className="text-sm text-gray-500 mt-1">المعلومات الكاملة • كود الطالب: <span className="font-mono">{data.code || "—"}</span></p>
         </div>
         {has("students.update") && (
-          <button onClick={() => nav(`/students/${id}/edit`)} data-testid="fullinfo-edit-btn" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><Pencil className="h-4 w-4" /> تعديل</button>
+          <button onClick={() => nav(`/students/${id}/full-information/edit`)} data-testid="fullinfo-edit-btn" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"><Pencil className="h-4 w-4" /> تعديل المعلومات الكاملة</button>
         )}
       </div>
 

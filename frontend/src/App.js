@@ -13,8 +13,10 @@ import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
 import Payments from "@/pages/Payments";
 import Teachers from "@/pages/Teachers";
+import TeacherForm from "@/pages/TeacherForm";
 import Classes from "@/pages/Classes";
 import Settings from "@/pages/Settings";
+import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
 
 function Protected({ children, perm }) {
@@ -46,7 +48,10 @@ function App() {
             <Route path="/students/:id" element={<Protected perm="students.view"><StudentView /></Protected>} />
             <Route path="/students/:id/edit" element={<Protected perm="students.update"><StudentForm mode="edit" /></Protected>} />
             <Route path="/students/:id/full-information" element={<Protected perm="students.fullInformation.view"><StudentFullInfo /></Protected>} />
+            <Route path="/students/:id/full-information/edit" element={<Protected perm="students.update"><StudentFullInfoEdit /></Protected>} />
             <Route path="/teachers" element={<Protected perm="teachers.view"><Teachers /></Protected>} />
+            <Route path="/teachers/new" element={<Protected perm="teachers.create"><TeacherForm mode="create" /></Protected>} />
+            <Route path="/teachers/:id/edit" element={<Protected perm="teachers.update"><TeacherForm mode="edit" /></Protected>} />
             <Route path="/classes" element={<Protected perm="classes.view"><Classes /></Protected>} />
             <Route path="/payments" element={<Protected perm="payments.view"><Payments /></Protected>} />
             <Route path="/users" element={<Protected perm="users.view"><Users /></Protected>} />

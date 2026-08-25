@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { Plus, Trash2, Pencil, Loader2, Search, Filter } from "lucide-react";
 import { toast } from "sonner";
@@ -7,6 +8,7 @@ import { GENDER_LABELS } from "@/lib/studentDefaults";
 
 export default function Teachers() {
   const { has } = useAuth();
+  const nav = useNavigate();
   const [items, setItems] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
@@ -14,7 +16,6 @@ export default function Teachers() {
   const [debQ, setDebQ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ gender: "", employmentStatus: "", specialization: "" });
-  const [editing, setEditing] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
 
   useEffect(() => { const t = setTimeout(() => setDebQ(q.trim()), 300); return () => clearTimeout(t); }, [q]);
@@ -32,18 +33,6 @@ export default function Teachers() {
   };
   useEffect(() => { load(1); /* eslint-disable-next-line */ }, [debQ, filters]);
 
-  const openNew = () => setEditing({ id: null, fullName: "", gender: "male", phone: "", address: "", specialization: "", qualification: "", employmentStatus: "active", notes: "" });
-  const openEdit = (t) => setEditing({ ...t });
-
-  const save = async (e) => {
-    e.preventDefault();
-    const { id, code, createdAt, updatedAt, ...body } = editing;
-    try {
-      if (id) await api.put(`/teachers/${id}`, body);
-      else await api.post("/teachers", body);
-      toast.success("تم الحفظ"); setEditing(null); load(pagination.page);
-    } catch (e) { toast.error(e?.response?.data?.detail || "فشل الحفظ"); }
-  };
   const doDelete = async () => {
     try { await api.delete(`/teachers/${confirmId}`); toast.success("تم الحذف"); setConfirmId(null); load(pagination.page); }
     catch (e) { toast.error(e?.response?.data?.detail || "فشل الحذف"); }
@@ -57,7 +46,7 @@ export default function Teachers() {
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div><h1 className="text-3xl font-bold text-gray-900">المعلمون</h1><p className="text-sm text-gray-500 mt-1">إدارة سجلات المعلمين</p></div>
         {has("teachers.create") && (
-          <button onClick={openNew} data-testid="add-teacher-btn" className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"><Plus className="h-4 w-4" /> إضافة معلم</button>
+          <button onClick={() => nav("/teachers/new")} data-testid="add-teacher-btn" className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"><Plus className="h-4 w-4" /> إضافة معلم</button>
         )}
       </div>
 
@@ -122,7 +111,7 @@ export default function Teachers() {
                     <td className="px-4 py-3"><span className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${t.employmentStatus === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}>{t.employmentStatus === "active" ? "نشط" : "غير نشط"}</span></td>
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
-                        {has("teachers.update") && <button onClick={() => openEdit(t)} data-testid={`edit-teacher-${t.id}`} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"><Pencil className="h-4 w-4" /></button>}
+                        {has("teachers.update") && <button onClick={() => nav(`/teachers/${t.id}/edit`)} data-testid={`edit-teacher-${t.id}`} className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"><Pencil className="h-4 w-4" /></button>}
                         {has("teachers.delete") && <button onClick={() => setConfirmId(t.id)} data-testid={`delete-teacher-${t.id}`} className="p-1.5 rounded-md text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>}
                       </div>
                     </td>
@@ -132,44 +121,16 @@ export default function Teachers() {
           </table>
         </div>
 
-        <Pagination page={pagination.page} total={pagination.totalPages} onPage={(p) => load(p)} />
-      </div>
-
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 border border-gray-200 my-8">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{editing.id ? "تعديل معلم" : "إضافة معلم"}</h3>
-            <form onSubmit={save} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">الاسم الكامل *</label>
-                  <input required data-testid="teacher-name" value={editing.fullName} onChange={(e) => setEditing({ ...editing, fullName: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">الجنس</label>
-                  <select value={editing.gender} onChange={(e) => setEditing({ ...editing, gender: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2">
-                    <option value="male">ذكر</option><option value="female">أنثى</option>
-                  </select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">الهاتف</label>
-                  <input value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">التخصص</label>
-                  <input value={editing.specialization} onChange={(e) => setEditing({ ...editing, specialization: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">المؤهل</label>
-                  <input value={editing.qualification} onChange={(e) => setEditing({ ...editing, qualification: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">الحالة الوظيفية</label>
-                  <select value={editing.employmentStatus} onChange={(e) => setEditing({ ...editing, employmentStatus: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2">
-                    <option value="active">نشط</option><option value="inactive">غير نشط</option>
-                  </select></div>
-                <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">العنوان</label>
-                  <input value={editing.address} onChange={(e) => setEditing({ ...editing, address: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-                <div className="md:col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">ملاحظات</label>
-                  <textarea rows={2} value={editing.notes} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2" /></div>
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">إلغاء</button>
-                <button type="submit" data-testid="save-teacher-btn" className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]">حفظ</button>
-              </div>
-            </form>
+        {pagination.totalPages > 1 && (
+          <div className="p-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-xs text-gray-500">صفحة {pagination.page} من {pagination.totalPages}</div>
+            <div className="flex gap-1">
+              <button disabled={pagination.page <= 1} onClick={() => load(pagination.page - 1)} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40">السابق</button>
+              <button disabled={pagination.page >= pagination.totalPages} onClick={() => load(pagination.page + 1)} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40">التالي</button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {confirmId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
@@ -183,19 +144,6 @@ export default function Teachers() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Pagination({ page, total, onPage }) {
-  if (total <= 1) return null;
-  return (
-    <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-      <div className="text-xs text-gray-500">صفحة {page} من {total}</div>
-      <div className="flex gap-1">
-        <button disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40">السابق</button>
-        <button disabled={page >= total} onClick={() => onPage(page + 1)} className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40">التالي</button>
-      </div>
     </div>
   );
 }
