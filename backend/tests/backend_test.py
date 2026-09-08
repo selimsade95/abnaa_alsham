@@ -12,11 +12,15 @@ from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    # fallback to frontend/.env
     from pathlib import Path
-    for line in Path("/app/frontend/.env").read_text().splitlines():
-        if line.startswith("REACT_APP_BACKEND_URL="):
-            BASE_URL = line.split("=", 1)[1].strip().strip('"').rstrip("/")
+    env_path = Path(__file__).resolve().parents[2] / "frontend" / ".env"
+    if env_path.exists():
+        for line in env_path.read_text().splitlines():
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                BASE_URL = line.split("=", 1)[1].strip().strip('"').rstrip("/")
+                break
+if not BASE_URL:
+    raise RuntimeError("Set REACT_APP_BACKEND_URL or add it to frontend/.env before running API tests.")
 API = f"{BASE_URL}/api"
 
 ADMIN_USER = "admin"
@@ -185,7 +189,8 @@ class TestTeachers:
         second_seq = int(r.json()["code"].split("-")[-1])
         assert second_seq == first_seq + 1
         # cleanup handled at end
-        requests.delete(f"{API}/teachers/{r.json()['id']}", headers=admin_headers)
+        requests.delete(f"{API}/teachers/{r.json()['id']}", headers=admin_headers,
+                json={"reason": "اختبار تنظيف"})
 
     def test_list_teachers_pagination_and_search(self, admin_headers, created_teacher):
         r = requests.get(f"{API}/teachers?search=TEST&page=1&limit=5", headers=admin_headers)
@@ -239,9 +244,16 @@ class TestClasses:
         assert "pagination" in j
         assert any(c["id"] == created_class["id"] for c in j["data"])
 
-    def test_delete_teacher_with_class_blocked(self, admin_headers, created_teacher):
-        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=admin_headers)
-        assert r.status_code == 400
+    def test_deactivate_teacher_with_class(self, admin_headers, created_teacher):
+        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=admin_headers,
+                    json={"reason": "انتهاء الحاجة للاختبار"})
+        assert r.status_code == 200
+        assert r.json()["deactivated"] is True
+        # Inactive teachers are hidden by default but are available on request.
+        assert not any(t["id"] == created_teacher["id"] for t in
+                       requests.get(f"{API}/teachers", headers=admin_headers).json()["data"])
+        assert any(t["id"] == created_teacher["id"] for t in
+                   requests.get(f"{API}/teachers?employmentStatus=inactive", headers=admin_headers).json()["data"])
 
 
 # ---------- Students CRUD ----------
@@ -312,6 +324,14 @@ class TestStudents:
         assert d["fees"]["remaining"] == 800
         assert "currentClass" in d
 
+    def test_public_student_validation(self, created_student):
+        r = requests.get(f"{API}/public/students/{created_student['id']}/validation")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["code"] == created_student["code"]
+        assert d["fullName"] == created_student["student"]["fullName"]
+        assert d["isActive"] is True
+
     def test_get_full_information(self, admin_headers, created_student):
         r = requests.get(f"{API}/students/{created_student['id']}/full-information",
                          headers=admin_headers)
@@ -335,6 +355,21 @@ class TestStudents:
         assert r.json()["code"] == orig_code
         assert r.json()["fullInfo"]["note"] == "excel-field-updated"
 
+    def test_reactivate_student(self, admin_headers, created_student):
+        sid = created_student["id"]
+        r = requests.delete(f"{API}/students/{sid}", headers=admin_headers,
+                    json={"reason": "اختبار التعطيل"})
+        assert r.status_code == 200
+        inactive = requests.get(f"{API}/students?status=inactive", headers=admin_headers)
+        inactive_student = next(s for s in inactive.json()["data"] if s["id"] == sid)
+        assert inactive_student["deactivationReason"] == "اختبار التعطيل"
+
+        r = requests.post(f"{API}/students/{sid}/reactivate", headers=admin_headers)
+        assert r.status_code == 200
+        assert r.json()["reactivated"] is True
+        active = requests.get(f"{API}/students", headers=admin_headers)
+        assert any(s["id"] == sid for s in active.json()["data"])
+
 
 # ---------- Payments ----------
 
@@ -355,6 +390,12 @@ class TestPayments:
         assert isinstance(arr, list) and len(arr) >= 1
         p = arr[0]
         assert "studentName" in p and "studentCode" in p and "createdByName" in p
+
+        payments = requests.get(f"{API}/payments", headers=admin_headers)
+        assert payments.status_code == 200
+        created_payment = next(p for p in payments.json() if p["student"] == created_student["id"])
+        assert created_payment["totalPayable"] == 1000
+        assert created_payment["totalRemaining"] == 800
 
 
 # ---------- Orphan documents ----------
@@ -404,12 +445,14 @@ class TestOrphanDocument:
 class TestRBAC:
     def test_reg_staff_cannot_delete_student(self, reg_staff_headers, created_student):
         headers, _ = reg_staff_headers
-        r = requests.delete(f"{API}/students/{created_student['id']}", headers=headers)
+        r = requests.delete(f"{API}/students/{created_student['id']}", headers=headers,
+                    json={"reason": "اختبار الصلاحيات"})
         assert r.status_code == 403
 
     def test_reg_staff_cannot_delete_teacher(self, reg_staff_headers, created_teacher):
         headers, _ = reg_staff_headers
-        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=headers)
+        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=headers,
+                    json={"reason": "اختبار الصلاحيات"})
         assert r.status_code == 403
 
 
@@ -428,19 +471,22 @@ class TestDashboard:
 # ---------- Cleanup teardown ----------
 
 class TestZZCleanup:
-    """Runs last (alphabetical) to remove test data."""
+    """Runs last to deactivate test data without removing its history."""
     def test_cleanup(self, admin_headers, created_student, created_class, created_teacher):
-        # delete student first (also deletes payments + orphan file)
-        r = requests.delete(f"{API}/students/{created_student['id']}", headers=admin_headers)
+        r = requests.delete(f"{API}/students/{created_student['id']}", headers=admin_headers,
+                    json={"reason": "تنظيف بيانات الاختبار"})
         assert r.status_code == 200
-        # verify 404
-        assert requests.get(f"{API}/students/{created_student['id']}",
-                            headers=admin_headers).status_code == 404
-        # delete class - class blocks teacher deletion; now no students
-        r = requests.delete(f"{API}/classes/{created_class['id']}", headers=admin_headers)
+        assert r.json()["deactivated"] is True
+        active_students = requests.get(f"{API}/students", headers=admin_headers).json()["data"]
+        inactive_students = requests.get(f"{API}/students?status=inactive", headers=admin_headers).json()["data"]
+        assert not any(s["id"] == created_student["id"] for s in active_students)
+        assert any(s["id"] == created_student["id"] for s in inactive_students)
+
+        r = requests.delete(f"{API}/classes/{created_class['id']}", headers=admin_headers,
+                    json={"reason": "تنظيف بيانات الاختبار"})
         assert r.status_code == 200
-        # now teacher delete works
-        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=admin_headers)
+        r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=admin_headers,
+                    json={"reason": "تنظيف بيانات الاختبار"})
         assert r.status_code == 200
         # cleanup TEST users
         users = requests.get(f"{API}/users", headers=admin_headers).json()

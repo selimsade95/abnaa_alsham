@@ -1,10 +1,10 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, uuid, bcrypt, jwt, logging, mimetypes, re
+import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -208,6 +208,9 @@ class ClassIn(BaseModel):
     status: Optional[str] = "active"
     notes: Optional[str] = ""
 
+class DeactivationIn(BaseModel):
+    reason: str
+
 class CodeSettingsIn(BaseModel):
     students: dict; teachers: dict; classes: dict; resetYearly: bool = True
 
@@ -305,9 +308,9 @@ async def list_teachers(search: Optional[str] = None, gender: Optional[str] = No
                         employmentStatus: Optional[str] = None, specialization: Optional[str] = None,
                         page: int = 1, limit: int = 20,
                         current=Depends(require_permission("teachers.view"))):
-    q = {}
+    # Inactive records are retained for history but stay out of normal lists.
+    q = {} if employmentStatus == "all" else {"employmentStatus": employmentStatus or {"$ne": "inactive"}}
     if gender: q["gender"] = gender
-    if employmentStatus: q["employmentStatus"] = employmentStatus
     if specialization: q["specialization"] = {"$regex": specialization, "$options": "i"}
     if search:
         rx = {"$regex": search, "$options": "i"}
@@ -316,6 +319,48 @@ async def list_teachers(search: Optional[str] = None, gender: Optional[str] = No
     skip = max(0, (page - 1) * limit)
     docs = await db.teachers.find(q, {"_id": 0}).sort("createdAt", -1).skip(skip).limit(limit).to_list(limit)
     return {"data": docs, "pagination": {"page": page, "limit": limit, "total": total, "totalPages": (total + limit - 1) // limit}}
+
+async def _read_csv_rows(file: UploadFile):
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "يجب أن يكون الملف بصيغة CSV وبترميز UTF-8")
+    sample = text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+        dialect.delimiter = ";"
+    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    rows = []
+    for row in reader:
+        normalized = {}
+        for key, value in row.items():
+            base_key = re.split(r"\s*[\[(]", key or "", maxsplit=1)[0].strip()
+            normalized[base_key] = value
+        rows.append(normalized)
+    return rows
+
+@api.post("/teachers/import")
+async def import_teachers(file: UploadFile = File(...), current=Depends(require_permission("teachers.create"))):
+    rows = await _read_csv_rows(file)
+    required = {"fullName", "gender", "phone", "address", "specialization", "qualification", "employmentStatus", "notes"}
+    if not rows or not required.issubset(rows[0].keys()):
+        raise HTTPException(400, "قالب المعلمين غير صحيح")
+    created = []
+    for index, row in enumerate(rows, 2):
+        if not (row.get("fullName") or "").strip():
+            raise HTTPException(400, f"اسم المعلم مطلوب في الصف {index}")
+        code = await generate_code("teachers")
+        doc = {"id": str(uuid.uuid4()), "code": code,
+               "fullName": row["fullName"].strip(), "gender": row.get("gender", "").strip(),
+               "phone": row.get("phone", "").strip(), "address": row.get("address", "").strip(),
+               "specialization": row.get("specialization", "").strip(), "qualification": row.get("qualification", "").strip(),
+               "employmentStatus": row.get("employmentStatus", "active").strip() or "active",
+               "notes": row.get("notes", "").strip(), "createdAt": now_iso(), "updatedAt": now_iso()}
+        await db.teachers.insert_one(doc); created.append(doc["id"])
+    return {"ok": True, "created": len(created)}
 
 @api.get("/teachers/{tid}")
 async def get_teacher(tid: str, current=Depends(require_permission("teachers.view"))):
@@ -340,12 +385,29 @@ async def update_teacher(tid: str, body: TeacherIn, current=Depends(require_perm
     return await db.teachers.find_one({"id": tid}, {"_id": 0})
 
 @api.delete("/teachers/{tid}")
-async def delete_teacher(tid: str, current=Depends(require_permission("teachers.delete"))):
-    cnt = await db.classes.count_documents({"teacherId": tid})
-    if cnt > 0: raise HTTPException(400, "لا يمكن حذف معلم مُعيَّن على صفوف؛ أعد التعيين أولاً")
-    r = await db.teachers.delete_one({"id": tid})
-    if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
-    return {"ok": True}
+async def delete_teacher(tid: str, body: DeactivationIn, current=Depends(require_permission("teachers.delete"))):
+    reason = body.reason.strip()
+    if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
+    r = await db.teachers.update_one(
+        {"id": tid},
+        {"$set": {"employmentStatus": "inactive", "deactivatedAt": now_iso(),
+                   "deactivationReason": reason, "updatedAt": now_iso()}},
+    )
+    if r.matched_count == 0: raise HTTPException(404, "غير موجود")
+    return {"ok": True, "deactivated": True}
+
+@api.post("/teachers/{tid}/reactivate")
+async def reactivate_teacher(tid: str, current=Depends(require_permission("teachers.update"))):
+    r = await db.teachers.update_one(
+        {"id": tid, "employmentStatus": "inactive"},
+        {"$set": {"employmentStatus": "active", "updatedAt": now_iso()},
+         "$unset": {"deactivatedAt": ""}},
+    )
+    if r.matched_count == 0:
+        teacher = await db.teachers.find_one({"id": tid}, {"_id": 0, "id": 1})
+        if not teacher: raise HTTPException(404, "غير موجود")
+        raise HTTPException(400, "المعلم نشط بالفعل")
+    return {"ok": True, "reactivated": True}
 
 # ---------- Classes ----------
 async def _class_enrich(c: dict) -> dict:
@@ -364,12 +426,12 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
                        teacherId: Optional[str] = None, status: Optional[str] = None,
                        page: int = 1, limit: int = 50,
                        current=Depends(require_permission("classes.view"))):
-    q = {}
+    # Inactive records are retained for history but stay out of normal lists.
+    q = {} if status == "all" else {"status": status or {"$ne": "inactive"}}
     if grade: q["grade"] = grade
     if section: q["section"] = section
     if academicYear: q["academicYear"] = academicYear
     if teacherId: q["teacherId"] = teacherId
-    if status: q["status"] = status
     if search:
         rx = {"$regex": search, "$options": "i"}
         q["$or"] = [{"name": rx}, {"code": rx}, {"grade": rx}, {"section": rx}, {"academicYear": rx}]
@@ -377,6 +439,30 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
     docs = await db.classes.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)
     for d in docs: await _class_enrich(d)
     return {"data": docs, "pagination": {"page": page, "limit": limit, "total": total, "totalPages": (total + limit - 1) // limit}}
+
+@api.post("/classes/import")
+async def import_classes(file: UploadFile = File(...), current=Depends(require_permission("classes.create"))):
+    rows = await _read_csv_rows(file)
+    required = {"name", "grade", "section", "academicYear", "teacherId", "capacity", "status", "notes"}
+    if not rows or not required.issubset(rows[0].keys()):
+        raise HTTPException(400, "قالب الصفوف غير صحيح")
+    created = []
+    for index, row in enumerate(rows, 2):
+        if not (row.get("name") or "").strip():
+            raise HTTPException(400, f"اسم الصف مطلوب في الصف {index}")
+        teacher_id = (row.get("teacherId") or "").strip() or None
+        if teacher_id and not await db.teachers.find_one({"id": teacher_id}):
+            raise HTTPException(400, f"المعلم غير موجود في الصف {index}")
+        try: capacity = int(row.get("capacity") or 0)
+        except ValueError: raise HTTPException(400, f"السعة غير صحيحة في الصف {index}")
+        code = await generate_code("classes")
+        doc = {"id": str(uuid.uuid4()), "code": code, "name": row["name"].strip(),
+               "grade": row.get("grade", "").strip(), "section": row.get("section", "").strip(),
+               "academicYear": row.get("academicYear", "").strip(), "teacherId": teacher_id,
+               "capacity": capacity, "status": row.get("status", "active").strip() or "active",
+               "notes": row.get("notes", "").strip(), "createdAt": now_iso(), "updatedAt": now_iso()}
+        await db.classes.insert_one(doc); created.append(doc["id"])
+    return {"ok": True, "created": len(created)}
 
 @api.get("/classes/{cid}")
 async def get_class(cid: str, current=Depends(require_permission("classes.view"))):
@@ -401,12 +487,29 @@ async def update_class(cid: str, body: ClassIn, current=Depends(require_permissi
     return await _class_enrich(await db.classes.find_one({"id": cid}, {"_id": 0}))
 
 @api.delete("/classes/{cid}")
-async def delete_class(cid: str, current=Depends(require_permission("classes.delete"))):
-    cnt = await db.students.count_documents({"currentClassId": cid})
-    if cnt > 0: raise HTTPException(400, "توجد طلاب مسجلون في هذا الصف، أعد تعيينهم أولاً")
-    r = await db.classes.delete_one({"id": cid})
-    if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
-    return {"ok": True}
+async def delete_class(cid: str, body: DeactivationIn, current=Depends(require_permission("classes.delete"))):
+    reason = body.reason.strip()
+    if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
+    r = await db.classes.update_one(
+        {"id": cid},
+        {"$set": {"status": "inactive", "deactivatedAt": now_iso(),
+                   "deactivationReason": reason, "updatedAt": now_iso()}},
+    )
+    if r.matched_count == 0: raise HTTPException(404, "غير موجود")
+    return {"ok": True, "deactivated": True}
+
+@api.post("/classes/{cid}/reactivate")
+async def reactivate_class(cid: str, current=Depends(require_permission("classes.update"))):
+    r = await db.classes.update_one(
+        {"id": cid, "status": "inactive"},
+        {"$set": {"status": "active", "updatedAt": now_iso()},
+         "$unset": {"deactivatedAt": ""}},
+    )
+    if r.matched_count == 0:
+        cls = await db.classes.find_one({"id": cid}, {"_id": 0, "id": 1})
+        if not cls: raise HTTPException(404, "غير موجود")
+        raise HTTPException(400, "الصف نشط بالفعل")
+    return {"ok": True, "reactivated": True}
 
 # ---------- Students ----------
 async def _student_payment_totals(sid: str, ay: Optional[str] = None) -> dict:
@@ -444,11 +547,11 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                         teacherId: Optional[str] = None,
                         page: int = 1, limit: int = 20,
                         current=Depends(require_permission("students.view"))):
-    q = {}
+    # Inactive records are retained for history but stay out of normal lists.
+    q = {} if status == "all" else {"student.status": status or {"$ne": "inactive"}}
     if gender: q["student.gender"] = gender
     if orphan in ("true", "false"): q["student.orphan"] = (orphan == "true")
     if registrationPath: q["student.registrationPath"] = registrationPath
-    if status: q["student.status"] = status
     if academicYear: q["fees.academicYear"] = academicYear
     if classId: q["currentClassId"] = classId
     if teacherId:
@@ -461,11 +564,12 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                     {"father.phone": rx}, {"mother.phone": rx},
                     {"student.currentAddress": rx},
                     {"general.whatsappGroupPhone": rx}]
-    total = await db.students.count_documents(q)
-    docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)
-    for d in docs: await _augment_student(d)
-    # optional payment status filter (in-memory on paged results)
+    # Payment status is derived from payment records, so it must be evaluated
+    # before pagination; otherwise matching students can be skipped and totals
+    # become inaccurate.
     if paymentStatus:
+        docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).to_list(None)
+        for d in docs: await _augment_student(d)
         def matches(d):
             f = d.get("fees", {}); tp = f.get("totalPayable", 0); pp = f.get("totalPaid", 0)
             if paymentStatus == "paid": return tp > 0 and pp >= tp
@@ -473,13 +577,69 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
             if paymentStatus == "unpaid": return pp == 0
             return True
         docs = [d for d in docs if matches(d)]
+        total = len(docs)
+        docs = docs[(page - 1) * limit:page * limit]
+    else:
+        total = await db.students.count_documents(q)
+        docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)
+        for d in docs: await _augment_student(d)
     return {"data": docs, "pagination": {"page": page, "limit": limit, "total": total, "totalPages": (total + limit - 1) // limit}}
+
+@api.post("/students/import")
+async def import_students(file: UploadFile = File(...), current=Depends(require_permission("students.create"))):
+    rows = await _read_csv_rows(file)
+    required = {"fullName", "gender", "birthdate", "registrationPath", "status", "currentAddress", "fatherName", "fatherPhone", "motherName", "motherPhone", "academicYear", "totalPayable", "currentClassId"}
+    if not rows or not required.issubset(rows[0].keys()):
+        raise HTTPException(400, "قالب الطلاب غير صحيح")
+    created = []
+    for index, row in enumerate(rows, 2):
+        full_name = (row.get("fullName") or "").strip()
+        if not full_name: raise HTTPException(400, f"اسم الطالب مطلوب في الصف {index}")
+        class_id = (row.get("currentClassId") or "").strip() or None
+        if class_id and not await db.classes.find_one({"id": class_id}):
+            raise HTTPException(400, f"الصف غير موجود في الصف {index}")
+        try: total_payable = float(row.get("totalPayable") or 0)
+        except ValueError: raise HTTPException(400, f"إجمالي المستحق غير صحيح في الصف {index}")
+        code = await generate_code("students")
+        doc = {"id": str(uuid.uuid4()), "code": code,
+               "student": {"fullName": full_name, "gender": row.get("gender", "male").strip() or "male",
+                           "birthdate": row.get("birthdate", "").strip(), "registrationPath": row.get("registrationPath", "خاص").strip() or "خاص",
+                           "status": row.get("status", "resident").strip() or "resident", "currentAddress": row.get("currentAddress", "").strip()},
+               "father": {"name": row.get("fatherName", "").strip(), "phone": row.get("fatherPhone", "").strip()},
+               "mother": {"name": row.get("motherName", "").strip(), "phone": row.get("motherPhone", "").strip()},
+               "fees": {"academicYear": row.get("academicYear", "").strip(), "totalPayable": total_payable},
+               "currentClassId": class_id, "siblings": [], "general": {}, "previousEducation": [],
+               "otherInfo": {}, "signing": {}, "fullInfo": {}, "createdAt": now_iso(), "updatedAt": now_iso()}
+        _clean_reg_path(doc["student"]["registrationPath"])
+        await db.students.insert_one(doc); created.append(doc["id"])
+    return {"ok": True, "created": len(created)}
 
 @api.get("/students/{sid}")
 async def get_student(sid: str, current=Depends(require_permission("students.view"))):
     d = await db.students.find_one({"id": sid}, {"_id": 0})
     if not d: raise HTTPException(404, "غير موجود")
     return await _augment_student(d)
+
+@api.get("/public/students/{sid}/validation")
+async def validate_student(sid: str):
+    d = await db.students.find_one({"id": sid}, {"_id": 0})
+    if not d: raise HTTPException(404, "الطالب غير موجود")
+    student = d.get("student") or {}
+    current_class = None
+    if d.get("currentClassId"):
+        current_class = await db.classes.find_one(
+            {"id": d["currentClassId"]},
+            {"_id": 0, "name": 1, "section": 1, "academicYear": 1},
+        )
+    return {
+        "code": d.get("code"),
+        "fullName": student.get("fullName"),
+        "status": student.get("status") or "resident",
+        "isActive": student.get("status") != "inactive",
+        "className": current_class.get("name") if current_class else student.get("newClass"),
+        "section": current_class.get("section") if current_class else None,
+        "academicYear": (current_class or {}).get("academicYear") or (d.get("fees") or {}).get("academicYear"),
+    }
 
 @api.get("/students/{sid}/full-information")
 async def get_student_full(sid: str, current=Depends(require_permission("students.fullInformation.view"))):
@@ -538,16 +698,29 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
     return await _augment_student(await db.students.find_one({"id": sid}, {"_id": 0}))
 
 @api.delete("/students/{sid}")
-async def delete_student(sid: str, current=Depends(require_permission("students.delete"))):
-    doc = await db.students.find_one({"id": sid})
-    if not doc: raise HTTPException(404, "غير موجود")
-    fp = (doc.get("orphanDocument") or {}).get("filePath")
-    if fp:
-        try: os.remove(fp)
-        except Exception: pass
-    await db.payments.delete_many({"student": sid})
-    await db.students.delete_one({"id": sid})
-    return {"ok": True}
+async def delete_student(sid: str, body: DeactivationIn, current=Depends(require_permission("students.delete"))):
+    reason = body.reason.strip()
+    if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
+    r = await db.students.update_one(
+        {"id": sid},
+        {"$set": {"student.status": "inactive", "deactivatedAt": now_iso(),
+                   "deactivationReason": reason, "updatedAt": now_iso()}},
+    )
+    if r.matched_count == 0: raise HTTPException(404, "غير موجود")
+    return {"ok": True, "deactivated": True}
+
+@api.post("/students/{sid}/reactivate")
+async def reactivate_student(sid: str, current=Depends(require_permission("students.update"))):
+    r = await db.students.update_one(
+        {"id": sid, "student.status": "inactive"},
+        {"$set": {"student.status": "resident", "updatedAt": now_iso()},
+         "$unset": {"deactivatedAt": ""}},
+    )
+    if r.matched_count == 0:
+        student = await db.students.find_one({"id": sid}, {"_id": 0, "id": 1})
+        if not student: raise HTTPException(404, "غير موجود")
+        raise HTTPException(400, "الطالب نشط بالفعل")
+    return {"ok": True, "reactivated": True}
 
 # ---- Orphan docs (unchanged) ----
 @api.post("/students/{sid}/orphan-document")
@@ -606,9 +779,14 @@ async def delete_orphan_doc(sid: str, current=Depends(require_permission("studen
 
 # ---------- Payments ----------
 async def _enrich_payment(p):
-    s = await db.students.find_one({"id": p.get("student")}, {"_id": 0, "student.fullName": 1, "code": 1})
+    s = await db.students.find_one({"id": p.get("student")}, {"_id": 0, "student.fullName": 1, "code": 1, "fees": 1})
     p["studentName"] = (s.get("student") or {}).get("fullName") if s else "—"
     p["studentCode"] = s.get("code") if s else None
+    fee_year = p.get("academicYear") or ((s.get("fees") or {}).get("academicYear") if s else "")
+    totals = await _student_payment_totals(p.get("student"), fee_year) if s else {"totalPaid": 0}
+    p["totalPayable"] = float(((s.get("fees") or {}).get("totalPayable")) or 0) if s else 0
+    p["totalPaid"] = totals["totalPaid"]
+    p["totalRemaining"] = max(0, p["totalPayable"] - p["totalPaid"])
     creator = await db.users.find_one({"id": p.get("createdBy")}, {"_id": 0, "name": 1})
     p["createdByName"] = creator.get("name") if creator else "—"
     return p
@@ -716,14 +894,66 @@ async def dashboard_stats(current=Depends(get_current_user)):
     orphans = await db.students.count_documents({"student.orphan": True})
     teachers_count = await db.teachers.count_documents({})
     classes_count = await db.classes.count_documents({})
-    pay_agg = await db.payments.aggregate([{"$group": {"_id": None, "sum": {"$sum": "$amount"}}}]).to_list(1)
+
+    # Only payments belonging to active students
+    pay_agg = await db.payments.aggregate([
+        {
+            "$lookup": {
+                "from": "students",
+                "localField": "student",
+                "foreignField": "id",
+                "as": "student"
+            }
+        },
+        {
+            "$unwind": "$student"
+        },
+        {
+            "$match": {
+                "student.student.status": {"$ne": "inactive"}
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "sum": {"$sum": "$amount"}
+            }
+        }
+    ]).to_list(1)
+
     total_collected = pay_agg[0]["sum"] if pay_agg else 0
-    stu_agg = await db.students.aggregate([{"$group": {"_id": None, "sum": {"$sum": "$fees.totalPayable"}}}]).to_list(1)
+
+    # Only payable fees of active students
+    stu_agg = await db.students.aggregate([
+        {
+            "$match": {
+                "student.status": {"$ne": "inactive"}
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "sum": {"$sum": "$fees.totalPayable"}
+            }
+        }
+    ]).to_list(1)
+
     total_payable = stu_agg[0]["sum"] if stu_agg else 0
-    return {"total": total, "female": female, "male": male, "orphans": orphans,
-            "teachers": teachers_count, "classes": classes_count,
-            "totalPayable": total_payable, "totalCollected": total_collected,
-            "totalRemaining": max(0, (total_payable or 0) - (total_collected or 0))}
+
+    return {
+        "total": total,
+        "female": female,
+        "male": male,
+        "orphans": orphans,
+        "teachers": teachers_count,
+        "classes": classes_count,
+        "totalPayable": total_payable,
+        "totalCollected": total_collected,
+        "totalRemaining": max(
+            0,
+            (total_payable or 0) - (total_collected or 0)
+        )
+    }
 
 # ---------- Startup / seed ----------
 @app.on_event("startup")
