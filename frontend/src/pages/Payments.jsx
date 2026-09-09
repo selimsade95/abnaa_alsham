@@ -43,6 +43,9 @@ export default function Payments() {
   const [students, setStudents] = useState([]);
   const [confirmId, setConfirmId] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [refund, setRefund] = useState(null);
+  const [refundPaid, setRefundPaid] = useState(0);
+  const [refundLoading, setRefundLoading] = useState(false);
 
   const exportPayments = async () => {
     try {
@@ -67,6 +70,14 @@ export default function Payments() {
     } catch {
       toast.error("تعذر تصدير المدفوعات");
     }
+  };
+
+  const printAllPayments = () => {
+    const params = new URLSearchParams();
+    if (debouncedQ) params.set("search", debouncedQ);
+    if (year) params.set("academicYear", year);
+    if (sem) params.set("semester", sem);
+    window.open(`/payments/print?${params.toString()}`, "_blank");
   };
 
   useEffect(() => {
@@ -113,6 +124,60 @@ export default function Payments() {
       notes: "",
     });
   };
+
+  const openRefund = async () => {
+    if (students.length === 0) {
+      try {
+        const response = await api.get("/students", {
+          params: { limit: 5000 },
+        });
+        setStudents(response.data?.data || []);
+      } catch {
+        toast.error("تعذر تحميل الطلاب");
+        return;
+      }
+    }
+    setRefund({
+      student: "",
+      academicYear: year || "",
+      semester: sem || "full_year",
+      amount: "",
+      paymentDate: new Date().toISOString().slice(0, 10),
+      notes: "",
+    });
+    setRefundPaid(0);
+  };
+
+  useEffect(() => {
+    if (!refund?.student || !refund.academicYear || !refund.semester) {
+      setRefundPaid(0);
+      return;
+    }
+    let cancelled = false;
+    setRefundLoading(true);
+    api
+      .get(`/students/${refund.student}/payments`)
+      .then((response) => {
+        if (cancelled) return;
+        const paid = response.data
+          .filter(
+            (payment) =>
+              payment.academicYear === refund.academicYear &&
+              payment.semester === refund.semester,
+          )
+          .reduce((total, payment) => total + Number(payment.amount || 0), 0);
+        setRefundPaid(Math.max(0, paid));
+      })
+      .catch(() => {
+        if (!cancelled) setRefundPaid(0);
+      })
+      .finally(() => {
+        if (!cancelled) setRefundLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refund?.student, refund?.academicYear, refund?.semester]);
   const openEdit = async (p) => {
     if (students.length === 0) {
       try {
@@ -121,6 +186,31 @@ export default function Payments() {
       } catch {}
     }
     setEditing({ ...p, paymentDate: (p.paymentDate || "").slice(0, 10) });
+  };
+
+  const saveRefund = async (event) => {
+    event.preventDefault();
+    if (
+      !refund.student ||
+      Number(refund.amount) <= 0 ||
+      Number(refund.amount) > refundPaid
+    )
+      return;
+    try {
+      await api.post("/payments/refund", {
+        student: refund.student,
+        academicYear: refund.academicYear,
+        semester: refund.semester,
+        amount: Number(refund.amount),
+        paymentDate: refund.paymentDate,
+        notes: refund.notes || "",
+      });
+      toast.success("تم تسجيل الاسترداد");
+      setRefund(null);
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر تسجيل الاسترداد");
+    }
   };
 
   const save = async (e) => {
@@ -171,12 +261,29 @@ export default function Payments() {
               <Plus className="h-4 w-4" /> إضافة دفعة
             </button>
           )}
+          {has("payments.create") && (
+            <button
+              onClick={openRefund}
+              data-testid="add-refund-btn"
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              رد دفعة
+            </button>
+          )}
           {has("payments.view") && (
             <button
               onClick={exportPayments}
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
             >
               <Download className="h-4 w-4" /> تصدير
+            </button>
+          )}
+          {has("payments.print") && (
+            <button
+              onClick={printAllPayments}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <Printer className="h-4 w-4" /> طباعة السجل
             </button>
           )}
         </div>
@@ -332,10 +439,7 @@ export default function Payments() {
                         {has("payments.print") && (
                           <button
                             onClick={() =>
-                              window.open(
-                                `/students/${p.student}/payments/print`,
-                                "_blank",
-                              )
+                              window.open(`/payments/${p.id}/print`, "_blank")
                             }
                             data-testid={`print-payment-${p.id}`}
                             title="طباعة سجل الطالب"
@@ -491,6 +595,136 @@ export default function Payments() {
                   className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
                 >
                   حفظ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {refund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              استرداد دفعة
+            </h3>
+            <form onSubmit={saveRefund} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  الطالب
+                </label>
+                <select
+                  required
+                  value={refund.student}
+                  onChange={(e) =>
+                    setRefund({ ...refund, student: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                >
+                  <option value="">اختر الطالب</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.student?.fullName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    السنة
+                  </label>
+                  <input
+                    required
+                    value={refund.academicYear}
+                    onChange={(e) =>
+                      setRefund({ ...refund, academicYear: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    الفصل
+                  </label>
+                  <select
+                    value={refund.semester}
+                    onChange={(e) =>
+                      setRefund({ ...refund, semester: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  >
+                    <option value="first">الفصل الأول</option>
+                    <option value="second">الفصل الثاني</option>
+                    <option value="full_year">السنة كاملة</option>
+                  </select>
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                المدفوع المتاح لهذا الفصل:{" "}
+                <strong>{refundLoading ? "جاري الحساب..." : refundPaid}</strong>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  مبلغ الاسترداد
+                </label>
+                <input
+                  required
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  max={refundPaid || undefined}
+                  value={refund.amount}
+                  onChange={(e) =>
+                    setRefund({ ...refund, amount: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  التاريخ
+                </label>
+                <input
+                  required
+                  type="date"
+                  value={refund.paymentDate}
+                  onChange={(e) =>
+                    setRefund({ ...refund, paymentDate: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+              <textarea
+                rows={2}
+                value={refund.notes}
+                onChange={(e) =>
+                  setRefund({ ...refund, notes: e.target.value })
+                }
+                placeholder="ملاحظات الاسترداد"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRefund(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={
+                    !refund.student ||
+                    refundLoading ||
+                    !refundPaid ||
+                    !refund.amount ||
+                    Number(refund.amount) <= 0 ||
+                    Number(refund.amount) > refundPaid
+                  }
+                  className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  تسجيل الاسترداد
                 </button>
               </div>
             </form>

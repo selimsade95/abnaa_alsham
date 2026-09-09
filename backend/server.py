@@ -105,7 +105,7 @@ def require_permission(perm):
         return current
     return checker
 
-# ---------- Code generation ----------
+#region Code generation
 DEFAULT_CODE_SETTINGS = {
     "students": {"prefix": "STU", "format": "{PREFIX}-{YEAR}-{SEQ:6}"},
     "teachers": {"prefix": "TCR", "format": "{PREFIX}-{YEAR}-{SEQ:6}"},
@@ -160,8 +160,9 @@ async def generate_code(entity: str) -> str:
     cfg = settings.get(entity) or DEFAULT_CODE_SETTINGS[entity]
     seq = await next_sequence(entity)
     return render_code(cfg["format"], cfg["prefix"], datetime.now(timezone.utc).year, seq)
+#endregion
 
-# ---------- Models ----------
+#region Models
 class LoginIn(BaseModel):
     username: str; password: str
 
@@ -185,6 +186,10 @@ class StudentIn(BaseModel):
     currentClassId: Optional[str] = None
 
 class PaymentIn(BaseModel):
+    student: str; academicYear: str; semester: str
+    amount: float; paymentDate: str; notes: Optional[str] = ""
+
+class RefundIn(BaseModel):
     student: str; academicYear: str; semester: str
     amount: float; paymentDate: str; notes: Optional[str] = ""
 
@@ -213,8 +218,9 @@ class DeactivationIn(BaseModel):
 
 class CodeSettingsIn(BaseModel):
     students: dict; teachers: dict; classes: dict; resetYearly: bool = True
+#endregion
 
-# ---------- Auth ----------
+#region Auth
 @api.post("/auth/login")
 async def login(body: LoginIn):
     user = await db.users.find_one({"username": body.username})
@@ -238,8 +244,9 @@ async def me(current=Depends(get_current_user)):
 @api.get("/permissions")
 async def list_permissions(current=Depends(get_current_user)):
     return [{"name": n, "description": d, "resource": r, "action": a} for (n, d, r, a) in PERMISSIONS_CATALOG]
+#endregion
 
-# ---------- Roles ----------
+#region Roles
 @api.get("/roles")
 async def list_roles(current=Depends(require_permission("roles.view"))):
     return await db.roles.find({}, {"_id": 0}).sort("createdAt", 1).to_list(200)
@@ -267,8 +274,9 @@ async def delete_role(rid: str, current=Depends(require_permission("roles.delete
     r = await db.roles.delete_one({"id": rid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}
+#endregion
 
-# ---------- Users ----------
+#region Users
 @api.get("/users")
 async def list_users(current=Depends(require_permission("users.view"))):
     return await db.users.find({}, {"_id": 0, "password": 0}).sort("createdAt", -1).to_list(500)
@@ -299,8 +307,9 @@ async def delete_user(uid: str, current=Depends(require_permission("users.delete
     r = await db.users.delete_one({"id": uid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}
+#endregion
 
-# ---------- Teachers ----------
+#region Teachers
 async def _teacher_out(t): t.pop("_id", None); return t
 
 @api.get("/teachers")
@@ -408,8 +417,9 @@ async def reactivate_teacher(tid: str, current=Depends(require_permission("teach
         if not teacher: raise HTTPException(404, "غير موجود")
         raise HTTPException(400, "المعلم نشط بالفعل")
     return {"ok": True, "reactivated": True}
+#endregion
 
-# ---------- Classes ----------
+#region Classes
 async def _class_enrich(c: dict) -> dict:
     if c.get("teacherId"):
         t = await db.teachers.find_one({"id": c["teacherId"]}, {"_id": 0, "fullName": 1, "code": 1})
@@ -510,13 +520,31 @@ async def reactivate_class(cid: str, current=Depends(require_permission("classes
         if not cls: raise HTTPException(404, "غير موجود")
         raise HTTPException(400, "الصف نشط بالفعل")
     return {"ok": True, "reactivated": True}
+#endregion
 
-# ---------- Students ----------
+#region Students
 async def _student_payment_totals(sid: str, ay: Optional[str] = None) -> dict:
     q = {"student": sid}
     if ay: q["academicYear"] = ay
     docs = await db.payments.find(q, {"_id": 0}).to_list(1000)
     return {"totalPaid": sum(float(p.get("amount", 0)) for p in docs), "count": len(docs)}
+
+def _payment_order_key(payment):
+    return (payment.get("paymentDate") or "", payment.get("createdAt") or "", payment.get("id") or "")
+
+async def _payment_snapshot(payment, payable):
+    if "totalPaidAtPayment" in payment and "totalRemainingAtPayment" in payment:
+        return float(payment["totalPaidAtPayment"]), float(payment["totalRemainingAtPayment"])
+    docs = await db.payments.find(
+        {"student": payment.get("student"), "academicYear": payment.get("academicYear")},
+        {"_id": 0, "id": 1, "amount": 1, "paymentDate": 1, "createdAt": 1},
+    ).to_list(1000)
+    cumulative = 0
+    for doc in sorted(docs, key=_payment_order_key):
+        cumulative += float(doc.get("amount", 0))
+        if doc.get("id") == payment.get("id"):
+            break
+    return cumulative, max(0, payable - cumulative)
 
 async def _augment_student(doc: dict) -> dict:
     fees = doc.get("fees") or {}
@@ -721,8 +749,9 @@ async def reactivate_student(sid: str, current=Depends(require_permission("stude
         if not student: raise HTTPException(404, "غير موجود")
         raise HTTPException(400, "الطالب نشط بالفعل")
     return {"ok": True, "reactivated": True}
+#endregion
 
-# ---- Orphan docs (unchanged) ----
+#region Orphan docs
 @api.post("/students/{sid}/orphan-document")
 async def upload_orphan_doc(sid: str, type: str = Form(...), description: Optional[str] = Form(""),
                              file: UploadFile = File(...),
@@ -776,17 +805,24 @@ async def delete_orphan_doc(sid: str, current=Depends(require_permission("studen
         except Exception: pass
     await db.students.update_one({"id": sid}, {"$unset": {"orphanDocument": ""}, "$set": {"updatedAt": now_iso()}})
     return {"ok": True}
+#endregion
 
-# ---------- Payments ----------
+#region Payments
 async def _enrich_payment(p):
+    # Database inserts add Mongo's ObjectId to the original dictionary. It is
+    # not JSON serializable, so never allow it to reach an API response.
+    p.pop("_id", None)
     s = await db.students.find_one({"id": p.get("student")}, {"_id": 0, "student.fullName": 1, "code": 1, "fees": 1})
     p["studentName"] = (s.get("student") or {}).get("fullName") if s else "—"
     p["studentCode"] = s.get("code") if s else None
     fee_year = p.get("academicYear") or ((s.get("fees") or {}).get("academicYear") if s else "")
-    totals = await _student_payment_totals(p.get("student"), fee_year) if s else {"totalPaid": 0}
     p["totalPayable"] = float(((s.get("fees") or {}).get("totalPayable")) or 0) if s else 0
-    p["totalPaid"] = totals["totalPaid"]
-    p["totalRemaining"] = max(0, p["totalPayable"] - p["totalPaid"])
+    p["totalPaid"], p["totalRemaining"] = await _payment_snapshot(p, p["totalPayable"]) if s else (0, 0)
+    current_totals = await _student_payment_totals(p.get("student"), fee_year) if s else {"totalPaid": 0}
+    p["currentTotalPaid"] = current_totals["totalPaid"]
+    p["currentTotalRemaining"] = max(0, p["totalPayable"] - p["currentTotalPaid"])
+    p["totalPaidAtPayment"] = float(p.get("totalPaidAtPayment") if p.get("totalPaidAtPayment") is not None else p["totalPaid"])
+    p["totalRemainingAtPayment"] = float(p.get("totalRemainingAtPayment") if p.get("totalRemainingAtPayment") is not None else p["totalRemaining"])
     creator = await db.users.find_one({"id": p.get("createdBy")}, {"_id": 0, "name": 1})
     p["createdByName"] = creator.get("name") if creator else "—"
     return p
@@ -802,7 +838,7 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
         matching = await db.students.find({"$or": [{"student.fullName": {"$regex": search, "$options": "i"}},
                                                     {"code": {"$regex": search, "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
         q["student"] = {"$in": [m["id"] for m in matching]}
-    docs = await db.payments.find(q, {"_id": 0}).sort("paymentDate", -1).to_list(1000)
+    docs = await db.payments.find(q, {"_id": 0}).sort("createdAt", -1).to_list(1000)
     for d in docs: await _enrich_payment(d)
     return docs
 
@@ -838,26 +874,68 @@ async def create_payment(body: PaymentIn, current=Depends(require_permission("pa
            "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
            "notes": body.notes or "", "createdBy": current["id"], "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.payments.insert_one(doc)
+    paid_at_payment, remaining_at_payment = await _payment_snapshot(doc, float(((await db.students.find_one({"id": body.student}) or {}).get("fees") or {}).get("totalPayable") or 0))
+    await db.payments.update_one({"id": doc["id"]}, {"$set": {"totalPaidAtPayment": paid_at_payment,
+        "totalRemainingAtPayment": remaining_at_payment}})
+    doc["totalPaidAtPayment"] = paid_at_payment
+    doc["totalRemainingAtPayment"] = remaining_at_payment
+    return await _enrich_payment({k: v for k, v in doc.items() if k != "_id"})
+
+@api.post("/payments/refund")
+async def create_refund(body: RefundIn, current=Depends(require_permission("payments.create"))):
+    if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
+    if body.amount <= 0: raise HTTPException(400, "مبلغ الاسترداد يجب أن يكون أكبر من صفر")
+    student = await db.students.find_one({"id": body.student}, {"_id": 0, "fees": 1})
+    if not student: raise HTTPException(404, "الطالب غير موجود")
+    semester_payments = await db.payments.find(
+        {"student": body.student, "academicYear": body.academicYear, "semester": body.semester},
+        {"_id": 0, "amount": 1},
+    ).to_list(1000)
+    paid_for_semester = max(0, sum(float(p.get("amount", 0)) for p in semester_payments))
+    if body.amount > paid_for_semester + 0.0001:
+        raise HTTPException(400, f"مبلغ الاسترداد يتجاوز المدفوع للفصل (المتاح: {paid_for_semester})")
+    doc = {"id": str(uuid.uuid4()), "student": body.student, "academicYear": body.academicYear,
+           "semester": body.semester, "amount": -float(body.amount), "type": "refund",
+           "paymentDate": body.paymentDate, "notes": body.notes or "", "createdBy": current["id"],
+           "createdAt": now_iso(), "updatedAt": now_iso()}
+    await db.payments.insert_one(doc)
+    payable = float(((student.get("fees") or {}).get("totalPayable")) or 0)
+    paid_at_payment, remaining_at_payment = await _payment_snapshot(doc, payable)
+    await db.payments.update_one({"id": doc["id"]}, {"$set": {"totalPaidAtPayment": paid_at_payment,
+        "totalRemainingAtPayment": remaining_at_payment}})
+    doc["totalPaidAtPayment"] = paid_at_payment
+    doc["totalRemainingAtPayment"] = remaining_at_payment
     return await _enrich_payment({k: v for k, v in doc.items() if k != "_id"})
 
 @api.put("/payments/{pid}")
 async def update_payment(pid: str, body: PaymentIn, current=Depends(require_permission("payments.update"))):
-    if not await db.payments.find_one({"id": pid}): raise HTTPException(404, "غير موجود")
+    existing = await db.payments.find_one({"id": pid})
+    if not existing: raise HTTPException(404, "غير موجود")
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
     await _validate_no_overpayment(body.student, body.academicYear, body.amount, exclude=pid)
     await db.payments.update_one({"id": pid}, {"$set": {"student": body.student, "academicYear": body.academicYear,
         "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
         "notes": body.notes or "", "updatedAt": now_iso()}})
-    return await _enrich_payment(await db.payments.find_one({"id": pid}, {"_id": 0}))
+    updated = await db.payments.find_one({"id": pid}, {"_id": 0})
+    student = await db.students.find_one({"id": body.student}, {"_id": 0, "fees": 1})
+    updated.pop("totalPaidAtPayment", None)
+    updated.pop("totalRemainingAtPayment", None)
+    paid_at_payment, remaining_at_payment = await _payment_snapshot(updated, float(((student or {}).get("fees") or {}).get("totalPayable") or 0))
+    await db.payments.update_one({"id": pid}, {"$set": {"totalPaidAtPayment": paid_at_payment,
+        "totalRemainingAtPayment": remaining_at_payment}})
+    updated["totalPaidAtPayment"] = paid_at_payment
+    updated["totalRemainingAtPayment"] = remaining_at_payment
+    return await _enrich_payment(updated)
 
 @api.delete("/payments/{pid}")
 async def delete_payment(pid: str, current=Depends(require_permission("payments.delete"))):
     r = await db.payments.delete_one({"id": pid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}
+#endregion
 
-# ---------- Settings / Code generation ----------
+#region Settings / Code generation
 @api.get("/settings/code-generation")
 async def get_settings(current=Depends(require_permission("settings.codeGeneration.view"))):
     return await get_code_settings()
@@ -884,8 +962,9 @@ async def update_settings(body: CodeSettingsIn, current=Depends(require_permissi
     await db.settings.update_one({"id": "code_generation"},
         {"$set": {**body.model_dump(), "updatedAt": now_iso()}}, upsert=True)
     return await get_code_settings()
+#endregion
 
-# ---------- Dashboard ----------
+#region Dashboard
 @api.get("/dashboard/stats")
 async def dashboard_stats(current=Depends(get_current_user)):
     total = await db.students.count_documents({})
@@ -954,8 +1033,9 @@ async def dashboard_stats(current=Depends(get_current_user)):
             (total_payable or 0) - (total_collected or 0)
         )
     }
+#endregion
 
-# ---------- Startup / seed ----------
+#region Startup / seed
 @app.on_event("startup")
 async def on_startup():
     defaults = [
@@ -1030,3 +1110,5 @@ app.add_middleware(CORSMiddleware, allow_credentials=True,
     allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"], allow_headers=["*"])
 logging.basicConfig(level=logging.INFO)
+
+#endregion

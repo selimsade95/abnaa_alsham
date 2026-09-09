@@ -79,6 +79,22 @@ function App() {
             path="/students/:id/payments/print"
             element={
               <Protected perm="payments.print">
+                <PaymentPrint studentHistory />
+              </Protected>
+            }
+          />
+          <Route
+            path="/payments/print"
+            element={
+              <Protected perm="payments.print">
+                <PaymentPrint />
+              </Protected>
+            }
+          />
+          <Route
+            path="/payments/:id/print"
+            element={
+              <Protected perm="payments.print">
                 <PaymentPrint />
               </Protected>
             }

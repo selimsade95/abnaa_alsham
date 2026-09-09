@@ -402,10 +402,22 @@ export default function StudentView() {
         <Section
           title="رسوم التسجيل"
           actions={
-            <StatusBadge
-              paid={fees.totalPaid || 0}
-              total={fees.totalPayable || 0}
-            />
+            <div className="flex items-center gap-2">
+              {has("payments.print") && (
+                <button
+                  onClick={() =>
+                    window.open(`/students/${id}/payments/print`, "_blank")
+                  }
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <Printer className="h-3.5 w-3.5" /> طباعة السجل
+                </button>
+              )}
+              <StatusBadge
+                paid={fees.totalPaid || 0}
+                total={fees.totalPayable || 0}
+              />
+            </div>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -496,6 +508,17 @@ export default function StudentView() {
                             className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
                           >
                             <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
+                        {has("payments.print") && (
+                          <button
+                            onClick={() =>
+                              window.open(`/payments/${p.id}/print`, "_blank")
+                            }
+                            title="طباعة الإيصال"
+                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                          >
+                            <Printer className="h-4 w-4" />
                           </button>
                         )}
                         {has("payments.delete") && (

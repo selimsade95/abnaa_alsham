@@ -382,6 +382,14 @@ class TestPayments:
         r = requests.post(f"{API}/payments", headers=admin_headers, json=body)
         assert r.status_code == 400
 
+    def test_refund_cannot_exceed_semester_paid_amount(self, admin_headers, created_student):
+        body = {"student": created_student["id"], "academicYear": "2025-2026",
+                "semester": "first", "amount": 201,
+                "paymentDate": datetime.utcnow().isoformat(), "notes": "TEST refund"}
+        r = requests.post(f"{API}/payments/refund", headers=admin_headers, json=body)
+        assert r.status_code == 400
+        assert "يتجاوز المدفوع للفصل" in r.text
+
     def test_list_student_payments_enriched(self, admin_headers, created_student):
         r = requests.get(f"{API}/students/{created_student['id']}/payments",
                          headers=admin_headers)
@@ -396,6 +404,17 @@ class TestPayments:
         created_payment = next(p for p in payments.json() if p["student"] == created_student["id"])
         assert created_payment["totalPayable"] == 1000
         assert created_payment["totalRemaining"] == 800
+
+    def test_refund_returns_successful_serializable_response(self, admin_headers, created_student):
+        body = {"student": created_student["id"], "academicYear": "2025-2026",
+                "semester": "first", "amount": 10,
+                "paymentDate": datetime.utcnow().isoformat(), "notes": "TEST valid refund"}
+        r = requests.post(f"{API}/payments/refund", headers=admin_headers, json=body)
+        assert r.status_code == 200, r.text
+        refund = r.json()
+        assert refund["type"] == "refund"
+        assert refund["amount"] == -10
+        assert "_id" not in refund
 
 
 # ---------- Orphan documents ----------

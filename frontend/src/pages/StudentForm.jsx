@@ -596,10 +596,8 @@ export default function StudentForm({ mode }) {
               min="0"
               step="0.01"
               className={inputCls}
-              value={data.fees.totalPayable}
-              onChange={(e) =>
-                update("fees.totalPayable", Number(e.target.value))
-              }
+              value={data.fees.totalPayable || ""}
+              onChange={(e) => update("fees.totalPayable", e.target.value)}
             />
           </Field>
         </div>
@@ -616,9 +614,9 @@ export default function StudentForm({ mode }) {
                   min="0"
                   step="0.01"
                   className={inputCls}
-                  value={data.initialPayment.amount}
+                  value={data.initialPayment.amount || ""}
                   onChange={(e) =>
-                    update("initialPayment.amount", Number(e.target.value))
+                    update("initialPayment.amount", e.target.value)
                   }
                 />
               </Field>
