@@ -4,6 +4,7 @@ import api, { API } from "@/lib/api";
 import { toast } from "sonner";
 import {
   ArrowRight,
+  Eye,
   Pencil,
   Trash2,
   Printer,
@@ -88,6 +89,7 @@ export default function StudentView() {
   const fileRef = useRef(null);
   const [studentDocumentType, setStudentDocumentType] = useState(null);
   const [studentDocumentConfirm, setStudentDocumentConfirm] = useState(null);
+  const [studentDocumentPreview, setStudentDocumentPreview] = useState(null);
   const studentDocumentFileRef = useRef(null);
 
   const load = () => {
@@ -228,7 +230,11 @@ export default function StudentView() {
   };
 
   const openStudentDocumentUpload = (type) => {
-    if (data?.documents?.[type] && !window.confirm("توجد وثيقة سابقة. هل تريد استبدالها؟")) return;
+    if (
+      data?.documents?.[type] &&
+      !window.confirm("توجد وثيقة سابقة. هل تريد استبدالها؟")
+    )
+      return;
     setStudentDocumentType(type);
   };
 
@@ -239,9 +245,13 @@ export default function StudentView() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      await api.post(`/students/${id}/documents/${studentDocumentType}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post(
+        `/students/${id}/documents/${studentDocumentType}`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
       toast.success("تم رفع الوثيقة");
       setStudentDocumentType(null);
       load();
@@ -252,7 +262,9 @@ export default function StudentView() {
 
   const downloadStudentDocument = async (type, metadata) => {
     try {
-      const response = await api.get(`/students/${id}/documents/${type}`, { responseType: "blob" });
+      const response = await api.get(`/students/${id}/documents/${type}`, {
+        responseType: "blob",
+      });
       const url = window.URL.createObjectURL(response.data);
       const link = window.document.createElement("a");
       link.href = url;
@@ -262,6 +274,34 @@ export default function StudentView() {
     } catch {
       toast.error("تعذر تنزيل الوثيقة");
     }
+  };
+
+  const viewStudentDocument = async (type, metadata) => {
+    try {
+      const response = await api.get(`/students/${id}/documents/${type}`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(response.data);
+      setStudentDocumentPreview((current) => {
+        if (current?.url) window.URL.revokeObjectURL(current.url);
+        return {
+          url,
+          isPdf:
+            response.data.type === "application/pdf" ||
+            metadata.fileName?.toLowerCase().endsWith(".pdf"),
+          name: metadata.originalName || metadata.fileName || type,
+        };
+      });
+    } catch {
+      toast.error("تعذر عرض الوثيقة");
+    }
+  };
+
+  const closeStudentDocumentPreview = () => {
+    setStudentDocumentPreview((current) => {
+      if (current?.url) window.URL.revokeObjectURL(current.url);
+      return null;
+    });
   };
 
   const deleteStudentDocument = async () => {
@@ -469,14 +509,30 @@ export default function StudentView() {
             const document = data.documents?.[key];
             return (
               <div key={key} className="rounded-lg border border-gray-200 p-3">
-                <div className="mb-2 text-sm font-medium text-gray-900">{label}</div>
+                <div className="mb-2 text-sm font-medium text-gray-900">
+                  {label}
+                </div>
                 {document ? (
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 text-xs text-gray-500">
-                      <div className="truncate">{document.originalName || document.fileName}</div>
-                      <div>{Math.round((document.size || 0) / 1024)} كيلوبايت</div>
+                      <div className="truncate">
+                        {document.originalName || document.fileName}
+                      </div>
+                      <div>
+                        {Math.round((document.size || 0) / 1024)} كيلوبايت
+                      </div>
                     </div>
                     <div className="flex shrink-0 gap-1">
+                      {has("students.documents.view") && (
+                        <button
+                          onClick={() => viewStudentDocument(key, document)}
+                          data-testid={`student-document-view-${key}`}
+                          title="عرض"
+                          className="rounded-md p-1.5 text-[#036A87] hover:bg-brand-light"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
                       {has("students.documents.view") && (
                         <button
                           onClick={() => downloadStudentDocument(key, document)}
@@ -508,7 +564,8 @@ export default function StudentView() {
                     data-testid={`student-document-upload-${key}`}
                     className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#036A87] hover:underline"
                   >
-                    <Upload className="h-3.5 w-3.5" /> {document ? "استبدال" : "رفع"}
+                    <Upload className="h-3.5 w-3.5" />{" "}
+                    {document ? "استبدال" : "رفع"}
                   </button>
                 )}
               </div>
@@ -956,9 +1013,15 @@ export default function StudentView() {
       {studentDocumentType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-bold text-gray-900">رفع وثيقة الطالب</h3>
+            <h3 className="mb-2 text-lg font-bold text-gray-900">
+              رفع وثيقة الطالب
+            </h3>
             <p className="mb-4 text-sm text-gray-600">
-              {STUDENT_DOCUMENT_TYPES.find((item) => item.key === studentDocumentType)?.label}
+              {
+                STUDENT_DOCUMENT_TYPES.find(
+                  (item) => item.key === studentDocumentType,
+                )?.label
+              }
             </p>
             <form onSubmit={uploadStudentDocument} className="space-y-4">
               <div>
@@ -998,8 +1061,12 @@ export default function StudentView() {
       {studentDocumentConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-bold text-gray-900">حذف الوثيقة</h3>
-            <p className="mb-6 text-sm text-gray-600">هل تريد حذف هذه الوثيقة؟</p>
+            <h3 className="mb-2 text-lg font-bold text-gray-900">
+              حذف الوثيقة
+            </h3>
+            <p className="mb-6 text-sm text-gray-600">
+              هل تريد حذف هذه الوثيقة؟
+            </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setStudentDocumentConfirm(null)}
@@ -1014,6 +1081,40 @@ export default function StudentView() {
               >
                 حذف
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {studentDocumentPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-200 p-4">
+              <h3 className="truncate text-lg font-bold text-gray-900">
+                {studentDocumentPreview.name}
+              </h3>
+              <button
+                onClick={closeStudentDocumentPreview}
+                title="إغلاق"
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
+              {studentDocumentPreview.isPdf ? (
+                <iframe
+                  src={studentDocumentPreview.url}
+                  title={studentDocumentPreview.name}
+                  className="h-[70vh] min-h-[420px] w-full rounded-lg border border-gray-200 bg-white"
+                />
+              ) : (
+                <img
+                  src={studentDocumentPreview.url}
+                  alt={studentDocumentPreview.name}
+                  className="mx-auto max-h-[70vh] max-w-full rounded-lg object-contain"
+                />
+              )}
             </div>
           </div>
         </div>

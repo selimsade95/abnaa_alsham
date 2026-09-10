@@ -672,6 +672,7 @@ async def validate_student(sid: str):
         "className": current_class.get("name") if current_class else student.get("newClass"),
         "section": current_class.get("section") if current_class else None,
         "academicYear": (current_class or {}).get("academicYear") or (d.get("fees") or {}).get("academicYear"),
+        "hasPersonalPhoto": bool(((d.get("documents") or {}).get("personal_photo") or {}).get("filePath")),
     }
 
 @api.get("/students/{sid}/full-information")
@@ -776,9 +777,10 @@ def _validate_upload(file: UploadFile):
         raise HTTPException(400, "نوع ملف غير مسموح")
     return ext, mime
 
-async def _save_upload(file: UploadFile, directory: Path, sid: str):
+async def _save_upload(file: UploadFile, directory: Path, student_code: str):
     ext, mime = _validate_upload(file)
-    fname = f"{sid}-{int(datetime.now().timestamp())}-{uuid.uuid4().hex[:8]}{ext}"
+    safe_code = re.sub(r"[^A-Za-z0-9_-]", "", student_code or "student")
+    fname = f"stu-{safe_code}-{int(datetime.now(timezone.utc).timestamp() * 1000)}{ext}"
     fpath = directory / fname
     size = 0
     with open(fpath, "wb") as out:
@@ -802,7 +804,7 @@ async def upload_student_document(sid: str, document_type: str, file: UploadFile
     student = await db.students.find_one({"id": sid})
     if not student:
         raise HTTPException(404, "الطالب غير موجود")
-    fname, fpath, mime, size = await _save_upload(file, STUDENT_DOCUMENTS_DIR, sid)
+    fname, fpath, mime, size = await _save_upload(file, STUDENT_DOCUMENTS_DIR, student.get("code") or sid)
     old = ((student.get("documents") or {}).get(document_type) or {}).get("filePath")
     meta = {"type": document_type, "label": STUDENT_DOCUMENT_TYPES[document_type], "fileName": fname,
             "originalName": file.filename or fname, "filePath": str(fpath), "mimeType": mime,
@@ -840,13 +842,21 @@ async def delete_student_document(sid: str, document_type: str,
     await db.students.update_one({"id": sid}, {"$unset": {f"documents.{document_type}": ""}, "$set": {"updatedAt": now_iso()}})
     return {"ok": True}
 
+@api.get("/public/students/{sid}/validation/personal-photo")
+async def get_public_personal_photo(sid: str):
+    student = await db.students.find_one({"id": sid}, {"_id": 0, "documents.personal_photo": 1})
+    document = ((student or {}).get("documents") or {}).get("personal_photo") or {}
+    if not document.get("filePath") or not os.path.exists(document["filePath"]):
+        raise HTTPException(404, "لا توجد صورة شخصية")
+    return FileResponse(document["filePath"], media_type=document.get("mimeType") or "image/jpeg")
+
 @api.post("/students/{sid}/orphan-document")
 async def upload_orphan_doc(sid: str, type: str = Form(...), description: Optional[str] = Form(""),
                              file: UploadFile = File(...),
                              current=Depends(require_permission("students.orphanDocument.upload"))):
     student = await db.students.find_one({"id": sid})
     if not student: raise HTTPException(404, "الطالب غير موجود")
-    fname, fpath, mime, size = await _save_upload(file, ORPHAN_DIR, sid)
+    fname, fpath, mime, size = await _save_upload(file, ORPHAN_DIR, student.get("code") or sid)
     old = (student.get("orphanDocument") or {}).get("filePath")
     if old:
         try: os.remove(old)

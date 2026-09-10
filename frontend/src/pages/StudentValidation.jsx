@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 
 export default function StudentValidation() {
@@ -83,6 +83,13 @@ export default function StudentValidation() {
             <h1 className="mt-3 text-2xl font-extrabold text-gray-900">
               {data.fullName}
             </h1>
+            {data.hasPersonalPhoto && (
+              <img
+                src={`${API}/public/students/${id}/validation/personal-photo`}
+                alt="صورة الطالب"
+                className="mx-auto mt-3 h-24 w-20 rounded-lg border border-gray-200 object-cover"
+              />
+            )}
             <div className="mt-1 font-mono text-sm text-[#036A87]">
               {data.code}
             </div>
