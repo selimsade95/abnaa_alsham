@@ -59,7 +59,7 @@ export default function Login() {
               مرحباً بك في نظام تسجيل الطلاب
             </h1>
             <p className="text-white/90 text-lg max-w-md leading-relaxed">
-              منصة بسيطة وأنيقة لإدارة تسجيلات طلاب مدرسة اقرأ.
+              منصة بسيطة وأنيقة لإدارة تسجيلات طلاب مدرسة أبناء الشام.
             </p>
           </div>
         </div>
@@ -75,7 +75,9 @@ export default function Login() {
               className="h-12 w-12 object-contain"
             />
             <div>
-              <div className="text-lg font-bold text-gray-900">مدرسة اقرأ</div>
+              <div className="text-lg font-bold text-gray-900">
+                مدرسة أبناء الشام
+              </div>
               <div className="text-xs text-gray-500">نظام تسجيل الطلاب</div>
             </div>
           </div>

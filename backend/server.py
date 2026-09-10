@@ -838,7 +838,7 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
         matching = await db.students.find({"$or": [{"student.fullName": {"$regex": search, "$options": "i"}},
                                                     {"code": {"$regex": search, "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
         q["student"] = {"$in": [m["id"] for m in matching]}
-    docs = await db.payments.find(q, {"_id": 0}).sort("createdAt", -1).to_list(1000)
+    docs = await db.payments.find(q, {"_id": 0}).sort("paymentDate", -1).to_list(1000)
     for d in docs: await _enrich_payment(d)
     return docs
 

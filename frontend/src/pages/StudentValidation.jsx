@@ -31,12 +31,12 @@ export default function StudentValidation() {
         <header className="bg-[#E0F9FF] px-6 py-5 flex items-center gap-3 border-b-2 border-[#04CDF9]">
           <img
             src="/assets/logo.png"
-            alt="مدرسة اقرأ"
+            alt="مدرسة أبناء الشام"
             className="h-14 w-14 object-contain"
           />
           <div>
             <div className="text-xl font-extrabold text-gray-900">
-              مدرسة اقرأ
+              مدرسة أبناء الشام
             </div>
             <div className="text-xs text-[#036A87]">
               التحقق من بيانات الطالب

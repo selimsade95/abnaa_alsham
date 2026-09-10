@@ -131,7 +131,7 @@ export default function PaymentPrint({ studentHistory = false }) {
         <header className="flex items-center gap-4 border-b-2 border-[#04CDF9] pb-4">
           {/* Left Logo */}
           <img
-            src="/assets/logo.png"
+            src="/assets/school_logo.png"
             alt="مدرسة أبناء الشام"
             className="h-16 w-16 object-contain"
           />
@@ -298,7 +298,7 @@ export default function PaymentPrint({ studentHistory = false }) {
 
         {/* Document note */}
         <p className="mt-6 text-xs text-gray-500">
-          هذا المستند يوضح سجل المدفوعات المسجل لدى مدرسة اقرأ.
+          هذا المستند يوضح سجل المدفوعات المسجل لدى مدرسة أبناء الشام.
         </p>
 
         {/* Push footer to bottom */}

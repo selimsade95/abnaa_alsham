@@ -67,16 +67,25 @@ export default function StudentCard() {
 
       <main className="student-card mx-auto max-w-md overflow-hidden rounded-2xl border border-[#BDEFFA] bg-white shadow-lg">
         <header className="bg-[#E0F9FF] px-6 py-5 flex items-center gap-3 border-b-2 border-[#04CDF9]">
-          <img
-            src="/assets/logo.png"
-            alt="مدرسة اقرأ"
-            className="h-14 w-14 object-contain"
-          />
-          <div>
-            <div className="text-xl font-extrabold text-gray-900">
-              مدرسة اقرأ
+          <div className="flex items-center justify-between w-[100%]">
+            <img
+              src="/assets/logo.png"
+              alt="مؤسسة اقرأ"
+              className="h-14 w-14 object-contain"
+            />
+            <div>
+              <div className="text-xl font-extrabold text-gray-900">
+                مدرسة أبناء الشام
+              </div>
+              <div className="text-xs text-center text-[#036A87]">
+                بطاقة طالب رقمية
+              </div>
             </div>
-            <div className="text-xs text-[#036A87]">بطاقة طالب رقمية</div>
+            <img
+              src="/assets/school_logo.png"
+              alt="مدرسة أبناء الشام"
+              className="h-14 w-14 object-contain"
+            />
           </div>
         </header>
         <section className="p-6 text-center">
@@ -104,13 +113,26 @@ export default function StudentCard() {
                 {data.currentClass?.section || "—"}
               </div>
             </div>
-            <div className="col-span-2 rounded-lg bg-gray-50 p-3">
+            <div className="rounded-lg bg-gray-50 p-3">
               <div className="text-xs text-gray-500">الحالة</div>
               <div className="mt-1 text-sm font-semibold text-gray-900">
                 {STATUS_LABELS[student.status] ||
                   (isActive ? "نشط" : "غير نشط")}
               </div>
             </div>
+            <div className="rounded-lg bg-gray-50 p-3">
+              <div className="text-xs text-gray-500">مسار التسجيل</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                {data.student.registrationPath || "—"}
+              </div>
+            </div>
+            {/* <div className="col-span-2 rounded-lg bg-gray-50 p-3">
+              <div className="text-xs text-gray-500">الحالة</div>
+              <div className="mt-1 text-sm font-semibold text-gray-900">
+                {STATUS_LABELS[student.status] ||
+                  (isActive ? "نشط" : "غير نشط")}
+              </div>
+            </div> */}
           </div>
           <div className="mt-6 flex flex-col items-center border-t border-gray-100 pt-5">
             <img

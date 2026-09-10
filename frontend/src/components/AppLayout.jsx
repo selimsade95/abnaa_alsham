@@ -88,13 +88,13 @@ export default function AppLayout() {
     <div className="flex h-full flex-col bg-white">
       <div className="flex items-center gap-3 px-6 py-6 border-b border-gray-200">
         <img
-          src="/assets/logo.png"
-          alt="IQRA"
+          src="/assets/school_logo.png"
+          alt="Abnaa Alsham"
           className="h-10 w-10 object-contain"
         />
         <div>
           <div className="text-lg font-bold text-gray-900 leading-tight">
-            مدرسة اقرأ
+            مدرسة أبناء الشام
           </div>
           <div className="text-xs text-gray-500">نظام تسجيل الطلاب</div>
         </div>
@@ -179,7 +179,7 @@ export default function AppLayout() {
             alt="IQRA"
             className="h-8 w-8 object-contain"
           />
-          <span className="font-bold text-gray-900">مدرسة اقرأ</span>
+          <span className="font-bold text-gray-900">مدرسة أبناء الشام</span>
         </div>
         <button
           onClick={() => setOpen(true)}

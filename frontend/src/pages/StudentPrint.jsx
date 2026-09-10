@@ -64,7 +64,7 @@ export default function StudentPrint() {
           />
           <div className="flex-1">
             <div className="text-xl font-extrabold text-gray-900">
-              مدرسة اقرأ
+              مدرسة أبناء الشام
             </div>
             <div className="text-sm text-gray-600">استمارة تسجيل طالب</div>
           </div>
@@ -364,7 +364,7 @@ export default function StudentPrint() {
         </div>
 
         <div className="text-center text-[10px] text-gray-500 mt-4">
-          مدرسة اقرأ — نظام تسجيل الطلاب
+          مدرسة أبناء الشام — نظام تسجيل الطلاب
         </div>
       </div>
     </div>
