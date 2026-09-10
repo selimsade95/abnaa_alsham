@@ -20,7 +20,9 @@ JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_HOURS = int(os.environ.get('JWT_EXPIRE_HOURS', '24'))
 UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', str(ROOT_DIR / 'uploads')))
 ORPHAN_DIR = UPLOAD_DIR / 'orphan-documents'
+STUDENT_DOCUMENTS_DIR = UPLOAD_DIR / 'student-documents'
 ORPHAN_DIR.mkdir(parents=True, exist_ok=True)
+STUDENT_DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_MB', '10')) * 1024 * 1024
 ALLOWED_MIMES = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
 ALLOWED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
@@ -51,6 +53,9 @@ PERMISSIONS_CATALOG = [
     ("students.orphanDocument.view", "عرض وثيقة اليتم", "students", "orphanDocument.view"),
     ("students.orphanDocument.upload", "رفع وثيقة اليتم", "students", "orphanDocument.upload"),
     ("students.orphanDocument.delete", "حذف وثيقة اليتم", "students", "orphanDocument.delete"),
+    ("students.documents.view", "عرض وثائق الطالب", "students", "documents.view"),
+    ("students.documents.upload", "رفع وثائق الطالب", "students", "documents.upload"),
+    ("students.documents.delete", "حذف وثائق الطالب", "students", "documents.delete"),
     ("teachers.view", "عرض المعلمين", "teachers", "view"),
     ("teachers.create", "إضافة معلمين", "teachers", "create"),
     ("teachers.update", "تعديل المعلمين", "teachers", "update"),
@@ -752,28 +757,96 @@ async def reactivate_student(sid: str, current=Depends(require_permission("stude
 #endregion
 
 #region Orphan docs
+STUDENT_DOCUMENT_TYPES = {
+    "student_id": "إخراج قيد / هوية الطالب",
+    "family_father": "بيان عائلي / دفتر العائلة — صفحة الأب",
+    "family_mother": "بيان عائلي / دفتر العائلة — صفحة الأم",
+    "family_student": "بيان عائلي / دفتر العائلة — صفحة الطالب",
+    "personal_photo": "صورة شخصية",
+    "mother_id_front": "هوية الأم — الوجه الأمامي",
+    "mother_id_back": "هوية الأم — الوجه الخلفي",
+}
+
+def _validate_upload(file: UploadFile):
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTS:
+        raise HTTPException(400, "امتداد ملف غير مسموح")
+    mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
+    if mime and mime not in ALLOWED_MIMES:
+        raise HTTPException(400, "نوع ملف غير مسموح")
+    return ext, mime
+
+async def _save_upload(file: UploadFile, directory: Path, sid: str):
+    ext, mime = _validate_upload(file)
+    fname = f"{sid}-{int(datetime.now().timestamp())}-{uuid.uuid4().hex[:8]}{ext}"
+    fpath = directory / fname
+    size = 0
+    with open(fpath, "wb") as out:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                out.close()
+                os.remove(fpath)
+                raise HTTPException(400, f"حجم الملف يتجاوز {MAX_UPLOAD_BYTES // (1024*1024)}MB")
+            out.write(chunk)
+    return fname, fpath, mime, size
+
+@api.post("/students/{sid}/documents/{document_type}")
+async def upload_student_document(sid: str, document_type: str, file: UploadFile = File(...),
+                                  current=Depends(require_permission("students.documents.upload"))):
+    if document_type not in STUDENT_DOCUMENT_TYPES:
+        raise HTTPException(400, "نوع الوثيقة غير صالح")
+    student = await db.students.find_one({"id": sid})
+    if not student:
+        raise HTTPException(404, "الطالب غير موجود")
+    fname, fpath, mime, size = await _save_upload(file, STUDENT_DOCUMENTS_DIR, sid)
+    old = ((student.get("documents") or {}).get(document_type) or {}).get("filePath")
+    meta = {"type": document_type, "label": STUDENT_DOCUMENT_TYPES[document_type], "fileName": fname,
+            "originalName": file.filename or fname, "filePath": str(fpath), "mimeType": mime,
+            "size": size, "uploadedAt": now_iso(), "uploadedBy": current["id"]}
+    await db.students.update_one({"id": sid}, {"$set": {f"documents.{document_type}": meta, "updatedAt": now_iso()}})
+    if old:
+        try: os.remove(old)
+        except OSError: pass
+    return {k: v for k, v in meta.items() if k != "filePath"}
+
+@api.get("/students/{sid}/documents/{document_type}")
+async def get_student_document(sid: str, document_type: str,
+                               current=Depends(require_permission("students.documents.view"))):
+    if document_type not in STUDENT_DOCUMENT_TYPES:
+        raise HTTPException(400, "نوع الوثيقة غير صالح")
+    student = await db.students.find_one({"id": sid})
+    document = ((student or {}).get("documents") or {}).get(document_type)
+    if not document or not document.get("filePath") or not os.path.exists(document["filePath"]):
+        raise HTTPException(404, "لا توجد وثيقة")
+    return FileResponse(document["filePath"], media_type=document.get("mimeType") or "application/octet-stream",
+                        filename=document.get("originalName") or document.get("fileName"))
+
+@api.delete("/students/{sid}/documents/{document_type}")
+async def delete_student_document(sid: str, document_type: str,
+                                  current=Depends(require_permission("students.documents.delete"))):
+    if document_type not in STUDENT_DOCUMENT_TYPES:
+        raise HTTPException(400, "نوع الوثيقة غير صالح")
+    student = await db.students.find_one({"id": sid})
+    if not student:
+        raise HTTPException(404, "الطالب غير موجود")
+    document = ((student.get("documents") or {}).get(document_type) or {})
+    if document.get("filePath"):
+        try: os.remove(document["filePath"])
+        except OSError: pass
+    await db.students.update_one({"id": sid}, {"$unset": {f"documents.{document_type}": ""}, "$set": {"updatedAt": now_iso()}})
+    return {"ok": True}
+
 @api.post("/students/{sid}/orphan-document")
 async def upload_orphan_doc(sid: str, type: str = Form(...), description: Optional[str] = Form(""),
                              file: UploadFile = File(...),
                              current=Depends(require_permission("students.orphanDocument.upload"))):
     student = await db.students.find_one({"id": sid})
     if not student: raise HTTPException(404, "الطالب غير موجود")
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in ALLOWED_EXTS: raise HTTPException(400, "امتداد ملف غير مسموح")
-    mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
-    if mime and mime not in ALLOWED_MIMES: raise HTTPException(400, "نوع ملف غير مسموح")
-    fname = f"{sid}-{int(datetime.now().timestamp())}-{uuid.uuid4().hex[:8]}{ext}"
-    fpath = ORPHAN_DIR / fname
-    size = 0
-    with open(fpath, "wb") as out:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk: break
-            size += len(chunk)
-            if size > MAX_UPLOAD_BYTES:
-                out.close(); os.remove(fpath)
-                raise HTTPException(400, f"حجم الملف يتجاوز {MAX_UPLOAD_BYTES // (1024*1024)}MB")
-            out.write(chunk)
+    fname, fpath, mime, size = await _save_upload(file, ORPHAN_DIR, sid)
     old = (student.get("orphanDocument") or {}).get("filePath")
     if old:
         try: os.remove(old)
@@ -1045,6 +1118,7 @@ async def on_startup():
                          "students.fullInformation.view",
                          "payments.view","payments.create","payments.print",
                          "students.orphanDocument.view","students.orphanDocument.upload",
+                         "students.documents.view","students.documents.upload","students.documents.delete",
                          "teachers.view","classes.view"]},
         {"name": "Accountant", "description": "محاسب",
          "permissions": ["students.view","payments.view","payments.create","payments.update",
@@ -1063,6 +1137,15 @@ async def on_startup():
                 admin_role_id = existing["id"]
     if not admin_role_id:
         admin_role_id = (await db.roles.find_one({"name": "Administrator"}))["id"]
+
+    # Grant the new document permissions to the seeded registration role without
+    # replacing any permissions an administrator may have added later.
+    await db.roles.update_one(
+        {"name": "Registration Staff"},
+        {"$addToSet": {"permissions": {"$each": [
+            "students.documents.view", "students.documents.upload", "students.documents.delete"
+        ]}}},
+    )
 
     try:
         await db.students.create_index("student.fullName")

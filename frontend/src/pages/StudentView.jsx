@@ -63,6 +63,16 @@ const StatusBadge = ({ paid, total }) => {
   );
 };
 
+const STUDENT_DOCUMENT_TYPES = [
+  { key: "student_id", label: "إخراج قيد / هوية الطالب" },
+  { key: "family_father", label: "بيان عائلي / دفتر العائلة — صفحة الأب" },
+  { key: "family_mother", label: "بيان عائلي / دفتر العائلة — صفحة الأم" },
+  { key: "family_student", label: "بيان عائلي / دفتر العائلة — صفحة الطالب" },
+  { key: "personal_photo", label: "صورة شخصية" },
+  { key: "mother_id_front", label: "هوية الأم — الوجه الأمامي" },
+  { key: "mother_id_back", label: "هوية الأم — الوجه الخلفي" },
+];
+
 export default function StudentView() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -76,6 +86,9 @@ export default function StudentView() {
   const [uploadModal, setUploadModal] = useState(false);
   const [docConfirm, setDocConfirm] = useState(false);
   const fileRef = useRef(null);
+  const [studentDocumentType, setStudentDocumentType] = useState(null);
+  const [studentDocumentConfirm, setStudentDocumentConfirm] = useState(null);
+  const studentDocumentFileRef = useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -211,6 +224,55 @@ export default function StudentView() {
       window.URL.revokeObjectURL(url);
     } catch {
       toast.error("تعذر تنزيل الوثيقة");
+    }
+  };
+
+  const openStudentDocumentUpload = (type) => {
+    if (data?.documents?.[type] && !window.confirm("توجد وثيقة سابقة. هل تريد استبدالها؟")) return;
+    setStudentDocumentType(type);
+  };
+
+  const uploadStudentDocument = async (event) => {
+    event.preventDefault();
+    const file = studentDocumentFileRef.current?.files?.[0];
+    if (!file || !studentDocumentType) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      await api.post(`/students/${id}/documents/${studentDocumentType}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success("تم رفع الوثيقة");
+      setStudentDocumentType(null);
+      load();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "فشل رفع الوثيقة");
+    }
+  };
+
+  const downloadStudentDocument = async (type, metadata) => {
+    try {
+      const response = await api.get(`/students/${id}/documents/${type}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(response.data);
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = metadata.originalName || metadata.fileName || type;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("تعذر تنزيل الوثيقة");
+    }
+  };
+
+  const deleteStudentDocument = async () => {
+    if (!studentDocumentConfirm) return;
+    try {
+      await api.delete(`/students/${id}/documents/${studentDocumentConfirm}`);
+      toast.success("تم حذف الوثيقة");
+      setStudentDocumentConfirm(null);
+      load();
+    } catch {
+      toast.error("تعذر حذف الوثيقة");
     }
   };
 
@@ -397,6 +459,63 @@ export default function StudentView() {
           )}
         </Section>
       )}
+
+      <Section title="وثائق الطالب">
+        <p className="mb-4 text-sm text-gray-500">
+          الصيغ المدعومة: PDF أو JPG أو PNG، وبحد أقصى 10 ميغابايت لكل ملف.
+        </p>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {STUDENT_DOCUMENT_TYPES.map(({ key, label }) => {
+            const document = data.documents?.[key];
+            return (
+              <div key={key} className="rounded-lg border border-gray-200 p-3">
+                <div className="mb-2 text-sm font-medium text-gray-900">{label}</div>
+                {document ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 text-xs text-gray-500">
+                      <div className="truncate">{document.originalName || document.fileName}</div>
+                      <div>{Math.round((document.size || 0) / 1024)} كيلوبايت</div>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      {has("students.documents.view") && (
+                        <button
+                          onClick={() => downloadStudentDocument(key, document)}
+                          data-testid={`student-document-download-${key}`}
+                          title="تنزيل"
+                          className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100"
+                        >
+                          <Download className="h-4 w-4" />
+                        </button>
+                      )}
+                      {has("students.documents.delete") && (
+                        <button
+                          onClick={() => setStudentDocumentConfirm(key)}
+                          data-testid={`student-document-delete-${key}`}
+                          title="حذف"
+                          className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">لم تُرفع بعد.</p>
+                )}
+                {has("students.documents.upload") && (
+                  <button
+                    onClick={() => openStudentDocumentUpload(key)}
+                    data-testid={`student-document-upload-${key}`}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#036A87] hover:underline"
+                  >
+                    <Upload className="h-3.5 w-3.5" /> {document ? "استبدال" : "رفع"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
 
       {has("payments.view") && (
         <Section
@@ -830,6 +949,72 @@ export default function StudentView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {studentDocumentType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 className="mb-2 text-lg font-bold text-gray-900">رفع وثيقة الطالب</h3>
+            <p className="mb-4 text-sm text-gray-600">
+              {STUDENT_DOCUMENT_TYPES.find((item) => item.key === studentDocumentType)?.label}
+            </p>
+            <form onSubmit={uploadStudentDocument} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  الملف (PDF/JPG/PNG - أقل من 10MB)
+                </label>
+                <input
+                  ref={studentDocumentFileRef}
+                  type="file"
+                  required
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  data-testid="student-document-file"
+                  className="w-full text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStudentDocumentType(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  data-testid="student-document-submit"
+                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                >
+                  رفع
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {studentDocumentConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
+            <h3 className="mb-2 text-lg font-bold text-gray-900">حذف الوثيقة</h3>
+            <p className="mb-6 text-sm text-gray-600">هل تريد حذف هذه الوثيقة؟</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setStudentDocumentConfirm(null)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={deleteStudentDocument}
+                data-testid="student-document-confirm-delete"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                حذف
+              </button>
+            </div>
           </div>
         </div>
       )}

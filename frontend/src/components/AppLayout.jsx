@@ -96,7 +96,7 @@ export default function AppLayout() {
           <div className="text-lg font-bold text-gray-900 leading-tight">
             مدرسة أبناء الشام
           </div>
-          <div className="text-xs text-gray-500">نظام تسجيل الطلاب</div>
+          <div className="text-xs text-gray-500">نظام إدارة المدرسة</div>
         </div>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-1">

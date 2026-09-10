@@ -364,7 +364,7 @@ export default function StudentPrint() {
         </div>
 
         <div className="text-center text-[10px] text-gray-500 mt-4">
-          مدرسة أبناء الشام — نظام تسجيل الطلاب
+          مدرسة أبناء الشام — نظام إدارة المدرسة
         </div>
       </div>
     </div>
