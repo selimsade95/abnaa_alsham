@@ -1,7 +1,4 @@
-import { useEffect, useState } from "react";
-import api from "@/lib/api";
-import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
+import { useSettings } from "@/hooks/useSettings";
 import { Loader2 } from "lucide-react";
 
 const ENTITIES = [
@@ -11,62 +8,8 @@ const ENTITIES = [
 ];
 
 export default function Settings() {
-  const { has } = useAuth();
-  const canEdit = has("settings.codeGeneration.update");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [preview, setPreview] = useState({});
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const r = await api.get("/settings/code-generation");
-      setData(r.data);
-      refreshPreview(r.data);
-    } catch {
-      toast.error("تعذر التحميل");
-    }
-    setLoading(false);
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const refreshPreview = async (d) => {
-    try {
-      const r = await api.post("/settings/code-generation/preview", {
-        students: d.students,
-        teachers: d.teachers,
-        classes: d.classes,
-        resetYearly: d.resetYearly,
-      });
-      setPreview(r.data);
-    } catch {
-      /* no-op */
-    }
-  };
-
-  const save = async () => {
-    try {
-      const r = await api.put("/settings/code-generation", {
-        students: data.students,
-        teachers: data.teachers,
-        classes: data.classes,
-        resetYearly: data.resetYearly,
-      });
-      setData(r.data);
-      refreshPreview(r.data);
-      toast.success("تم الحفظ");
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل الحفظ");
-    }
-  };
-
-  const updateEntity = (key, field, value) => {
-    const next = { ...data, [key]: { ...data[key], [field]: value } };
-    setData(next);
-    refreshPreview(next);
-  };
+  const { canEdit, data, loading, preview, setData, save, updateEntity } =
+    useSettings();
 
   if (loading || !data)
     return (

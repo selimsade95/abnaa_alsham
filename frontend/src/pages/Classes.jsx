@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import api from "@/lib/api";
+import { useClassesList } from "@/hooks/useClassesList";
 import {
   Plus,
   Trash2,
@@ -11,188 +10,41 @@ import {
   Download,
   Upload,
 } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
-import { downloadCsv, downloadTemplate, uploadCsv } from "@/lib/csv";
+import { downloadTemplate } from "@/lib/csv";
 
 export default function Classes() {
-  const { has } = useAuth();
-  const [items, setItems] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 1,
-  });
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [debQ, setDebQ] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    grade: "",
-    section: "",
-    academicYear: "",
-    teacherId: "",
-    status: "",
-  });
-  const [editing, setEditing] = useState(null);
-  const [confirmId, setConfirmId] = useState(null);
-  const [deactivationReason, setDeactivationReason] = useState("");
-  const [reactivating, setReactivating] = useState(null);
-  const importRef = useRef(null);
-  const classColumns = [
-    { label: "الكود", value: (c) => c.code },
-    { label: "الاسم", value: (c) => c.name },
-    { label: "الصف", value: (c) => c.grade },
-    { label: "الشعبة", value: (c) => c.section },
-    { label: "السنة", value: (c) => c.academicYear },
-    { label: "المعلم", value: (c) => c.teacherName },
-    { label: "الحالة", value: (c) => c.status },
-    { label: "سبب التعطيل", value: (c) => c.deactivationReason },
-  ];
-  const classTemplate = [
-    "name",
-    "grade",
-    "section",
-    "academicYear",
-    "teacherIds [comma-separated existing teacher IDs]",
-    "capacity",
-    "status [active|inactive]",
-    "notes",
-  ];
-
-  const exportClasses = async () => {
-    try {
-      const params = { page: 1, limit: 5000, search: debQ, ...filters };
-      Object.keys(params).forEach((key) => !params[key] && delete params[key]);
-      const response = await api.get("/classes", { params });
-      downloadCsv("classes.csv", classColumns, response.data.data);
-    } catch {
-      toast.error("تعذر تصدير الصفوف");
-    }
-  };
-  const importClasses = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      const response = await uploadCsv(api, "/classes/import", file);
-      toast.success(`تم استيراد ${response.data.created} صف`);
-      load(1);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "تعذر استيراد الصفوف");
-    }
-  };
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebQ(q.trim()), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-  useEffect(() => {
-    api
-      .get("/teachers", { params: { limit: 500 } })
-      .then((r) => setTeachers(r.data.data))
-      .catch(() => {});
-  }, []);
-
-  const load = async (p = 1) => {
-    setLoading(true);
-    try {
-      const params = { page: p, limit: 50 };
-      if (debQ) params.search = debQ;
-      Object.entries(filters).forEach(([k, v]) => {
-        if (v) params[k] = v;
-      });
-      const r = await api.get("/classes", { params });
-      setItems(r.data.data);
-      setPagination(r.data.pagination);
-    } catch {
-      toast.error("تعذر التحميل");
-    }
-    setLoading(false);
-  };
-  useEffect(() => {
-    load(1); /* eslint-disable-next-line */
-  }, [debQ, filters]);
-
-  const openNew = () =>
-    setEditing({
-      id: null,
-      name: "",
-      grade: "",
-      section: "",
-      academicYear: "",
-      teacherIds: [],
-      capacity: 0,
-      status: "active",
-      notes: "",
-    });
-  const openEdit = (c) => setEditing({ ...c, teacherIds: c.teacherIds || (c.teacherId ? [c.teacherId] : []) });
-
-  const save = async (e) => {
-    e.preventDefault();
-    const {
-      id,
-      code,
-      createdAt,
-      updatedAt,
-      teacherName,
-      teacherCode,
-      studentCount,
-      ...rest
-    } = editing;
-    const body = {
-      ...rest,
-      teacherIds: rest.teacherIds || [],
-      teacherId: (rest.teacherIds || [])[0] || null,
-      capacity: Number(rest.capacity) || 0,
-    };
-    try {
-      if (id) await api.put(`/classes/${id}`, body);
-      else await api.post("/classes", body);
-      toast.success("تم الحفظ");
-      setEditing(null);
-      load(pagination.page);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل الحفظ");
-    }
-  };
-  const doDelete = async () => {
-    if (!confirmId || !deactivationReason.trim()) return;
-    try {
-      await api.delete(`/classes/${confirmId}`, {
-        data: { reason: deactivationReason.trim() },
-      });
-      toast.success("تم تعطيل الصف");
-      setConfirmId(null);
-      load(pagination.page);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل تعطيل الصف");
-    }
-  };
-
-  const doReactivate = async (id) => {
-    setReactivating(id);
-    try {
-      await api.post(`/classes/${id}/reactivate`);
-      toast.success("تم إعادة تفعيل الصف");
-      load(pagination.page);
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل إعادة تفعيل الصف");
-    }
-    setReactivating(null);
-  };
-
-  const clearFilters = () =>
-    setFilters({
-      grade: "",
-      section: "",
-      academicYear: "",
-      teacherId: "",
-      status: "",
-    });
-  const hasActiveFilters = Object.values(filters).some(Boolean);
+  const {
+    has,
+    items,
+    teachers,
+    pagination,
+    loading,
+    q,
+    setQ,
+    showFilters,
+    setShowFilters,
+    filters,
+    setFilters,
+    editing,
+    setEditing,
+    confirmId,
+    setConfirmId,
+    deactivationReason,
+    setDeactivationReason,
+    reactivating,
+    importRef,
+    exportClasses,
+    importClasses,
+    openNew,
+    openEdit,
+    save,
+    doDelete,
+    doReactivate,
+    clearFilters,
+    classTemplate,
+    hasActiveFilters,
+    load,
+  } = useClassesList();
 
   return (
     <div className="space-y-6">
@@ -516,17 +368,24 @@ export default function Classes() {
                   </label>
                   <select
                     value={editing.teacherIds || []}
-                    onChange={(e) => setEditing({
-                      ...editing,
-                      teacherIds: Array.from(e.target.selectedOptions, (option) => option.value),
-                    })}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        teacherIds: Array.from(
+                          e.target.selectedOptions,
+                          (option) => option.value,
+                        ),
+                      })
+                    }
                     multiple
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 min-h-24"
                   >
                     {teachers
                       .filter((t) => t.employmentStatus === "active")
                       .map((t) => (
-                        <option key={t.id} value={t.id}>{t.fullName}</option>
+                        <option key={t.id} value={t.id}>
+                          {t.fullName}
+                        </option>
                       ))}
                   </select>
                 </div>

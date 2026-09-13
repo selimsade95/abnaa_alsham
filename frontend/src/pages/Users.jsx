@@ -1,97 +1,25 @@
-import { useEffect, useState } from "react";
-import api from "@/lib/api";
 import { Plus, Trash2, Loader2, Pencil } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
+import { useUsers } from "@/hooks/useUsers";
 
 export default function Users() {
-  const { user, has } = useAuth();
-  const [items, setItems] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null);
-  const [confirmId, setConfirmId] = useState(null);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [u, r] = await Promise.all([
-        api.get("/users"),
-        api.get("/roles").catch(() => ({ data: [] })),
-      ]);
-      setItems(u.data);
-      setRoles(r.data);
-      const t = await api.get("/teachers", { params: { limit: 500 } }).catch(() => ({ data: { data: [] } }));
-      setTeachers(t.data.data || []);
-    } catch {
-      toast.error("تعذر تحميل المستخدمين");
-    }
-    setLoading(false);
-  };
-  useEffect(() => {
-    load();
-  }, []);
-
-  const openNew = () =>
-    setEditing({ id: null, name: "", username: "", password: "", roles: [], teacherId: "" });
-  const openEdit = (u) =>
-    setEditing({
-      id: u.id,
-      name: u.name,
-      username: u.username,
-      password: "",
-      roles: u.roles || [],
-      teacherId: u.teacherId || "",
-    });
-
-  const toggleRole = (rid) => {
-    const s = new Set(editing.roles);
-    if (s.has(rid)) s.delete(rid);
-    else s.add(rid);
-    setEditing({ ...editing, roles: Array.from(s) });
-  };
-
-  const save = async (e) => {
-    e.preventDefault();
-    try {
-      if (editing.id) {
-        const body = { name: editing.name, roles: editing.roles };
-        body.teacherId = editing.teacherId || null;
-        if (editing.password) body.password = editing.password;
-        await api.put(`/users/${editing.id}`, body);
-      } else {
-        if (!editing.password || editing.password.length < 4) {
-          toast.error("كلمة المرور 4 أحرف على الأقل");
-          return;
-        }
-        await api.post("/users", {
-          name: editing.name,
-          username: editing.username,
-          password: editing.password,
-          roles: editing.roles,
-          teacherId: editing.teacherId || null,
-        });
-      }
-      toast.success("تم الحفظ");
-      setEditing(null);
-      load();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل الحفظ");
-    }
-  };
-  const doDelete = async () => {
-    try {
-      await api.delete(`/users/${confirmId}`);
-      toast.success("تم الحذف");
-      setConfirmId(null);
-      load();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل الحذف");
-    }
-  };
-
-  const roleName = (rid) => roles.find((r) => r.id === rid)?.name || "—";
+  const {
+    user,
+    has,
+    items,
+    roles,
+    teachers,
+    loading,
+    editing,
+    setEditing,
+    confirmId,
+    setConfirmId,
+    openNew,
+    openEdit,
+    toggleRole,
+    save,
+    doDelete,
+    roleName,
+  } = useUsers();
 
   return (
     <div className="space-y-6">
@@ -172,7 +100,8 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {teachers.find((t) => t.id === u.teacherId)?.fullName || "—"}
+                    {teachers.find((t) => t.id === u.teacherId)?.fullName ||
+                      "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {u.createdAt?.slice(0, 10)}
@@ -295,13 +224,23 @@ export default function Users() {
                 </label>
                 <select
                   value={editing.teacherId}
-                  onChange={(e) => setEditing({ ...editing, teacherId: e.target.value })}
+                  onChange={(e) =>
+                    setEditing({ ...editing, teacherId: e.target.value })
+                  }
                   className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 >
                   <option value="">— بدون ربط —</option>
                   {teachers
-                    .filter((t) => t.employmentStatus === "active" || t.id === editing.teacherId)
-                    .map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                    .filter(
+                      (t) =>
+                        t.employmentStatus === "active" ||
+                        t.id === editing.teacherId,
+                    )
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.fullName}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">

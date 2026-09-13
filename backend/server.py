@@ -834,26 +834,29 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                     {"father.phone": rx}, {"mother.phone": rx},
                     {"student.currentAddress": rx},
                     {"general.whatsappGroupPhone": rx}]
-    # Payment status is derived from payment records, so it must be evaluated
-    # before pagination; otherwise matching students can be skipped and totals
-    # become inaccurate.
+    # Payment status and fee totals are derived from payment records, so the
+    # complete filtered set must be evaluated before pagination.
+    matched_docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).to_list(None)
+    for d in matched_docs: await _augment_student(d)
     if paymentStatus:
-        docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).to_list(None)
-        for d in docs: await _augment_student(d)
         def matches(d):
             f = d.get("fees", {}); tp = f.get("totalPayable", 0); pp = f.get("totalPaid", 0)
             if paymentStatus == "paid": return tp > 0 and pp >= tp
             if paymentStatus == "partial": return 0 < pp < tp
             if paymentStatus == "unpaid": return pp == 0
             return True
-        docs = [d for d in docs if matches(d)]
-        total = len(docs)
-        docs = docs[(page - 1) * limit:page * limit]
-    else:
-        total = await db.students.count_documents(q)
-        docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)
-        for d in docs: await _augment_student(d)
-    return {"data": docs, "pagination": {"page": page, "limit": limit, "total": total, "totalPages": (total + limit - 1) // limit}}
+        matched_docs = [d for d in matched_docs if matches(d)]
+    total = len(matched_docs)
+    start = (page - 1) * limit
+    docs = matched_docs[start:start + limit]
+    summary = {
+        "totalPayable": sum(float((d.get("fees") or {}).get("totalPayable") or 0) for d in matched_docs),
+        "totalPaid": sum(float((d.get("fees") or {}).get("totalPaid") or 0) for d in matched_docs),
+    }
+    summary["totalRemaining"] = max(0, summary["totalPayable"] - summary["totalPaid"])
+    return {"data": docs, "summary": summary,
+            "pagination": {"page": page, "limit": limit, "total": total,
+                            "totalPages": (total + limit - 1) // limit}}
 
 @api.post("/students/import")
 async def import_students(file: UploadFile = File(...), current=Depends(require_permission("students.create"))):

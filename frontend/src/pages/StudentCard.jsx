@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
-import api, { API } from "@/lib/api";
+import { API } from "@/lib/api";
+import { useStudent } from "@/hooks/useStudent";
 import {
   Loader2,
   Printer,
@@ -15,14 +16,12 @@ import { STATUS_LABELS } from "@/lib/studentDefaults";
 
 export default function StudentCard() {
   const { id } = useParams();
-  const [data, setData] = useState(null);
+  const { student: data } = useStudent(id);
   const [qr, setQr] = useState("");
 
   useEffect(() => {
-    api
-      .get(`/students/${id}`)
-      .then(async (response) => {
-        setData(response.data);
+    if (data) {
+      (async () => {
         const url = `${window.location.origin}/validate/student/${id}`;
         setQr(
           await QRCode.toDataURL(url, {
@@ -35,9 +34,9 @@ export default function StudentCard() {
             },
           }),
         );
-      })
-      .catch(() => toast.error("تعذر تحميل بطاقة الطالب"));
-  }, [id]);
+      })().catch(() => toast.error("تعذر تحميل بطاقة الطالب"));
+    }
+  }, [data, id]);
 
   if (!data || !qr)
     return (

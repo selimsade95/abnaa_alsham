@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
-import api from "@/lib/api";
+import { useStudent } from "@/hooks/useStudent";
 import {
   STATUS_LABELS,
   GENDER_LABELS,
@@ -25,18 +25,7 @@ const Row = ({ label, value }) => (
 
 export default function StudentPrint() {
   const { id } = useParams();
-  const [data, setData] = useState(null);
-  const [payments, setPayments] = useState([]);
-
-  useEffect(() => {
-    Promise.all([
-      api.get(`/students/${id}`),
-      api.get(`/students/${id}/payments`).catch(() => ({ data: [] })),
-    ]).then(([s, p]) => {
-      setData(s.data);
-      setPayments(p.data);
-    });
-  }, [id]);
+  const { student: data, payments } = useStudent(id, { payments: true });
 
   useEffect(() => {
     if (data) {

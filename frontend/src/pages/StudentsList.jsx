@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import api from "@/lib/api";
+import { Link } from "react-router-dom";
 import {
   Search,
   Plus,
@@ -15,169 +13,45 @@ import {
   Download,
   Upload,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   STATUS_LABELS,
   GENDER_LABELS,
   REGISTRATION_PATHS,
 } from "@/lib/studentDefaults";
-import { useAuth } from "@/lib/auth";
-import { downloadCsv, downloadTemplate, uploadCsv } from "@/lib/csv";
+import { downloadTemplate } from "@/lib/csv";
+import { useStudentsList } from "@/hooks/useStudentsList";
 
 export default function StudentsList() {
-  const { has } = useAuth();
-  const nav = useNavigate();
-  const [items, setItems] = useState([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    totalPages: 1,
-  });
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [debQ, setDebQ] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    gender: "",
-    orphan: "",
-    registrationPath: "",
-    classId: "",
-    status: "",
-    academicYear: "",
-    paymentStatus: "",
-  });
-  const [classes, setClasses] = useState([]);
-  const [confirmId, setConfirmId] = useState(null);
-  const [deactivationReason, setDeactivationReason] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [reactivating, setReactivating] = useState(null);
-  const importRef = useRef(null);
-
-  const studentColumns = [
-    { label: "الكود", value: (s) => s.code },
-    { label: "الاسم الكامل", value: (s) => s.student?.fullName },
-    { label: "الجنس", value: (s) => s.student?.gender },
-    { label: "تاريخ الميلاد", value: (s) => s.student?.birthdate },
-    { label: "الحالة", value: (s) => s.student?.status },
-    {
-      label: "الصف",
-      value: (s) => s.currentClass?.name || s.student?.newClass,
-    },
-    { label: "مسار التسجيل", value: (s) => s.student?.registrationPath },
-    { label: "الهاتف", value: (s) => s.father?.phone || s.mother?.phone },
-    { label: "سبب التعطيل", value: (s) => s.deactivationReason },
-  ];
-  const studentTemplate = [
-    "fullName",
-    "gender [male|female]",
-    "birthdate",
-    "registrationPath [خاص|القرية|الايتام]",
-    "status [resident|immigrant|displaced|inactive]",
-    "currentAddress",
-    "fatherName",
-    "fatherPhone",
-    "motherName",
-    "motherPhone",
-    "academicYear",
-    "totalPayable",
-    "currentClassId [existing class ID]",
-  ];
-
-  const exportStudents = async () => {
-    try {
-      const params = { page: 1, limit: 5000, search: debQ, ...filters };
-      Object.keys(params).forEach((key) => !params[key] && delete params[key]);
-      const response = await api.get("/students", { params });
-      downloadCsv("students.csv", studentColumns, response.data.data);
-    } catch {
-      toast.error("تعذر تصدير الطلاب");
-    }
-  };
-  const importStudents = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      const response = await uploadCsv(api, "/students/import", file);
-      toast.success(`تم استيراد ${response.data.created} طالب`);
-      load(1);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "تعذر استيراد الطلاب");
-    }
-  };
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebQ(q.trim()), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-  useEffect(() => {
-    if (has("classes.view"))
-      api
-        .get("/classes", { params: { limit: 500 } })
-        .then((r) => setClasses(r.data.data))
-        .catch(() => {}); /* eslint-disable-next-line */
-  }, []);
-
-  const load = async (p = 1) => {
-    setLoading(true);
-    try {
-      const params = { page: p, limit: 20 };
-      if (debQ) params.search = debQ;
-      Object.entries(filters).forEach(([k, v]) => {
-        if (v) params[k] = v;
-      });
-      const r = await api.get("/students", { params });
-      setItems(r.data.data);
-      setPagination(r.data.pagination);
-    } catch {
-      toast.error("تعذر تحميل الطلاب");
-    }
-    setLoading(false);
-  };
-  useEffect(() => {
-    load(1); /* eslint-disable-next-line */
-  }, [debQ, filters]);
-
-  const doDelete = async () => {
-    if (!confirmId || !deactivationReason.trim()) return;
-    setDeleting(true);
-    try {
-      await api.delete(`/students/${confirmId}`, {
-        data: { reason: deactivationReason.trim() },
-      });
-      toast.success("تم تعطيل الطالب");
-      setConfirmId(null);
-      load(pagination.page);
-    } catch {
-      toast.error("تعذر تعطيل الطالب");
-    }
-    setDeleting(false);
-  };
-
-  const doReactivate = async (id) => {
-    setReactivating(id);
-    try {
-      await api.post(`/students/${id}/reactivate`);
-      toast.success("تم إعادة تفعيل الطالب");
-      load(pagination.page);
-    } catch {
-      toast.error("تعذر إعادة تفعيل الطالب");
-    }
-    setReactivating(null);
-  };
-
-  const clearFilters = () =>
-    setFilters({
-      gender: "",
-      orphan: "",
-      registrationPath: "",
-      classId: "",
-      status: "",
-      academicYear: "",
-      paymentStatus: "",
-    });
-  const activeCount = Object.values(filters).filter(Boolean).length;
+  const {
+    has,
+    nav,
+    items,
+    summary,
+    pagination,
+    loading,
+    q,
+    setQ,
+    showFilters,
+    setShowFilters,
+    filters,
+    setFilters,
+    classes,
+    confirmId,
+    setConfirmId,
+    deactivationReason,
+    setDeactivationReason,
+    deleting,
+    reactivating,
+    importRef,
+    load,
+    doDelete,
+    doReactivate,
+    clearFilters,
+    exportStudents,
+    importStudents,
+    studentTemplate,
+    activeCount,
+  } = useStudentsList();
 
   return (
     <div className="space-y-6">
@@ -381,6 +255,29 @@ export default function StudentsList() {
               >
                 مسح الفلاتر
               </button>
+            </div>
+          </div>
+        )}
+
+        {activeCount > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border-b border-gray-200">
+            <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
+              <div className="text-sm text-sky-700">إجمالي المستحق</div>
+              <div className="mt-1 text-2xl font-bold text-sky-900">
+                {summary.totalPayable.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-sm text-emerald-700">إجمالي المدفوع</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-900">
+                {summary.totalPaid.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="text-sm text-amber-700">إجمالي المتبقي</div>
+              <div className="mt-1 text-2xl font-bold text-amber-900">
+                {summary.totalRemaining.toLocaleString()}
+              </div>
             </div>
           </div>
         )}

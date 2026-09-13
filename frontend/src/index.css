@@ -1,16 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
-  font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
+  font-family:
+    "Tajawal",
+    system-ui,
+    -apple-system,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #F8FAFC;
+  background-color: #f8fafc;
   color: #111827;
 }
 
@@ -40,13 +45,17 @@ html, body {
 }
 
 @layer base {
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground; }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
 /* Force RTL-aware focus outline */
 :focus-visible {
-  outline: 2px solid #04CDF9;
+  outline: 2px solid #04cdf9;
   outline-offset: 2px;
 }
 
@@ -60,7 +69,8 @@ html, body {
     background: #fff !important;
     color: #000 !important;
   }
-  .no-print, .no-print * {
+  .no-print,
+  .no-print * {
     display: none !important;
   }
   .print-area {
@@ -81,7 +91,9 @@ html, body {
   .print-page-break {
     page-break-before: always;
   }
-  input, textarea, select {
+  input,
+  textarea,
+  select {
     border: none !important;
     background: transparent !important;
     color: #000 !important;
@@ -90,7 +102,17 @@ html, body {
 }
 
 /* Custom scrollbar */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #F1F5F9; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

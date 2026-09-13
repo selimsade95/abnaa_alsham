@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import api from "@/lib/api";
-import { toast } from "sonner";
 import { Loader2, Plus, Trash2, ArrowRight } from "lucide-react";
+import { useStudentForm } from "@/hooks/useStudentForm";
 import {
-  emptyStudent,
   LANGUAGES,
   STATUS_LABELS,
   REGISTRATION_PATHS,
@@ -47,164 +43,28 @@ const Radio = ({ name, checked, onChange, label, testid }) => (
 );
 
 export default function StudentForm({ mode }) {
-  const nav = useNavigate();
-  const { id } = useParams();
-  const [data, setData] = useState(emptyStudent());
-  const [loading, setLoading] = useState(mode === "edit");
-  const [saving, setSaving] = useState(false);
-  const [hobbiesInput, setHobbiesInput] = useState("");
-  const [errors, setErrors] = useState({});
-  const [classes, setClasses] = useState([]);
-  const [showFullInfo, setShowFullInfo] = useState(false);
-
-  useEffect(() => {
-    api
-      .get("/classes", { params: { limit: 500 } })
-      .then((r) => setClasses(r.data.data))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (mode === "edit" && id) {
-      api
-        .get(`/students/${id}`)
-        .then((r) => {
-          const d = r.data;
-          if (d.student?.birthdate)
-            d.student.birthdate = d.student.birthdate.slice(0, 10);
-          const merged = {
-            ...emptyStudent(),
-            ...d,
-            student: { ...emptyStudent().student, ...d.student },
-            fullInfo: { ...emptyStudent().fullInfo, ...(d.fullInfo || {}) },
-            currentClassId: d.currentClassId || "",
-          };
-          merged.fees = {
-            academicYear: d.fees?.academicYear || "",
-            totalPayable: d.fees?.totalPayable || 0,
-          };
-          setData(merged);
-          setHobbiesInput((d.student?.hobbies || []).join("، "));
-        })
-        .catch(() => toast.error("تعذر تحميل بيانات الطالب"))
-        .finally(() => setLoading(false));
-    }
-  }, [id, mode]);
-
-  const update = (path, value) => {
-    setData((prev) => {
-      const next = structuredClone(prev);
-      const keys = path.split(".");
-      let obj = next;
-      for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]];
-      obj[keys[keys.length - 1]] = value;
-      return next;
-    });
-  };
-
-  const toggleLanguage = (lang) => {
-    const set = new Set(data.student.languages);
-    if (set.has(lang)) set.delete(lang);
-    else set.add(lang);
-    update("student.languages", Array.from(set));
-  };
-
-  const addSibling = () =>
-    update("siblings", [
-      ...data.siblings,
-      {
-        order: data.siblings.length + 1,
-        fullName: "",
-        gender: "male",
-        class: "",
-      },
-    ]);
-  const removeSibling = (idx) =>
-    update(
-      "siblings",
-      data.siblings
-        .filter((_, i) => i !== idx)
-        .map((s, i) => ({ ...s, order: i + 1 })),
-    );
-  const updateSibling = (idx, k, v) =>
-    update(
-      "siblings",
-      data.siblings.map((s, i) => (i === idx ? { ...s, [k]: v } : s)),
-    );
-
-  const addEdu = () =>
-    update("previousEducation", [
-      ...data.previousEducation,
-      {
-        classes: "",
-        schoolName: "",
-        startingDate: "",
-        endingDate: "",
-        results: "",
-      },
-    ]);
-  const removeEdu = (idx) =>
-    update(
-      "previousEducation",
-      data.previousEducation.filter((_, i) => i !== idx),
-    );
-  const updateEdu = (idx, k, v) =>
-    update(
-      "previousEducation",
-      data.previousEducation.map((e, i) => (i === idx ? { ...e, [k]: v } : e)),
-    );
-
-  const validate = () => {
-    const e = {};
-    if (!data.student.fullName?.trim()) e.fullName = "الاسم الكامل مطلوب";
-    if (!data.student.gender) e.gender = "الجنس مطلوب";
-    if (!data.student.birthdate) e.birthdate = "تاريخ الميلاد مطلوب";
-    if (!data.student.newClass?.trim()) e.newClass = "الصف الجديد مطلوب";
-    if (!data.student.status) e.status = "الوضع مطلوب";
-    if (!data.student.registrationPath)
-      e.registrationPath = "مسار التسجيل مطلوب";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!validate()) {
-      toast.error("يرجى تعبئة الحقول المطلوبة");
-      return;
-    }
-    const hobbies = hobbiesInput
-      .split(/[,،]/)
-      .map((h) => h.trim())
-      .filter(Boolean);
-    const payload = structuredClone(data);
-    payload.student.hobbies = hobbies;
-    if (payload.student.birthdate?.length === 10)
-      payload.student.birthdate = `${payload.student.birthdate}T00:00:00`;
-    // clean initial payment on edit
-    if (mode === "edit") delete payload.initialPayment;
-    else if (
-      !payload.initialPayment?.amount ||
-      Number(payload.initialPayment.amount) <= 0
-    )
-      delete payload.initialPayment;
-    setSaving(true);
-    try {
-      if (mode === "edit") {
-        await api.put(`/students/${id}`, payload);
-        toast.success("تم التحديث");
-        nav(`/students/${id}`);
-      } else {
-        const res = await api.post("/students", payload);
-        toast.success("تم الإنشاء");
-        nav(`/students/${res.data.id}`);
-      }
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || "تعذر حفظ البيانات");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const {
+    nav,
+    id,
+    data,
+    loading,
+    saving,
+    hobbiesInput,
+    setHobbiesInput,
+    errors,
+    classes,
+    showFullInfo,
+    setShowFullInfo,
+    update,
+    toggleLanguage,
+    addSibling,
+    removeSibling,
+    updateSibling,
+    addEdu,
+    removeEdu,
+    updateEdu,
+    submit,
+  } = useStudentForm(mode);
 
   if (loading)
     return (

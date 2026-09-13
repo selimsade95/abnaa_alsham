@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import {
   SEMESTER_LABELS,
 } from "@/lib/studentDefaults";
 import { useAuth } from "@/lib/auth";
+import { useStudent } from "@/hooks/useStudent";
 
 const Section = ({ title, children, actions }) => (
   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -78,9 +79,14 @@ export default function StudentView() {
   const { id } = useParams();
   const nav = useNavigate();
   const { has } = useAuth();
-  const [data, setData] = useState(null);
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    student: data,
+    payments,
+    loading,
+    reload,
+  } = useStudent(id, {
+    payments: has("payments.view"),
+  });
   const [confirm, setConfirm] = useState(false);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [payModal, setPayModal] = useState(null);
@@ -91,25 +97,6 @@ export default function StudentView() {
   const [studentDocumentConfirm, setStudentDocumentConfirm] = useState(null);
   const [studentDocumentPreview, setStudentDocumentPreview] = useState(null);
   const studentDocumentFileRef = useRef(null);
-
-  const load = () => {
-    setLoading(true);
-    Promise.all([
-      api.get(`/students/${id}`),
-      has("payments.view")
-        ? api.get(`/students/${id}/payments`)
-        : Promise.resolve({ data: [] }),
-    ])
-      .then(([s, p]) => {
-        setData(s.data);
-        setPayments(p.data);
-      })
-      .catch(() => toast.error("تعذر تحميل بيانات الطالب"))
-      .finally(() => setLoading(false));
-  };
-  useEffect(() => {
-    load(); /* eslint-disable-next-line */
-  }, [id]);
 
   const doDelete = async () => {
     if (!deactivationReason.trim()) return;
@@ -152,7 +139,7 @@ export default function StudentView() {
       else await api.post("/payments", body);
       toast.success("تم الحفظ");
       setPayModal(null);
-      load();
+      reload();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "فشل الحفظ");
     }
@@ -163,7 +150,7 @@ export default function StudentView() {
     try {
       await api.delete(`/payments/${pid}`);
       toast.success("تم الحذف");
-      load();
+      reload();
     } catch {
       toast.error("تعذر الحذف");
     }
@@ -189,7 +176,7 @@ export default function StudentView() {
       });
       toast.success("تم رفع الوثيقة");
       setUploadModal(false);
-      load();
+      reload();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "فشل الرفع");
     }
@@ -207,7 +194,7 @@ export default function StudentView() {
       await api.delete(`/students/${id}/orphan-document`);
       toast.success("تم حذف الوثيقة");
       setDocConfirm(false);
-      load();
+      reload();
     } catch {
       toast.error("تعذر الحذف");
     }
@@ -254,7 +241,7 @@ export default function StudentView() {
       );
       toast.success("تم رفع الوثيقة");
       setStudentDocumentType(null);
-      load();
+      reload();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "فشل رفع الوثيقة");
     }
@@ -310,7 +297,7 @@ export default function StudentView() {
       await api.delete(`/students/${id}/documents/${studentDocumentConfirm}`);
       toast.success("تم حذف الوثيقة");
       setStudentDocumentConfirm(null);
-      load();
+      reload();
     } catch {
       toast.error("تعذر حذف الوثيقة");
     }

@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useStudent } from "@/hooks/useStudent";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "@/lib/api";
 import { ArrowRight, Loader2, Pencil } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -30,16 +29,7 @@ export default function StudentFullInfo() {
   const { id } = useParams();
   const nav = useNavigate();
   const { has } = useAuth();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .get(`/students/${id}/full-information`)
-      .then((r) => setData(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [id]);
+  const { student: data, loading } = useStudent(id, { fullInformation: true });
 
   if (loading)
     return (
