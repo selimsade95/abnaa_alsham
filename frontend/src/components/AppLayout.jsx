@@ -137,6 +137,16 @@ export default function AppLayout() {
           );
         })}
       </nav>
+      <p className="text-sm text-center text-gray-400">
+        تم إنشاؤه بواسطة مؤسسة{" "}
+        <a
+          className="text-gray-600"
+          href="https://iqracharity.org"
+          target="_blank"
+        >
+          اقرأ الخيرية
+        </a>
+      </p>
       <div className="border-t border-gray-200 p-4">
         <div className="mb-3 flex items-center gap-3 px-2">
           <div className="h-9 w-9 rounded-full bg-brand-light text-[#036A87] flex items-center justify-center text-sm font-bold">
