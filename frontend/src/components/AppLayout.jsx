@@ -13,6 +13,7 @@ import {
   BookOpen,
   Presentation,
   Settings as SettingsIcon,
+  ClipboardCheck,
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -48,6 +49,20 @@ export default function AppLayout() {
       icon: BookOpen,
       testid: "nav-classes",
       show: has("classes.view"),
+    },
+    {
+      to: "/subjects",
+      label: "المواد والإسنادات",
+      icon: BookOpen,
+      testid: "nav-subjects",
+      show: has("subjects.view"),
+    },
+    {
+      to: "/grades",
+      label: "الدرجات",
+      icon: ClipboardCheck,
+      testid: "nav-grades",
+      show: has("grades.view"),
     },
     {
       to: "/payments",

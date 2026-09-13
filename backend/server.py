@@ -80,6 +80,14 @@ PERMISSIONS_CATALOG = [
     ("permissions.view", "عرض الصلاحيات", "permissions", "view"),
     ("settings.codeGeneration.view", "عرض إعدادات توليد الأكواد", "settings", "codeGeneration.view"),
     ("settings.codeGeneration.update", "تعديل إعدادات توليد الأكواد", "settings", "codeGeneration.update"),
+    ("subjects.view", "عرض المواد", "subjects", "view"),
+    ("subjects.create", "إضافة مواد", "subjects", "create"),
+    ("subjects.update", "تعديل المواد", "subjects", "update"),
+    ("subjects.delete", "حذف المواد", "subjects", "delete"),
+    ("grades.view", "عرض الدرجات", "grades", "view"),
+    ("grades.create", "إضافة الدرجات", "grades", "create"),
+    ("grades.edit", "تعديل الدرجات", "grades", "edit"),
+    ("grades.accept", "فتح فترة قبول الدرجات", "grades", "accept"),
 ]
 ALL_PERMS = [p[0] for p in PERMISSIONS_CATALOG]
 
@@ -109,6 +117,58 @@ def require_permission(perm):
             raise HTTPException(403, f"لا تملك صلاحية: {perm}")
         return current
     return checker
+
+async def allowed_class_ids(current):
+    """Return None for unrestricted users, otherwise the classes assigned to their teacher."""
+    teacher_id = current.get("teacherId")
+    if not teacher_id:
+        return None
+    classes = await db.classes.find(
+        {"$or": [{"teacherIds": teacher_id}, {"teacherId": teacher_id}]},
+        {"_id": 0, "id": 1},
+    ).to_list(5000)
+    return [item["id"] for item in classes]
+
+async def ensure_class_access(class_id, current):
+    allowed = await allowed_class_ids(current)
+    if allowed is not None and class_id not in allowed:
+        raise HTTPException(404, "غير موجود")
+    cls = await db.classes.find_one({"id": class_id})
+    if not cls:
+        raise HTTPException(404, "غير موجود")
+    return cls
+
+async def ensure_student_access(student_id, current):
+    student = await db.students.find_one({"id": student_id})
+    if not student:
+        raise HTTPException(404, "غير موجود")
+    allowed = await allowed_class_ids(current)
+    if allowed is not None and student.get("currentClassId") not in allowed:
+        raise HTTPException(404, "غير موجود")
+    return student
+
+async def grade_scope(current):
+    """Return authorized class/subject pairs, or None for unrestricted users."""
+    teacher_id = current.get("teacherId")
+    if not teacher_id:
+        return None
+    assignments = await db.class_subject_assignments.find(
+        {"teacherIds": teacher_id}, {"_id": 0, "classId": 1, "subjectId": 1}
+    ).to_list(5000)
+    return {(item["classId"], item["subjectId"]) for item in assignments}
+
+async def ensure_grade_scope(class_id, subject_id, current):
+    allowed = await grade_scope(current)
+    if allowed is not None and (class_id, subject_id) not in allowed:
+        raise HTTPException(404, "غير موجود")
+    cls = await db.classes.find_one({"id": class_id})
+    subject = await db.subjects.find_one({"id": subject_id})
+    if not cls or not subject:
+        raise HTTPException(400, "الصف أو المادة غير موجودة")
+    assignment = await db.class_subject_assignments.find_one({"classId": class_id, "subjectId": subject_id})
+    if not assignment:
+        raise HTTPException(400, "المادة غير مسندة إلى هذا الصف")
+    return cls, subject, assignment
 
 #region Code generation
 DEFAULT_CODE_SETTINGS = {
@@ -172,10 +232,11 @@ class LoginIn(BaseModel):
     username: str; password: str
 
 class UserCreate(BaseModel):
-    name: str; username: str; password: str; roles: List[str] = []
+    name: str; username: str; password: str; roles: List[str] = []; teacherId: Optional[str] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None; password: Optional[str] = None; roles: Optional[List[str]] = None
+    teacherId: Optional[str] = None
 
 class RoleIn(BaseModel):
     name: str; description: Optional[str] = ""; permissions: List[str] = []
@@ -214,6 +275,7 @@ class ClassIn(BaseModel):
     section: Optional[str] = ""
     academicYear: Optional[str] = ""
     teacherId: Optional[str] = None
+    teacherIds: List[str] = []
     capacity: Optional[int] = 0
     status: Optional[str] = "active"
     notes: Optional[str] = ""
@@ -223,6 +285,27 @@ class DeactivationIn(BaseModel):
 
 class CodeSettingsIn(BaseModel):
     students: dict; teachers: dict; classes: dict; resetYearly: bool = True
+
+class SubjectIn(BaseModel):
+    name: str
+    code: Optional[str] = ""
+    status: Optional[str] = "active"
+    notes: Optional[str] = ""
+
+class TeacherSubjectIn(BaseModel):
+    teacherId: str; subjectId: str
+
+class ClassSubjectIn(BaseModel):
+    classId: str; subjectId: str; teacherIds: List[str] = []
+
+class GradeIn(BaseModel):
+    studentId: str; classId: str; subjectId: str
+    academicYear: str; period: str
+    score: float
+    notes: Optional[str] = ""
+
+class GradeSettingsIn(BaseModel):
+    accepting: bool = False
 #endregion
 
 #region Auth
@@ -235,6 +318,7 @@ async def login(body: LoginIn):
     return {"token": create_token(user["id"], user["username"]),
             "user": {"id": user["id"], "name": user["name"], "username": user["username"],
                      "createdAt": user["createdAt"], "roles": user.get("roles", []),
+                     "teacherId": user.get("teacherId"),
                      "permissions": perms}}
 
 @api.post("/auth/logout")
@@ -244,6 +328,7 @@ async def logout(current=Depends(get_current_user)): return {"ok": True}
 async def me(current=Depends(get_current_user)):
     return {"id": current["id"], "name": current["name"], "username": current["username"],
             "createdAt": current["createdAt"], "roles": current.get("roles", []),
+            "teacherId": current.get("teacherId"),
             "permissions": current.get("permissions", [])}
 
 @api.get("/permissions")
@@ -291,8 +376,12 @@ async def create_user(body: UserCreate, current=Depends(require_permission("user
     if not body.name.strip() or not body.username.strip() or len(body.password) < 4:
         raise HTTPException(400, "بيانات غير صالحة")
     if await db.users.find_one({"username": body.username}): raise HTTPException(400, "اسم المستخدم مستخدم")
+    if body.teacherId:
+        if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
+        if await db.users.find_one({"teacherId": body.teacherId}): raise HTTPException(400, "المعلم مرتبط بحساب آخر")
     doc = {"id": str(uuid.uuid4()), "name": body.name.strip(), "username": body.username.strip(),
            "password": hash_pw(body.password), "roles": body.roles or [],
+           "teacherId": body.teacherId,
            "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.users.insert_one(doc); doc.pop("password", None); doc.pop("_id", None); return doc
 
@@ -303,6 +392,13 @@ async def update_user(uid: str, body: UserUpdate, current=Depends(require_permis
     if body.name is not None: upd["name"] = body.name.strip()
     if body.password: upd["password"] = hash_pw(body.password)
     if body.roles is not None: upd["roles"] = body.roles
+    if "teacherId" in body.model_fields_set and body.teacherId is None:
+        upd["teacherId"] = None
+    elif body.teacherId is not None:
+        if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
+        if await db.users.find_one({"teacherId": body.teacherId, "id": {"$ne": uid}}):
+            raise HTTPException(400, "المعلم مرتبط بحساب آخر")
+        upd["teacherId"] = body.teacherId
     await db.users.update_one({"id": uid}, {"$set": upd})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
 
@@ -424,14 +520,131 @@ async def reactivate_teacher(tid: str, current=Depends(require_permission("teach
     return {"ok": True, "reactivated": True}
 #endregion
 
+#region Subjects and assignments
+@api.get("/subjects")
+async def list_subjects(status: Optional[str] = None,
+                        current=Depends(require_permission("subjects.view"))):
+    q = {} if status == "all" else {"status": status or {"$ne": "inactive"}}
+    if current.get("teacherId"):
+        assignments = await db.teacher_subject_assignments.find(
+            {"teacherId": current["teacherId"]}, {"_id": 0, "subjectId": 1}
+        ).to_list(5000)
+        q["id"] = {"$in": [item["subjectId"] for item in assignments]}
+    return await db.subjects.find(q, {"_id": 0}).sort("name", 1).to_list(500)
+
+@api.post("/subjects")
+async def create_subject(body: SubjectIn, current=Depends(require_permission("subjects.create"))):
+    if not body.name.strip(): raise HTTPException(400, "اسم المادة مطلوب")
+    if body.code and await db.subjects.find_one({"code": body.code.strip()}):
+        raise HTTPException(400, "رمز المادة مستخدم")
+    doc = {"id": str(uuid.uuid4()), **body.model_dump(), "name": body.name.strip(),
+           "code": (body.code or "").strip(), "createdAt": now_iso(), "updatedAt": now_iso()}
+    await db.subjects.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/subjects/{subject_id}")
+async def update_subject(subject_id: str, body: SubjectIn,
+                         current=Depends(require_permission("subjects.update"))):
+    if not body.name.strip(): raise HTTPException(400, "اسم المادة مطلوب")
+    if not await db.subjects.find_one({"id": subject_id}): raise HTTPException(404, "غير موجود")
+    if body.code and await db.subjects.find_one({"code": body.code.strip(), "id": {"$ne": subject_id}}):
+        raise HTTPException(400, "رمز المادة مستخدم")
+    await db.subjects.update_one({"id": subject_id}, {"$set": {
+        **body.model_dump(), "name": body.name.strip(), "code": (body.code or "").strip(), "updatedAt": now_iso()
+    }})
+    return await db.subjects.find_one({"id": subject_id}, {"_id": 0})
+
+@api.delete("/subjects/{subject_id}")
+async def delete_subject(subject_id: str, current=Depends(require_permission("subjects.delete"))):
+    result = await db.subjects.update_one({"id": subject_id}, {"$set": {"status": "inactive", "updatedAt": now_iso()}})
+    if not result.matched_count: raise HTTPException(404, "غير موجود")
+    return {"ok": True}
+
+@api.get("/teacher-subject-assignments")
+async def list_teacher_subject_assignments(teacherId: Optional[str] = None,
+                                           current=Depends(require_permission("subjects.view"))):
+    if current.get("teacherId"):
+        teacherId = current["teacherId"]
+    q = {"teacherId": teacherId} if teacherId else {}
+    return await db.teacher_subject_assignments.find(q, {"_id": 0}).to_list(5000)
+
+@api.post("/teacher-subject-assignments")
+async def create_teacher_subject_assignment(body: TeacherSubjectIn,
+                                            current=Depends(require_permission("subjects.update"))):
+    if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
+    if not await db.subjects.find_one({"id": body.subjectId, "status": {"$ne": "inactive"}}): raise HTTPException(400, "المادة غير موجودة")
+    if await db.teacher_subject_assignments.find_one({"teacherId": body.teacherId, "subjectId": body.subjectId}):
+        raise HTTPException(400, "الإسناد موجود مسبقاً")
+    doc = {"id": str(uuid.uuid4()), **body.model_dump(), "createdAt": now_iso()}
+    await db.teacher_subject_assignments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.delete("/teacher-subject-assignments/{assignment_id}")
+async def delete_teacher_subject_assignment(assignment_id: str,
+                                            current=Depends(require_permission("subjects.update"))):
+    result = await db.teacher_subject_assignments.delete_one({"id": assignment_id})
+    if not result.deleted_count: raise HTTPException(404, "غير موجود")
+    return {"ok": True}
+
+@api.get("/class-subject-assignments")
+async def list_class_subject_assignments(classId: Optional[str] = None,
+                                         current=Depends(require_permission("subjects.view"))):
+    q = {"classId": classId} if classId else {}
+    assignments = await db.class_subject_assignments.find(q, {"_id": 0}).to_list(5000)
+    allowed = await grade_scope(current)
+    if allowed is not None:
+        assignments = [item for item in assignments if (item["classId"], item["subjectId"]) in allowed]
+    return assignments
+
+@api.post("/class-subject-assignments")
+async def create_class_subject_assignment(body: ClassSubjectIn,
+                                          current=Depends(require_permission("subjects.update"))):
+    if not await db.classes.find_one({"id": body.classId}): raise HTTPException(400, "الصف غير موجود")
+    if not await db.subjects.find_one({"id": body.subjectId, "status": {"$ne": "inactive"}}): raise HTTPException(400, "المادة غير موجودة")
+    if await db.class_subject_assignments.find_one({"classId": body.classId, "subjectId": body.subjectId}):
+        raise HTTPException(400, "المادة مسندة إلى الصف مسبقاً")
+    teacher_ids = list(dict.fromkeys(body.teacherIds))
+    for teacher_id in teacher_ids:
+        if not await db.teachers.find_one({"id": teacher_id}): raise HTTPException(400, "المعلم غير موجود")
+        if not await db.teacher_subject_assignments.find_one({"teacherId": teacher_id, "subjectId": body.subjectId}):
+            raise HTTPException(400, "المعلم غير مخول لهذه المادة")
+    doc = {"id": str(uuid.uuid4()), "classId": body.classId, "subjectId": body.subjectId,
+           "teacherIds": teacher_ids, "createdAt": now_iso()}
+    await db.class_subject_assignments.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/class-subject-assignments/{assignment_id}")
+async def update_class_subject_assignment(assignment_id: str, body: ClassSubjectIn,
+                                          current=Depends(require_permission("subjects.update"))):
+    existing = await db.class_subject_assignments.find_one({"id": assignment_id})
+    if not existing: raise HTTPException(404, "غير موجود")
+    if existing["classId"] != body.classId or existing["subjectId"] != body.subjectId:
+        raise HTTPException(400, "لا يمكن تغيير الصف أو المادة")
+    for teacher_id in body.teacherIds:
+        if not await db.teacher_subject_assignments.find_one({"teacherId": teacher_id, "subjectId": body.subjectId}):
+            raise HTTPException(400, "المعلم غير مخول لهذه المادة")
+    await db.class_subject_assignments.update_one({"id": assignment_id}, {"$set": {"teacherIds": list(dict.fromkeys(body.teacherIds))}})
+    return await db.class_subject_assignments.find_one({"id": assignment_id}, {"_id": 0})
+
+@api.delete("/class-subject-assignments/{assignment_id}")
+async def delete_class_subject_assignment(assignment_id: str,
+                                          current=Depends(require_permission("subjects.update"))):
+    result = await db.class_subject_assignments.delete_one({"id": assignment_id})
+    if not result.deleted_count: raise HTTPException(404, "غير موجود")
+    return {"ok": True}
+#endregion
+
 #region Classes
 async def _class_enrich(c: dict) -> dict:
-    if c.get("teacherId"):
-        t = await db.teachers.find_one({"id": c["teacherId"]}, {"_id": 0, "fullName": 1, "code": 1})
-        c["teacherName"] = t.get("fullName") if t else None
-        c["teacherCode"] = t.get("code") if t else None
-    else:
-        c["teacherName"] = None; c["teacherCode"] = None
+    teacher_ids = c.get("teacherIds") or ([c["teacherId"]] if c.get("teacherId") else [])
+    teachers = await db.teachers.find({"id": {"$in": teacher_ids}}, {"_id": 0, "fullName": 1, "code": 1}).to_list(100)
+    c["teacherIds"] = teacher_ids
+    c["teacherNames"] = [t.get("fullName") for t in teachers]
+    c["teacherName"] = ", ".join(c["teacherNames"]) or None
+    c["teacherCode"] = ", ".join(t.get("code") for t in teachers if t.get("code")) or None
     c["studentCount"] = await db.students.count_documents({"currentClassId": c["id"]})
     return c
 
@@ -446,7 +659,11 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
     if grade: q["grade"] = grade
     if section: q["section"] = section
     if academicYear: q["academicYear"] = academicYear
-    if teacherId: q["teacherId"] = teacherId
+    allowed = await allowed_class_ids(current)
+    if allowed is not None:
+        q["id"] = {"$in": allowed}
+    elif teacherId:
+        q["$or"] = [{"teacherIds": teacherId}, {"teacherId": teacherId}]
     if search:
         rx = {"$regex": search, "$options": "i"}
         q["$or"] = [{"name": rx}, {"code": rx}, {"grade": rx}, {"section": rx}, {"academicYear": rx}]
@@ -458,22 +675,24 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
 @api.post("/classes/import")
 async def import_classes(file: UploadFile = File(...), current=Depends(require_permission("classes.create"))):
     rows = await _read_csv_rows(file)
-    required = {"name", "grade", "section", "academicYear", "teacherId", "capacity", "status", "notes"}
+    required = {"name", "grade", "section", "academicYear", "capacity", "status", "notes"}
     if not rows or not required.issubset(rows[0].keys()):
         raise HTTPException(400, "قالب الصفوف غير صحيح")
     created = []
     for index, row in enumerate(rows, 2):
         if not (row.get("name") or "").strip():
             raise HTTPException(400, f"اسم الصف مطلوب في الصف {index}")
-        teacher_id = (row.get("teacherId") or "").strip() or None
-        if teacher_id and not await db.teachers.find_one({"id": teacher_id}):
-            raise HTTPException(400, f"المعلم غير موجود في الصف {index}")
+        teacher_ids = [item.strip() for item in (row.get("teacherIds") or row.get("teacherId") or "").split(",") if item.strip()]
+        for teacher_id in teacher_ids:
+            if not await db.teachers.find_one({"id": teacher_id}):
+                raise HTTPException(400, f"المعلم غير موجود في الصف {index}")
         try: capacity = int(row.get("capacity") or 0)
         except ValueError: raise HTTPException(400, f"السعة غير صحيحة في الصف {index}")
         code = await generate_code("classes")
         doc = {"id": str(uuid.uuid4()), "code": code, "name": row["name"].strip(),
                "grade": row.get("grade", "").strip(), "section": row.get("section", "").strip(),
-               "academicYear": row.get("academicYear", "").strip(), "teacherId": teacher_id,
+               "academicYear": row.get("academicYear", "").strip(), "teacherIds": teacher_ids,
+               "teacherId": teacher_ids[0] if teacher_ids else None,
                "capacity": capacity, "status": row.get("status", "active").strip() or "active",
                "notes": row.get("notes", "").strip(), "createdAt": now_iso(), "updatedAt": now_iso()}
         await db.classes.insert_one(doc); created.append(doc["id"])
@@ -481,23 +700,36 @@ async def import_classes(file: UploadFile = File(...), current=Depends(require_p
 
 @api.get("/classes/{cid}")
 async def get_class(cid: str, current=Depends(require_permission("classes.view"))):
-    c = await db.classes.find_one({"id": cid}, {"_id": 0})
-    if not c: raise HTTPException(404, "غير موجود")
+    c = await ensure_class_access(cid, current)
+    c.pop("_id", None)
     return await _class_enrich(c)
 
 @api.post("/classes")
 async def create_class(body: ClassIn, current=Depends(require_permission("classes.create"))):
     if not body.name.strip(): raise HTTPException(400, "الاسم مطلوب")
     code = await generate_code("classes")
-    doc = {"id": str(uuid.uuid4()), "code": code, **body.model_dump(),
+    data = body.model_dump()
+    teacher_ids = list(dict.fromkeys(data.get("teacherIds") or ([] if not data.get("teacherId") else [data["teacherId"]])))
+    for teacher_id in teacher_ids:
+        if not await db.teachers.find_one({"id": teacher_id}):
+            raise HTTPException(400, "أحد المعلمين غير موجود")
+    data["teacherIds"] = teacher_ids
+    data["teacherId"] = teacher_ids[0] if teacher_ids else None
+    doc = {"id": str(uuid.uuid4()), "code": code, **data,
            "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.classes.insert_one(doc)
     return await _class_enrich({k: v for k, v in doc.items() if k != "_id"})
 
 @api.put("/classes/{cid}")
 async def update_class(cid: str, body: ClassIn, current=Depends(require_permission("classes.update"))):
-    if not await db.classes.find_one({"id": cid}): raise HTTPException(404, "غير موجود")
-    upd = {**body.model_dump(), "updatedAt": now_iso()}
+    await ensure_class_access(cid, current)
+    upd = body.model_dump()
+    upd["teacherIds"] = list(dict.fromkeys(upd.get("teacherIds") or ([] if not upd.get("teacherId") else [upd["teacherId"]])))
+    for teacher_id in upd["teacherIds"]:
+        if not await db.teachers.find_one({"id": teacher_id}):
+            raise HTTPException(400, "أحد المعلمين غير موجود")
+    upd["teacherId"] = upd["teacherIds"][0] if upd["teacherIds"] else None
+    upd["updatedAt"] = now_iso()
     await db.classes.update_one({"id": cid}, {"$set": upd})
     return await _class_enrich(await db.classes.find_one({"id": cid}, {"_id": 0}))
 
@@ -505,6 +737,7 @@ async def update_class(cid: str, body: ClassIn, current=Depends(require_permissi
 async def delete_class(cid: str, body: DeactivationIn, current=Depends(require_permission("classes.delete"))):
     reason = body.reason.strip()
     if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
+    await ensure_class_access(cid, current)
     r = await db.classes.update_one(
         {"id": cid},
         {"$set": {"status": "inactive", "deactivatedAt": now_iso(),
@@ -515,6 +748,7 @@ async def delete_class(cid: str, body: DeactivationIn, current=Depends(require_p
 
 @api.post("/classes/{cid}/reactivate")
 async def reactivate_class(cid: str, current=Depends(require_permission("classes.update"))):
+    await ensure_class_access(cid, current)
     r = await db.classes.update_one(
         {"id": cid, "status": "inactive"},
         {"$set": {"status": "active", "updatedAt": now_iso()},
@@ -586,9 +820,12 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
     if orphan in ("true", "false"): q["student.orphan"] = (orphan == "true")
     if registrationPath: q["student.registrationPath"] = registrationPath
     if academicYear: q["fees.academicYear"] = academicYear
-    if classId: q["currentClassId"] = classId
-    if teacherId:
-        cls = await db.classes.find({"teacherId": teacherId}, {"id": 1, "_id": 0}).to_list(500)
+    allowed = await allowed_class_ids(current)
+    if allowed is not None:
+        q["currentClassId"] = {"$in": allowed}
+    elif classId: q["currentClassId"] = classId
+    elif teacherId:
+        cls = await db.classes.find({"$or": [{"teacherIds": teacherId}, {"teacherId": teacherId}]}, {"id": 1, "_id": 0}).to_list(500)
         q["currentClassId"] = {"$in": [c["id"] for c in cls]}
     if search:
         rx = {"$regex": search, "$options": "i"}
@@ -631,6 +868,9 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
         class_id = (row.get("currentClassId") or "").strip() or None
         if class_id and not await db.classes.find_one({"id": class_id}):
             raise HTTPException(400, f"الصف غير موجود في الصف {index}")
+        allowed = await allowed_class_ids(current)
+        if allowed is not None and class_id not in allowed:
+            raise HTTPException(403, f"لا يمكنك إضافة طالب إلى هذا الصف في الصف {index}")
         try: total_payable = float(row.get("totalPayable") or 0)
         except ValueError: raise HTTPException(400, f"إجمالي المستحق غير صحيح في الصف {index}")
         code = await generate_code("students")
@@ -649,8 +889,8 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
 
 @api.get("/students/{sid}")
 async def get_student(sid: str, current=Depends(require_permission("students.view"))):
-    d = await db.students.find_one({"id": sid}, {"_id": 0})
-    if not d: raise HTTPException(404, "غير موجود")
+    d = await ensure_student_access(sid, current)
+    d.pop("_id", None)
     return await _augment_student(d)
 
 @api.get("/public/students/{sid}/validation")
@@ -677,8 +917,8 @@ async def validate_student(sid: str):
 
 @api.get("/students/{sid}/full-information")
 async def get_student_full(sid: str, current=Depends(require_permission("students.fullInformation.view"))):
-    d = await db.students.find_one({"id": sid}, {"_id": 0})
-    if not d: raise HTTPException(404, "غير موجود")
+    d = await ensure_student_access(sid, current)
+    d.pop("_id", None)
     return await _augment_student(d)
 
 def _clean_reg_path(p):
@@ -699,6 +939,9 @@ async def create_student(body: StudentIn, current=Depends(require_permission("st
     if p.get("currentClassId"):
         if not await db.classes.find_one({"id": p["currentClassId"]}):
             raise HTTPException(400, "الصف غير موجود")
+        allowed = await allowed_class_ids(current)
+        if allowed is not None and p["currentClassId"] not in allowed:
+            raise HTTPException(403, "لا يمكنك إضافة طالب إلى هذا الصف")
     await db.students.insert_one(p)
     if initial and float(initial.get("amount") or 0) > 0:
         amt = float(initial["amount"])
@@ -714,8 +957,7 @@ async def create_student(body: StudentIn, current=Depends(require_permission("st
 
 @api.put("/students/{sid}")
 async def update_student(sid: str, body: StudentIn, current=Depends(require_permission("students.update"))):
-    existing = await db.students.find_one({"id": sid})
-    if not existing: raise HTTPException(404, "غير موجود")
+    existing = await ensure_student_access(sid, current)
     p = body.model_dump()
     p.pop("initialPayment", None)
     _clean_reg_path((p.get("student") or {}).get("registrationPath"))
@@ -727,6 +969,9 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
     if p.get("currentClassId"):
         if not await db.classes.find_one({"id": p["currentClassId"]}):
             raise HTTPException(400, "الصف غير موجود")
+        allowed = await allowed_class_ids(current)
+        if allowed is not None and p["currentClassId"] not in allowed:
+            raise HTTPException(403, "لا يمكنك نقل الطالب إلى هذا الصف")
     p["updatedAt"] = now_iso()
     await db.students.update_one({"id": sid}, {"$set": p})
     return await _augment_student(await db.students.find_one({"id": sid}, {"_id": 0}))
@@ -735,6 +980,7 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
 async def delete_student(sid: str, body: DeactivationIn, current=Depends(require_permission("students.delete"))):
     reason = body.reason.strip()
     if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
+    await ensure_student_access(sid, current)
     r = await db.students.update_one(
         {"id": sid},
         {"$set": {"student.status": "inactive", "deactivatedAt": now_iso(),
@@ -745,6 +991,7 @@ async def delete_student(sid: str, body: DeactivationIn, current=Depends(require
 
 @api.post("/students/{sid}/reactivate")
 async def reactivate_student(sid: str, current=Depends(require_permission("students.update"))):
+    await ensure_student_access(sid, current)
     r = await db.students.update_one(
         {"id": sid, "student.status": "inactive"},
         {"$set": {"student.status": "resident", "updatedAt": now_iso()},
@@ -755,6 +1002,83 @@ async def reactivate_student(sid: str, current=Depends(require_permission("stude
         if not student: raise HTTPException(404, "غير موجود")
         raise HTTPException(400, "الطالب نشط بالفعل")
     return {"ok": True, "reactivated": True}
+#endregion
+
+#region Grades
+async def get_grade_settings():
+    settings = await db.settings.find_one({"id": "grades"}, {"_id": 0})
+    return settings or {"id": "grades", "accepting": False}
+
+@api.get("/settings/grades")
+async def read_grade_settings(current=Depends(require_permission("grades.view"))):
+    return await get_grade_settings()
+
+@api.put("/settings/grades")
+async def update_grade_settings(body: GradeSettingsIn,
+                                current=Depends(require_permission("grades.accept"))):
+    doc = {"id": "grades", "accepting": body.accepting, "updatedAt": now_iso(), "updatedBy": current["id"]}
+    await db.settings.update_one({"id": "grades"}, {"$set": doc}, upsert=True)
+    return {k: v for k, v in doc.items() if k != "updatedBy"}
+
+@api.get("/grades")
+async def list_grades(academicYear: Optional[str] = None, period: Optional[str] = None,
+                      classId: Optional[str] = None, subjectId: Optional[str] = None,
+                      studentId: Optional[str] = None,
+                      current=Depends(require_permission("grades.view"))):
+    allowed = await grade_scope(current)
+    q = {}
+    if academicYear: q["academicYear"] = academicYear
+    if period: q["period"] = period
+    if classId: q["classId"] = classId
+    if subjectId: q["subjectId"] = subjectId
+    if studentId: q["studentId"] = studentId
+    if allowed is not None:
+        q["$or"] = [{"classId": c, "subjectId": s} for c, s in allowed]
+    docs = await db.grades.find(q, {"_id": 0}).sort("updatedAt", -1).to_list(10000)
+    if allowed is not None:
+        docs = [doc for doc in docs if (doc.get("classId"), doc.get("subjectId")) in allowed]
+    for doc in docs:
+        student = await db.students.find_one({"id": doc.get("studentId")}, {"_id": 0, "student.fullName": 1, "code": 1})
+        subject = await db.subjects.find_one({"id": doc.get("subjectId")}, {"_id": 0, "name": 1})
+        cls = await db.classes.find_one({"id": doc.get("classId")}, {"_id": 0, "name": 1, "section": 1})
+        doc["studentName"] = (student.get("student") or {}).get("fullName") if student else "—"
+        doc["studentCode"] = student.get("code") if student else None
+        doc["subjectName"] = subject.get("name") if subject else "—"
+        doc["className"] = f'{cls.get("name")} {cls.get("section") or ""}'.strip() if cls else "—"
+    return docs
+
+@api.post("/grades")
+async def create_grade(body: GradeIn, current=Depends(require_permission("grades.create"))):
+    if not (0 <= body.score <= 100): raise HTTPException(400, "الدرجة يجب أن تكون بين 0 و100")
+    settings = await get_grade_settings()
+    if not settings.get("accepting"): raise HTTPException(403, "فترة قبول الدرجات غير مفعلة")
+    student = await ensure_student_access(body.studentId, current)
+    if student.get("currentClassId") != body.classId: raise HTTPException(400, "الطالب ليس في هذا الصف")
+    await ensure_grade_scope(body.classId, body.subjectId, current)
+    if await db.grades.find_one({"studentId": body.studentId, "classId": body.classId,
+                                 "subjectId": body.subjectId, "academicYear": body.academicYear,
+                                 "period": body.period}):
+        raise HTTPException(400, "الدرجة موجودة مسبقاً")
+    doc = {"id": str(uuid.uuid4()), **body.model_dump(), "createdBy": current["id"],
+           "createdAt": now_iso(), "updatedAt": now_iso()}
+    await db.grades.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api.put("/grades/{grade_id}")
+async def update_grade(grade_id: str, body: GradeIn,
+                       current=Depends(require_permission("grades.edit"))):
+    if not (0 <= body.score <= 100): raise HTTPException(400, "الدرجة يجب أن تكون بين 0 و100")
+    settings = await get_grade_settings()
+    if not settings.get("accepting"): raise HTTPException(403, "فترة قبول الدرجات غير مفعلة")
+    existing = await db.grades.find_one({"id": grade_id})
+    if not existing: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(body.studentId, current)
+    await ensure_grade_scope(body.classId, body.subjectId, current)
+    if body.studentId != existing.get("studentId") or body.classId != existing.get("classId") or body.subjectId != existing.get("subjectId"):
+        raise HTTPException(400, "لا يمكن تغيير الطالب أو الصف أو المادة")
+    await db.grades.update_one({"id": grade_id}, {"$set": {"score": body.score, "notes": body.notes or "", "updatedAt": now_iso(), "updatedBy": current["id"]}})
+    return await db.grades.find_one({"id": grade_id}, {"_id": 0})
 #endregion
 
 #region Orphan docs
@@ -804,6 +1128,7 @@ async def upload_student_document(sid: str, document_type: str, file: UploadFile
     student = await db.students.find_one({"id": sid})
     if not student:
         raise HTTPException(404, "الطالب غير موجود")
+    await ensure_student_access(sid, current)
     fname, fpath, mime, size = await _save_upload(file, STUDENT_DOCUMENTS_DIR, student.get("code") or sid)
     old = ((student.get("documents") or {}).get(document_type) or {}).get("filePath")
     meta = {"type": document_type, "label": STUDENT_DOCUMENT_TYPES[document_type], "fileName": fname,
@@ -821,6 +1146,7 @@ async def get_student_document(sid: str, document_type: str,
     if document_type not in STUDENT_DOCUMENT_TYPES:
         raise HTTPException(400, "نوع الوثيقة غير صالح")
     student = await db.students.find_one({"id": sid})
+    await ensure_student_access(sid, current)
     document = ((student or {}).get("documents") or {}).get(document_type)
     if not document or not document.get("filePath") or not os.path.exists(document["filePath"]):
         raise HTTPException(404, "لا توجد وثيقة")
@@ -835,6 +1161,7 @@ async def delete_student_document(sid: str, document_type: str,
     student = await db.students.find_one({"id": sid})
     if not student:
         raise HTTPException(404, "الطالب غير موجود")
+    await ensure_student_access(sid, current)
     document = ((student.get("documents") or {}).get(document_type) or {})
     if document.get("filePath"):
         try: os.remove(document["filePath"])
@@ -856,6 +1183,7 @@ async def upload_orphan_doc(sid: str, type: str = Form(...), description: Option
                              current=Depends(require_permission("students.orphanDocument.upload"))):
     student = await db.students.find_one({"id": sid})
     if not student: raise HTTPException(404, "الطالب غير موجود")
+    await ensure_student_access(sid, current)
     fname, fpath, mime, size = await _save_upload(file, ORPHAN_DIR, student.get("code") or sid)
     old = (student.get("orphanDocument") or {}).get("filePath")
     if old:
@@ -871,6 +1199,7 @@ async def upload_orphan_doc(sid: str, type: str = Form(...), description: Option
 async def get_orphan_doc(sid: str, current=Depends(require_permission("students.orphanDocument.view"))):
     student = await db.students.find_one({"id": sid})
     if not student: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(sid, current)
     od = student.get("orphanDocument")
     if not od or not od.get("filePath") or not os.path.exists(od["filePath"]):
         raise HTTPException(404, "لا توجد وثيقة")
@@ -881,6 +1210,7 @@ async def get_orphan_doc(sid: str, current=Depends(require_permission("students.
 async def delete_orphan_doc(sid: str, current=Depends(require_permission("students.orphanDocument.delete"))):
     student = await db.students.find_one({"id": sid})
     if not student: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(sid, current)
     od = student.get("orphanDocument")
     if not od: return {"ok": True}
     if od.get("filePath"):
@@ -921,6 +1251,12 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
         matching = await db.students.find({"$or": [{"student.fullName": {"$regex": search, "$options": "i"}},
                                                     {"code": {"$regex": search, "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
         q["student"] = {"$in": [m["id"] for m in matching]}
+    allowed = await allowed_class_ids(current)
+    if allowed is not None:
+        scoped_students = await db.students.find({"currentClassId": {"$in": allowed}}, {"id": 1, "_id": 0}).to_list(5000)
+        scoped_ids = [student["id"] for student in scoped_students]
+        existing_ids = q.get("student", {}).get("$in") if isinstance(q.get("student"), dict) else None
+        q["student"] = {"$in": [sid for sid in (existing_ids or scoped_ids) if sid in scoped_ids]}
     docs = await db.payments.find(q, {"_id": 0}).sort("paymentDate", -1).to_list(1000)
     for d in docs: await _enrich_payment(d)
     return docs
@@ -929,10 +1265,12 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
 async def get_payment(pid: str, current=Depends(require_permission("payments.view"))):
     p = await db.payments.find_one({"id": pid}, {"_id": 0})
     if not p: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(p.get("student"), current)
     return await _enrich_payment(p)
 
 @api.get("/students/{sid}/payments")
 async def list_student_payments(sid: str, current=Depends(require_permission("payments.view"))):
+    await ensure_student_access(sid, current)
     docs = await db.payments.find({"student": sid}, {"_id": 0}).sort("paymentDate", -1).to_list(500)
     for d in docs: await _enrich_payment(d)
     return docs
@@ -952,6 +1290,7 @@ async def _validate_no_overpayment(sid, ay, amt, exclude=None):
 async def create_payment(body: PaymentIn, current=Depends(require_permission("payments.create"))):
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
+    await ensure_student_access(body.student, current)
     await _validate_no_overpayment(body.student, body.academicYear, body.amount)
     doc = {"id": str(uuid.uuid4()), "student": body.student, "academicYear": body.academicYear,
            "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
@@ -968,6 +1307,7 @@ async def create_payment(body: PaymentIn, current=Depends(require_permission("pa
 async def create_refund(body: RefundIn, current=Depends(require_permission("payments.create"))):
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "مبلغ الاسترداد يجب أن يكون أكبر من صفر")
+    await ensure_student_access(body.student, current)
     student = await db.students.find_one({"id": body.student}, {"_id": 0, "fees": 1})
     if not student: raise HTTPException(404, "الطالب غير موجود")
     semester_payments = await db.payments.find(
@@ -994,6 +1334,8 @@ async def create_refund(body: RefundIn, current=Depends(require_permission("paym
 async def update_payment(pid: str, body: PaymentIn, current=Depends(require_permission("payments.update"))):
     existing = await db.payments.find_one({"id": pid})
     if not existing: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(existing.get("student"), current)
+    await ensure_student_access(body.student, current)
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
     await _validate_no_overpayment(body.student, body.academicYear, body.amount, exclude=pid)
@@ -1013,6 +1355,9 @@ async def update_payment(pid: str, body: PaymentIn, current=Depends(require_perm
 
 @api.delete("/payments/{pid}")
 async def delete_payment(pid: str, current=Depends(require_permission("payments.delete"))):
+    existing = await db.payments.find_one({"id": pid}, {"_id": 0, "student": 1})
+    if not existing: raise HTTPException(404, "غير موجود")
+    await ensure_student_access(existing.get("student"), current)
     r = await db.payments.delete_one({"id": pid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}
@@ -1050,12 +1395,14 @@ async def update_settings(body: CodeSettingsIn, current=Depends(require_permissi
 #region Dashboard
 @api.get("/dashboard/stats")
 async def dashboard_stats(current=Depends(get_current_user)):
-    total = await db.students.count_documents({})
-    female = await db.students.count_documents({"student.gender": "female"})
-    male = await db.students.count_documents({"student.gender": "male"})
-    orphans = await db.students.count_documents({"student.orphan": True})
-    teachers_count = await db.teachers.count_documents({})
-    classes_count = await db.classes.count_documents({})
+    allowed = await allowed_class_ids(current)
+    student_scope = {} if allowed is None else {"currentClassId": {"$in": allowed}}
+    total = await db.students.count_documents(student_scope)
+    female = await db.students.count_documents({**student_scope, "student.gender": "female"})
+    male = await db.students.count_documents({**student_scope, "student.gender": "male"})
+    orphans = await db.students.count_documents({**student_scope, "student.orphan": True})
+    teachers_count = await db.teachers.count_documents({} if allowed is None else {"id": current.get("teacherId")})
+    classes_count = await db.classes.count_documents({} if allowed is None else {"id": {"$in": allowed}})
 
     # Only payments belonging to active students
     pay_agg = await db.payments.aggregate([
@@ -1072,7 +1419,8 @@ async def dashboard_stats(current=Depends(get_current_user)):
         },
         {
             "$match": {
-                "student.student.status": {"$ne": "inactive"}
+                "student.student.status": {"$ne": "inactive"},
+                **({} if allowed is None else {"student.currentClassId": {"$in": allowed}}),
             }
         },
         {
@@ -1089,7 +1437,8 @@ async def dashboard_stats(current=Depends(get_current_user)):
     stu_agg = await db.students.aggregate([
         {
             "$match": {
-                "student.status": {"$ne": "inactive"}
+                "student.status": {"$ne": "inactive"},
+                **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
             }
         },
         {
@@ -1133,6 +1482,10 @@ async def on_startup():
         {"name": "Accountant", "description": "محاسب",
          "permissions": ["students.view","payments.view","payments.create","payments.update",
                          "payments.delete","payments.print"]},
+        {"name": "Teacher", "description": "معلم - الصفوف والطلاب المسندون فقط",
+         "permissions": ["students.view", "students.print", "students.fullInformation.view",
+                         "students.documents.view", "students.orphanDocument.view",
+                         "classes.view", "subjects.view", "grades.view", "grades.create", "grades.edit"]},
     ]
     admin_role_id = None
     for r in defaults:
@@ -1156,6 +1509,19 @@ async def on_startup():
             "students.documents.view", "students.documents.upload", "students.documents.delete"
         ]}}},
     )
+    await db.roles.update_one(
+        {"name": "Teacher"},
+        {"$addToSet": {"permissions": {"$each": [
+            "subjects.view", "grades.view", "grades.create", "grades.edit"
+        ]}}},
+    )
+
+    await db.classes.update_many(
+        {"teacherId": {"$exists": True}, "teacherIds": {"$exists": False}},
+        [{"$set": {"teacherIds": {"$cond": [
+            {"$ne": ["$teacherId", None]}, ["$teacherId"], []
+        ]}}}],
+    )
 
     try:
         await db.students.create_index("student.fullName")
@@ -1168,6 +1534,10 @@ async def on_startup():
         await db.teachers.create_index("code", unique=True, sparse=True)
         await db.classes.create_index("code", unique=True, sparse=True)
         await db.counters.create_index("key", unique=True)
+        await db.subjects.create_index("code", unique=True, sparse=True)
+        await db.teacher_subject_assignments.create_index([("teacherId", 1), ("subjectId", 1)], unique=True)
+        await db.class_subject_assignments.create_index([("classId", 1), ("subjectId", 1)], unique=True)
+        await db.grades.create_index([("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
     except Exception as e:
         logging.warning(f"index setup: {e}")
 
@@ -1194,6 +1564,7 @@ async def on_startup():
             {"$addToSet": {"roles": admin_role_id}})
 
     await get_code_settings()
+    await get_grade_settings()
 
 @app.on_event("shutdown")
 async def on_shutdown(): client.close()

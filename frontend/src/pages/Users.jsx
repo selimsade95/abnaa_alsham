@@ -8,6 +8,7 @@ export default function Users() {
   const { user, has } = useAuth();
   const [items, setItems] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
@@ -21,6 +22,8 @@ export default function Users() {
       ]);
       setItems(u.data);
       setRoles(r.data);
+      const t = await api.get("/teachers", { params: { limit: 500 } }).catch(() => ({ data: { data: [] } }));
+      setTeachers(t.data.data || []);
     } catch {
       toast.error("تعذر تحميل المستخدمين");
     }
@@ -31,7 +34,7 @@ export default function Users() {
   }, []);
 
   const openNew = () =>
-    setEditing({ id: null, name: "", username: "", password: "", roles: [] });
+    setEditing({ id: null, name: "", username: "", password: "", roles: [], teacherId: "" });
   const openEdit = (u) =>
     setEditing({
       id: u.id,
@@ -39,6 +42,7 @@ export default function Users() {
       username: u.username,
       password: "",
       roles: u.roles || [],
+      teacherId: u.teacherId || "",
     });
 
   const toggleRole = (rid) => {
@@ -53,6 +57,7 @@ export default function Users() {
     try {
       if (editing.id) {
         const body = { name: editing.name, roles: editing.roles };
+        body.teacherId = editing.teacherId || null;
         if (editing.password) body.password = editing.password;
         await api.put(`/users/${editing.id}`, body);
       } else {
@@ -65,6 +70,7 @@ export default function Users() {
           username: editing.username,
           password: editing.password,
           roles: editing.roles,
+          teacherId: editing.teacherId || null,
         });
       }
       toast.success("تم الحفظ");
@@ -114,6 +120,7 @@ export default function Users() {
               <th className="px-4 py-3 font-medium">الاسم</th>
               <th className="px-4 py-3 font-medium">اسم المستخدم</th>
               <th className="px-4 py-3 font-medium">الأدوار</th>
+              <th className="px-4 py-3 font-medium">المعلم المرتبط</th>
               <th className="px-4 py-3 font-medium">تاريخ الإنشاء</th>
               <th className="px-4 py-3 font-medium text-left">إجراءات</th>
             </tr>
@@ -122,7 +129,7 @@ export default function Users() {
             {loading ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-10 text-center text-gray-500"
                 >
                   <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري
@@ -132,7 +139,7 @@ export default function Users() {
             ) : items.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-10 text-center text-gray-500"
                 >
                   لا يوجد مستخدمون.
@@ -163,6 +170,9 @@ export default function Users() {
                         <span className="text-xs text-gray-400">لا يوجد</span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {teachers.find((t) => t.id === u.teacherId)?.fullName || "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {u.createdAt?.slice(0, 10)}
@@ -278,6 +288,21 @@ export default function Users() {
                     </div>
                   )}
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ربط بحساب معلم
+                </label>
+                <select
+                  value={editing.teacherId}
+                  onChange={(e) => setEditing({ ...editing, teacherId: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                >
+                  <option value="">— بدون ربط —</option>
+                  {teachers
+                    .filter((t) => t.employmentStatus === "active" || t.id === editing.teacherId)
+                    .map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                </select>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button

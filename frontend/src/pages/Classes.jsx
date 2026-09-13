@@ -56,7 +56,7 @@ export default function Classes() {
     "grade",
     "section",
     "academicYear",
-    "teacherId [existing teacher ID]",
+    "teacherIds [comma-separated existing teacher IDs]",
     "capacity",
     "status [active|inactive]",
     "notes",
@@ -123,12 +123,12 @@ export default function Classes() {
       grade: "",
       section: "",
       academicYear: "",
-      teacherId: "",
+      teacherIds: [],
       capacity: 0,
       status: "active",
       notes: "",
     });
-  const openEdit = (c) => setEditing({ ...c, teacherId: c.teacherId || "" });
+  const openEdit = (c) => setEditing({ ...c, teacherIds: c.teacherIds || (c.teacherId ? [c.teacherId] : []) });
 
   const save = async (e) => {
     e.preventDefault();
@@ -144,7 +144,8 @@ export default function Classes() {
     } = editing;
     const body = {
       ...rest,
-      teacherId: rest.teacherId || null,
+      teacherIds: rest.teacherIds || [],
+      teacherId: (rest.teacherIds || [])[0] || null,
       capacity: Number(rest.capacity) || 0,
     };
     try {
@@ -514,19 +515,18 @@ export default function Classes() {
                     المعلم
                   </label>
                   <select
-                    value={editing.teacherId}
-                    onChange={(e) =>
-                      setEditing({ ...editing, teacherId: e.target.value })
-                    }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    value={editing.teacherIds || []}
+                    onChange={(e) => setEditing({
+                      ...editing,
+                      teacherIds: Array.from(e.target.selectedOptions, (option) => option.value),
+                    })}
+                    multiple
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 min-h-24"
                   >
-                    <option value="">— بدون —</option>
                     {teachers
                       .filter((t) => t.employmentStatus === "active")
                       .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.fullName}
-                        </option>
+                        <option key={t.id} value={t.id}>{t.fullName}</option>
                       ))}
                   </select>
                 </div>

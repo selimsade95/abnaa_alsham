@@ -40,6 +40,8 @@ export default function Roles() {
     users: "المستخدمون",
     roles: "الأدوار",
     permissions: "الصلاحيات",
+    subjects: "المواد",
+    grades: "الدرجات",
   };
 
   const openNew = () =>

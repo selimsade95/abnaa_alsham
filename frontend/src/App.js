@@ -25,6 +25,8 @@ import Teachers from "@/pages/Teachers";
 import TeacherForm from "@/pages/TeacherForm";
 import Classes from "@/pages/Classes";
 import Settings from "@/pages/Settings";
+import Subjects from "@/pages/Subjects";
+import Grades from "@/pages/Grades";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
 
@@ -185,6 +187,22 @@ function App() {
               element={
                 <Protected perm="classes.view">
                   <Classes />
+                </Protected>
+              }
+            />
+            <Route
+              path="/subjects"
+              element={
+                <Protected perm="subjects.view">
+                  <Subjects />
+                </Protected>
+              }
+            />
+            <Route
+              path="/grades"
+              element={
+                <Protected perm="grades.view">
+                  <Grades />
                 </Protected>
               }
             />
