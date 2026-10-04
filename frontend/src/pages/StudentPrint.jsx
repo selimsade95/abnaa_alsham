@@ -101,6 +101,7 @@ export default function StudentPrint() {
               value={s.finalRegistrationPath || s.registrationPath}
             />
             <Row label="الصف السابق" value={s.previousClass} />
+            <Row label="رقم الحافلة" value={s.busNumber} />
             <Row label="الصف الجديد" value={s.newClass} />
             <Row label="الوضع" value={STATUS_LABELS[s.status]} />
             <Row
@@ -195,7 +196,13 @@ export default function StudentPrint() {
                     <td className="border border-gray-300 px-2 py-1">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td
+                      className={`border border-gray-300 px-2 py-1 ${
+                        p.type === "refund" || Number(p.amount) < 0
+                          ? "text-red-600"
+                          : ""
+                      }`}
+                    >
                       {p.amount}
                     </td>
                   </tr>

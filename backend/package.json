@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Nodemailer bridge used by the FastAPI backend",
+  "dependencies": {
+    "nodemailer": "^10.0.14"
+  }
+}

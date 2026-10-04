@@ -5,6 +5,36 @@ import { toast } from "sonner";
 import { emptyStudent, REGISTRATION_PATHS } from "@/lib/studentDefaults";
 import { useClasses } from "@/hooks/useClasses";
 
+function syncParentOrphanData(next) {
+  const student = next.student;
+  const fatherAlive = next.father.alive !== false;
+  const motherAlive = next.mother.alive !== false;
+
+  if (student.orphan && student.orphanOf) {
+    next.father.alive = !["father", "both"].includes(student.orphanOf);
+    next.mother.alive = !["mother", "both"].includes(student.orphanOf);
+    return next;
+  }
+
+  const deceased = [
+    ...(!fatherAlive ? ["father"] : []),
+    ...(!motherAlive ? ["mother"] : []),
+  ];
+  if (deceased.length) {
+    student.orphan = true;
+    student.orphanOf =
+      deceased.length === 2
+        ? "both"
+        : deceased[0] === "father"
+          ? "father"
+          : "mother";
+  } else if (!student.orphan) {
+    student.orphanOf = "";
+  }
+
+  return next;
+}
+
 export function useStudentForm(mode) {
   const nav = useNavigate();
   const { id } = useParams();
@@ -62,8 +92,17 @@ export function useStudentForm(mode) {
               "",
           },
           fullInfo: { ...emptyStudent().fullInfo, ...(student.fullInfo || {}) },
+          father: { ...emptyStudent().father, ...(student.father || {}) },
+          mother: { ...emptyStudent().mother, ...(student.mother || {}) },
+          general: { ...emptyStudent().general, ...(student.general || {}) },
+          otherInfo: {
+            ...emptyStudent().otherInfo,
+            ...(student.otherInfo || {}),
+          },
+          signing: { ...emptyStudent().signing, ...(student.signing || {}) },
           currentClassId: student.currentClassId || "",
         };
+        syncParentOrphanData(merged);
         merged.fees = {
           academicYear: student.fees?.academicYear || "",
           totalPayable: student.fees?.totalPayable || 0,
@@ -91,6 +130,33 @@ export function useStudentForm(mode) {
       for (let index = 0; index < keys.length - 1; index += 1)
         target = target[keys[index]];
       target[keys[keys.length - 1]] = value;
+      if (path === "student.orphan" && value === false) {
+        next.student.orphanOf = "";
+        next.father.alive = true;
+        next.mother.alive = true;
+      } else if (path === "student.orphanOf" && value) {
+        next.student.orphan = true;
+        next.father.alive = !["father", "both"].includes(value);
+        next.mother.alive = !["mother", "both"].includes(value);
+      } else if (path === "father.alive" || path === "mother.alive") {
+        const fatherAlive = next.father.alive !== false;
+        const motherAlive = next.mother.alive !== false;
+        const deceased = [
+          ...(!fatherAlive ? ["father"] : []),
+          ...(!motherAlive ? ["mother"] : []),
+        ];
+        next.student.orphan = deceased.length > 0;
+        next.student.orphanOf =
+          deceased.length === 2
+            ? "both"
+            : deceased[0] === "father"
+              ? "father"
+              : deceased[0] === "mother"
+                ? "mother"
+                : "";
+      } else if (path === "student.orphan" && value) {
+        syncParentOrphanData(next);
+      }
       return next;
     });
   };
@@ -156,6 +222,8 @@ export function useStudentForm(mode) {
     if (!data.student.newClass?.trim())
       nextErrors.newClass = "الصف الجديد مطلوب";
     if (!data.student.status) nextErrors.status = "الوضع مطلوب";
+    if (data.student.orphan && !data.student.orphanOf)
+      nextErrors.orphanOf = "يرجى تحديد الوالد المتوفى";
     if (!data.student.registrationPath)
       nextErrors.registrationPath = "مسار التسجيل الأولي مطلوب";
     if (!data.student.finalRegistrationPath)

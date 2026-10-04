@@ -102,6 +102,7 @@ export default function StudentFullInfo() {
           <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
           <Row label="عمره بالسنوات" value={fi.ageYears} />
           <Row label="الجنس" value={GENDER_LABELS[s.gender]} />
+          <Row label="رقم الحافلة" value={s.busNumber} />
           <Row label="الجنسية" value={fi.nationality} />
           <Row label="حالة الطالب" value={STATUS_LABELS[s.status]} />
           <Row label="حالة الطالب الأسرية" value={fi.familyStatus} />

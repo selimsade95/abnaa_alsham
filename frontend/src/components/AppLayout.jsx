@@ -14,6 +14,7 @@ import {
   Presentation,
   Settings as SettingsIcon,
   ClipboardCheck,
+  MessageSquareText,
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -63,6 +64,13 @@ export default function AppLayout() {
       icon: ClipboardCheck,
       testid: "nav-grades",
       show: has("grades.view"),
+    },
+    {
+      to: "/verification-messages",
+      label: "رسائل التحقق",
+      icon: MessageSquareText,
+      testid: "nav-verification-messages",
+      show: has("messages.view"),
     },
     {
       to: "/payments",

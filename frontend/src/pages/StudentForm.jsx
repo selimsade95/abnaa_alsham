@@ -228,6 +228,13 @@ export default function StudentForm({ mode }) {
               onChange={(e) => update("student.previousClass", e.target.value)}
             />
           </Field>
+          <Field label="رقم الحافلة">
+            <input
+              className={inputCls}
+              value={s.busNumber || ""}
+              onChange={(e) => update("student.busNumber", e.target.value)}
+            />
+          </Field>
           <Field label="الصف الجديد" required>
             {classes.length > 0 ? (
               <>
@@ -325,6 +332,9 @@ export default function StudentForm({ mode }) {
                     label="كلاهما"
                   />
                 </div>
+                {errors.orphanOf && (
+                  <p className="text-xs text-red-600 mt-1">{errors.orphanOf}</p>
+                )}
               </Field>
               <Field label="نوع وثيقة اليتم">
                 <select
@@ -799,6 +809,14 @@ export default function StudentForm({ mode }) {
             }
           />
         </Field>
+        <Field label="كيف سيصل الطالب إلى المدرسة؟">
+          <textarea
+            rows={2}
+            className={inputCls}
+            value={data.otherInfo.transportation}
+            onChange={(e) => update("otherInfo.transportation", e.target.value)}
+          />
+        </Field>
         <div>
           <h4 className="text-sm font-medium text-gray-700 mb-2">
             جهة الاتصال في حالات الطوارئ
@@ -1036,36 +1054,28 @@ export default function StudentForm({ mode }) {
                   />
                 </div>
               </Field>
+              <Field label="هل يوجد مدخنون في أسرة الطالب؟">
+                <div className="flex items-center gap-6 pt-2">
+                  <Radio
+                    name="smokers"
+                    checked={!data.otherInfo.familySmokers}
+                    onChange={() => update("otherInfo.familySmokers", false)}
+                    label="لا"
+                  />
+                  <Radio
+                    name="smokers"
+                    checked={data.otherInfo.familySmokers}
+                    onChange={() => update("otherInfo.familySmokers", true)}
+                    label="نعم"
+                  />
+                </div>
+              </Field>
             </div>
           </div>
         )}
       </div>
 
       <Section title="معلومات أخرى">
-        <Field label="هل يوجد مدخنون في أسرة الطالب؟">
-          <div className="flex items-center gap-6 pt-2">
-            <Radio
-              name="smokers"
-              checked={!data.otherInfo.familySmokers}
-              onChange={() => update("otherInfo.familySmokers", false)}
-              label="لا"
-            />
-            <Radio
-              name="smokers"
-              checked={data.otherInfo.familySmokers}
-              onChange={() => update("otherInfo.familySmokers", true)}
-              label="نعم"
-            />
-          </div>
-        </Field>
-        <Field label="كيف سيصل الطالب إلى المدرسة؟">
-          <textarea
-            rows={2}
-            className={inputCls}
-            value={data.otherInfo.transportation}
-            onChange={(e) => update("otherInfo.transportation", e.target.value)}
-          />
-        </Field>
         <Field label="ملاحظات (داخلية - لا تظهر في المطبوعة)">
           <textarea
             rows={3}

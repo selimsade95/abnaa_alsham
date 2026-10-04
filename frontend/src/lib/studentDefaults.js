@@ -8,6 +8,7 @@ export const emptyStudent = () => ({
     finalRegistrationPath: "",
     previousClass: "",
     newClass: "",
+    busNumber: "",
     status: "resident",
     fullName: "",
     birthdate: "",

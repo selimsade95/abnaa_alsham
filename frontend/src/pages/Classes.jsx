@@ -1,9 +1,13 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useClassesList } from "@/hooks/useClassesList";
+import api from "@/lib/api";
 import {
   Plus,
   Trash2,
   Pencil,
   Loader2,
+  Eye,
   Search,
   Filter,
   RotateCcw,
@@ -15,6 +19,10 @@ import {
 import { downloadTemplate } from "@/lib/csv";
 
 export default function Classes() {
+  const [classDetails, setClassDetails] = useState(null);
+  const [classDetailsLoading, setClassDetailsLoading] = useState(false);
+  const [classDetailsError, setClassDetailsError] = useState("");
+  const [classGradesError, setClassGradesError] = useState(false);
   const {
     has,
     items,
@@ -55,6 +63,54 @@ export default function Classes() {
     hasActiveFilters,
     load,
   } = useClassesList();
+
+  const openClassDetails = async (classItem) => {
+    setClassDetails({
+      classItem,
+      students: [],
+      average: null,
+      gradeCount: 0,
+    });
+    setClassDetailsError("");
+    setClassGradesError(false);
+    setClassDetailsLoading(true);
+    try {
+      const response = await api.get("/students", {
+        params: { classId: classItem.id, status: "all", limit: 500 },
+      });
+      const students = response.data.data || [];
+      let average = null;
+      let gradeCount = 0;
+      if (has("grades.view")) {
+        try {
+          const gradesResponse = await api.get("/grades", {
+            params: {
+              classId: classItem.id,
+              ...(classItem.academicYear
+                ? { academicYear: classItem.academicYear }
+                : {}),
+            },
+          });
+          const scores = gradesResponse.data
+            .map((grade) => Number(grade.score))
+            .filter(Number.isFinite);
+          gradeCount = scores.length;
+          if (gradeCount)
+            average =
+              scores.reduce((total, score) => total + score, 0) / gradeCount;
+        } catch {
+          setClassGradesError(true);
+        }
+      }
+      setClassDetails({ classItem, students, average, gradeCount });
+    } catch (error) {
+      setClassDetailsError(
+        error?.response?.data?.detail || "تعذر تحميل طلاب الصف",
+      );
+    } finally {
+      setClassDetailsLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -268,6 +324,16 @@ export default function Classes() {
                     </td>
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
+                        {has("students.view") && (
+                          <button
+                            onClick={() => openClassDetails(c)}
+                            data-testid={`class-details-${c.id}`}
+                            title="معلومات الصف والطلاب"
+                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        )}
                         {c.status === "active" && has("students.update") && (
                           <button
                             onClick={() => openPromotion(c)}
@@ -668,6 +734,161 @@ export default function Classes() {
               >
                 تعطيل
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {classDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
+          <div
+            className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl"
+            dir="rtl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {classDetails.classItem.name}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {[classDetails.classItem.grade, classDetails.classItem.section]
+                    .filter(Boolean)
+                    .join(" — ")}
+                  {classDetails.classItem.academicYear
+                    ? ` • ${classDetails.classItem.academicYear}`
+                    : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClassDetails(null)}
+                title="إغلاق"
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">عدد الطلاب</div>
+                  <div className="mt-1 text-2xl font-bold text-gray-900">
+                    {classDetailsLoading
+                      ? "…"
+                      : classDetails.students.length}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">
+                    متوسط درجات الصف
+                  </div>
+                  <div className="mt-1 text-2xl font-bold text-gray-900">
+                    {classDetailsLoading
+                      ? "…"
+                      : classDetails.average === null
+                        ? "—"
+                        : `${classDetails.average.toFixed(1)}%`}
+                  </div>
+                  {classDetails.gradeCount > 0 && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      {classDetails.gradeCount} درجة مسجلة
+                    </div>
+                  )}
+                  {!has("grades.view") && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      لا توجد صلاحية لعرض الدرجات
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">المعلمون</div>
+                  <div className="mt-1 text-base font-semibold text-gray-900">
+                    {classDetails.classItem.teacherName || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {classGradesError && (
+                <p className="text-sm text-amber-700" role="status">
+                  تعذر تحميل الدرجات؛ متوسط الصف غير متاح حالياً.
+                </p>
+              )}
+              {classDetailsError ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+                  {classDetailsError}
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="min-w-full text-right text-sm">
+                    <thead className="bg-gray-50 text-xs text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3">كود الطالب</th>
+                        <th className="px-4 py-3">اسم الطالب</th>
+                        <th className="px-4 py-3">الجنس</th>
+                        <th className="px-4 py-3">رقم الحافلة</th>
+                        <th className="px-4 py-3">الهاتف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {classDetailsLoading ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-4 py-8 text-center text-gray-500"
+                          >
+                            <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
+                            جاري تحميل الطلاب...
+                          </td>
+                        </tr>
+                      ) : classDetails.students.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-4 py-8 text-center text-gray-500"
+                          >
+                            لا يوجد طلاب مسجلون في هذا الصف.
+                          </td>
+                        </tr>
+                      ) : (
+                        classDetails.students.map((student) => (
+                          <tr
+                            key={student.id}
+                            className="border-t border-gray-100"
+                          >
+                            <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                              {student.code || "—"}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-gray-900">
+                              <Link
+                                to={`/students/${student.id}`}
+                                onClick={() => setClassDetails(null)}
+                                className="text-[#036A87] hover:underline"
+                              >
+                                {student.student?.fullName || "—"}
+                              </Link>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {student.student?.gender === "female"
+                                ? "أنثى"
+                                : student.student?.gender === "male"
+                                  ? "ذكر"
+                                  : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {student.student?.busNumber || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {student.father?.phone ||
+                                student.mother?.phone ||
+                                "—"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

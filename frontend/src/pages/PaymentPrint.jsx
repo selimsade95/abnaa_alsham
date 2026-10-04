@@ -295,7 +295,13 @@ export default function PaymentPrint({ studentHistory = false }) {
                   {FEE_TYPE_LABELS[payment.feeType || "academic"]}
                 </td>
 
-                <td className="border border-gray-300 p-2 font-semibold">
+                <td
+                  className={`border border-gray-300 p-2 font-semibold ${
+                    payment.type === "refund" || Number(payment.amount) < 0
+                      ? "text-red-600"
+                      : ""
+                  }`}
+                >
                   {payment.amount}
                 </td>
 

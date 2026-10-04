@@ -53,6 +53,7 @@ const STUDENT_DOCUMENT_TYPES = [
   { key: "family_mother", label: "بيان عائلي / دفتر العائلة — صفحة الأم" },
   { key: "family_student", label: "بيان عائلي / دفتر العائلة — صفحة الطالب" },
   { key: "personal_photo", label: "صورة شخصية" },
+  { key: "address_document", label: "طبعة الإحصاء" },
   { key: "mother_id_front", label: "هوية الأم — الوجه الأمامي" },
   { key: "mother_id_back", label: "هوية الأم — الوجه الخلفي" },
 ];
@@ -558,6 +559,7 @@ export default function StudentView() {
             value={s.finalRegistrationPath || s.registrationPath}
           />
           <Row label="الصف السابق" value={s.previousClass} />
+          <Row label="رقم الحافلة" value={s.busNumber} />
           <Row label="الصف الجديد" value={s.newClass} />
           <Row label="الوضع" value={STATUS_LABELS[s.status]} />
           <Row
@@ -839,7 +841,7 @@ export default function StudentView() {
                     <td className="px-3 py-2 text-gray-600">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
-                    <td className="px-3 py-2 font-semibold text-gray-900 tabular-nums">
+                    <td className={`px-3 py-2 font-semibold tabular-nums ${p.type === "refund" || Number(p.amount) < 0 ? "text-red-600" : "text-gray-900"}`}>
                       {p.amount}
                     </td>
                     <td className="px-3 py-2 text-gray-600">

@@ -451,7 +451,13 @@ export default function Payments() {
                     <td className="px-4 py-3 text-gray-700">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
+                    <td
+                      className={`px-4 py-3 font-semibold tabular-nums ${
+                        p.type === "refund" || Number(p.amount) < 0
+                          ? "text-red-600"
+                          : "text-gray-900"
+                      }`}
+                    >
                       {p.amount}
                     </td>
                     <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">

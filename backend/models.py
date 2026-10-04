@@ -1,7 +1,7 @@
 """Pydantic request models used by the API routes."""
 
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import List, Literal, Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class LoginIn(BaseModel):
@@ -149,3 +149,31 @@ class GradeIn(BaseModel):
 
 class GradeSettingsIn(BaseModel):
     accepting: bool = False
+
+
+class PublicMessageIn(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    phone: str = Field(min_length=5, max_length=30)
+    email: EmailStr
+    messageType: Literal["complaint", "suggestion", "inquiry", "other"]
+    content: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("name", "phone", "content")
+    @classmethod
+    def strip_and_require_text(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("هذا الحقل مطلوب")
+        return value
+
+
+class MessageReplyIn(BaseModel):
+    response: str = Field(min_length=1, max_length=10000)
+
+    @field_validator("response")
+    @classmethod
+    def strip_and_require_response(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError("الرد مطلوب")
+        return value

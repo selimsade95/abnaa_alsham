@@ -42,6 +42,7 @@ export default function Roles() {
     permissions: "الصلاحيات",
     subjects: "المواد",
     grades: "الدرجات",
+    messages: "رسائل التحقق",
   };
 
   const openNew = () =>

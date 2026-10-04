@@ -776,6 +776,27 @@ class TestOrphanDocument:
         assert r.status_code == 400
 
 
+class TestStudentDocument:
+    def test_upload_and_download_address_document_image(
+        self, admin_headers, created_student
+    ):
+        files = {"file": ("address.jpg", b"\xff\xd8\xff\xd9", "image/jpeg")}
+        upload = requests.post(
+            f"{API}/students/{created_student['id']}/documents/address_document",
+            headers=admin_headers,
+            files=files,
+        )
+        assert upload.status_code == 200, upload.text
+        assert upload.json()["label"] == "طبعة الإحصاء"
+
+        download = requests.get(
+            f"{API}/students/{created_student['id']}/documents/address_document",
+            headers=admin_headers,
+        )
+        assert download.status_code == 200
+        assert download.headers.get("content-type", "").startswith("image/jpeg")
+
+
 # ---------- RBAC ----------
 
 class TestRBAC:

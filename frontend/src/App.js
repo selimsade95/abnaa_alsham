@@ -27,6 +27,7 @@ import Classes from "@/pages/Classes";
 import Settings from "@/pages/Settings";
 import Subjects from "@/pages/Subjects";
 import Grades from "@/pages/Grades";
+import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
 
@@ -203,6 +204,14 @@ function App() {
               element={
                 <Protected perm="grades.view">
                   <Grades />
+                </Protected>
+              }
+            />
+            <Route
+              path="/verification-messages"
+              element={
+                <Protected perm="messages.view">
+                  <VerificationMessages />
                 </Protected>
               }
             />

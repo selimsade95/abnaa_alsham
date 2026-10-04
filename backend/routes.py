@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io, math
+import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io, math, asyncio, json
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -102,6 +102,8 @@ PERMISSIONS_CATALOG = [
     ("grades.create", "إضافة الدرجات", "grades", "create"),
     ("grades.edit", "تعديل الدرجات", "grades", "edit"),
     ("grades.accept", "فتح فترة قبول الدرجات", "grades", "accept"),
+    ("messages.view", "عرض رسائل التحقق", "messages", "view"),
+    ("messages.reply", "الرد على رسائل التحقق", "messages", "reply"),
 ]
 ALL_PERMS = [p[0] for p in PERMISSIONS_CATALOG]
 
@@ -908,7 +910,10 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
     if academicYear: q["fees.academicYear"] = academicYear
     allowed = await allowed_class_ids(current)
     if allowed is not None:
-        q["currentClassId"] = {"$in": allowed}
+        if classId:
+            q["currentClassId"] = classId if classId in allowed else {"$in": []}
+        else:
+            q["currentClassId"] = {"$in": allowed}
     elif classId: q["currentClassId"] = classId
     elif teacherId:
         cls = await db.classes.find({"$or": [{"teacherIds": teacherId}, {"teacherId": teacherId}]}, {"id": 1, "_id": 0}).to_list(500)
@@ -1032,6 +1037,15 @@ async def validate_student(sid: str):
             {"id": d["currentClassId"]},
             {"_id": 0, "name": 1, "section": 1, "academicYear": 1},
         )
+    grades = await db.grades.find(
+        {"studentId": sid},
+        {"_id": 0, "academicYear": 1, "period": 1, "score": 1, "subjectId": 1},
+    ).sort([("academicYear", -1), ("period", 1)]).to_list(10000)
+    for grade in grades:
+        subject = await db.subjects.find_one(
+            {"id": grade.pop("subjectId", None)}, {"_id": 0, "name": 1}
+        )
+        grade["subjectName"] = subject.get("name") if subject else "—"
     return {
         "code": d.get("code"),
         "fullName": student.get("fullName"),
@@ -1041,7 +1055,157 @@ async def validate_student(sid: str):
         "section": current_class.get("section") if current_class else None,
         "academicYear": (current_class or {}).get("academicYear") or (d.get("fees") or {}).get("academicYear"),
         "hasPersonalPhoto": bool(((d.get("documents") or {}).get("personal_photo") or {}).get("filePath")),
+        "grades": grades,
     }
+
+
+MESSAGE_TYPE_LABELS = {
+    "complaint": "شكوى",
+    "suggestion": "اقتراح",
+    "inquiry": "استفسار",
+    "other": "أخرى",
+}
+
+
+async def _send_message_email(recipient, subject, content):
+    if not os.environ.get("GMAIL_USER") or not os.environ.get("GMAIL_APP_PASSWORD"):
+        raise RuntimeError("إعدادات البريد الإلكتروني غير مكتملة")
+
+    script = ROOT_DIR / "send_email.js"
+    process = await asyncio.create_subprocess_exec(
+        os.environ.get("NODE_BIN", "node"),
+        str(script),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    payload = json.dumps(
+        {"to": recipient, "subject": subject, "text": content},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    stdout, stderr = await process.communicate(payload)
+    if process.returncode:
+        logging.error("Nodemailer send failed: %s", stderr.decode("utf-8", errors="replace")[:1000])
+        raise RuntimeError("تعذر إرسال البريد الإلكتروني")
+
+
+@api.post("/public/students/{sid}/messages")
+async def create_public_message(sid: str, body: PublicMessageIn):
+    student = await db.students.find_one(
+        {"id": sid}, {"_id": 0, "code": 1, "student.fullName": 1}
+    )
+    if not student:
+        raise HTTPException(404, "الطالب غير موجود")
+    doc = {
+        "id": str(uuid.uuid4()),
+        **body.model_dump(),
+        "email": str(body.email),
+        "messageTypeLabel": MESSAGE_TYPE_LABELS[body.messageType],
+        "studentId": sid,
+        "studentName": (student.get("student") or {}).get("fullName"),
+        "studentCode": student.get("code"),
+        "status": "open",
+        "createdAt": now_iso(),
+        "response": "",
+        "responseBy": None,
+        "responseAt": None,
+        "emailDeliveryStatus": None,
+        "emailDeliveryError": None,
+    }
+    await db.verification_messages.insert_one(doc)
+    doc.pop("_id", None)
+    return {"ok": True, "id": doc["id"]}
+
+
+@api.get("/messages")
+async def list_verification_messages(
+    current=Depends(require_permission("messages.view")),
+):
+    return await db.verification_messages.find(
+        {}, {"_id": 0, "emailDeliveryError": 0}
+    ).sort("createdAt", -1).to_list(1000)
+
+
+async def _deliver_message_response(message):
+    try:
+        await _send_message_email(
+            message["email"],
+            "الرد على رسالتك إلى مدرسة أبناء الشام",
+            f"مرحباً {message['name']}،\n\n"
+            f"رد المدرسة على رسالتك ({message['messageTypeLabel']}):\n\n"
+            f"{message['response']}\n\nمدرسة أبناء الشام",
+        )
+    except Exception as exc:
+        logging.exception("Could not send verification-message reply")
+        await db.verification_messages.update_one(
+            {"id": message["id"]},
+            {"$set": {
+                "emailDeliveryStatus": "failed",
+                "emailDeliveryError": str(exc)[:500],
+            }},
+        )
+        raise HTTPException(502, "تم حفظ الرد لكن تعذر إرسال البريد الإلكتروني") from exc
+
+    await db.verification_messages.update_one(
+        {"id": message["id"]},
+        {"$set": {
+            "emailDeliveryStatus": "sent",
+            "emailDeliveryError": None,
+            "emailSentAt": now_iso(),
+        }},
+    )
+
+
+@api.post("/messages/{message_id}/reply")
+async def reply_to_verification_message(
+    message_id: str,
+    body: MessageReplyIn,
+    current=Depends(require_permission("messages.reply")),
+):
+    message = await db.verification_messages.find_one({"id": message_id}, {"_id": 0})
+    if not message:
+        raise HTTPException(404, "الرسالة غير موجودة")
+    updated_at = now_iso()
+    await db.verification_messages.update_one(
+        {"id": message_id},
+        {"$set": {
+            "response": body.response,
+            "responseBy": current.get("name") or current.get("username"),
+            "responseAt": updated_at,
+            "status": "responded",
+            "emailDeliveryStatus": "pending",
+            "emailDeliveryError": None,
+        }},
+    )
+    message.update({
+        "response": body.response,
+        "responseAt": updated_at,
+        "messageTypeLabel": message.get("messageTypeLabel")
+        or MESSAGE_TYPE_LABELS.get(message.get("messageType"), "أخرى"),
+    })
+    await _deliver_message_response(message)
+    return await db.verification_messages.find_one(
+        {"id": message_id}, {"_id": 0, "emailDeliveryError": 0}
+    )
+
+
+@api.post("/messages/{message_id}/resend")
+async def resend_verification_message_reply(
+    message_id: str,
+    current=Depends(require_permission("messages.reply")),
+):
+    message = await db.verification_messages.find_one({"id": message_id}, {"_id": 0})
+    if not message:
+        raise HTTPException(404, "الرسالة غير موجودة")
+    if not message.get("response"):
+        raise HTTPException(400, "لا يوجد رد لإعادة إرساله")
+    message["messageTypeLabel"] = message.get("messageTypeLabel") or MESSAGE_TYPE_LABELS.get(
+        message.get("messageType"), "أخرى"
+    )
+    await _deliver_message_response(message)
+    return await db.verification_messages.find_one(
+        {"id": message_id}, {"_id": 0, "emailDeliveryError": 0}
+    )
 
 @api.get("/students/{sid}/full-information")
 async def get_student_full(sid: str, current=Depends(require_permission("students.fullInformation.view"))):
@@ -1304,6 +1468,7 @@ STUDENT_DOCUMENT_TYPES = {
     "family_mother": "بيان عائلي / دفتر العائلة — صفحة الأم",
     "family_student": "بيان عائلي / دفتر العائلة — صفحة الطالب",
     "personal_photo": "صورة شخصية",
+    "address_document": "طبعة الإحصاء",
     "mother_id_front": "هوية الأم — الوجه الأمامي",
     "mother_id_back": "هوية الأم — الوجه الخلفي",
 }
@@ -1860,6 +2025,7 @@ async def on_startup():
         await db.teacher_subject_assignments.create_index([("teacherId", 1), ("subjectId", 1)], unique=True)
         await db.class_subject_assignments.create_index([("classId", 1), ("subjectId", 1)], unique=True)
         await db.grades.create_index([("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
+        await db.verification_messages.create_index([("createdAt", -1)])
     except Exception as e:
         logging.warning(f"index setup: {e}")
 
