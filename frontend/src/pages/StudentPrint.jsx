@@ -5,6 +5,8 @@ import {
   STATUS_LABELS,
   GENDER_LABELS,
   ORPHAN_OF_LABELS,
+  FEE_TYPE_LABELS,
+  FEE_TYPE_ORDER,
   SEMESTER_LABELS,
 } from "@/lib/studentDefaults";
 
@@ -93,7 +95,11 @@ export default function StudentPrint() {
             <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
             <Row label="مكان الميلاد" value={s.birthPlace} />
             <Row label="الجنس" value={GENDER_LABELS[s.gender]} />
-            <Row label="مسار التسجيل" value={s.registrationPath} />
+            <Row label="مسار التسجيل الأولي" value={s.registrationPath} />
+            <Row
+              label="مسار التسجيل النهائي"
+              value={s.finalRegistrationPath || s.registrationPath}
+            />
             <Row label="الصف السابق" value={s.previousClass} />
             <Row label="الصف الجديد" value={s.newClass} />
             <Row label="الوضع" value={STATUS_LABELS[s.status]} />
@@ -123,23 +129,35 @@ export default function StudentPrint() {
         </Section>
 
         <Section title="رسوم التسجيل">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <div className="text-gray-600 text-[11px]">السنة الدراسية</div>
               <div className="font-semibold">{fees.academicYear || "—"}</div>
             </div>
-            <div>
-              <div className="text-gray-600 text-[11px]">إجمالي المستحق</div>
-              <div className="font-semibold">{fees.totalPayable || 0}</div>
-            </div>
-            <div>
-              <div className="text-gray-600 text-[11px]">المدفوع</div>
-              <div className="font-semibold">{fees.totalPaid || 0}</div>
-            </div>
-            <div>
-              <div className="text-gray-600 text-[11px]">المتبقي</div>
-              <div className="font-semibold">{fees.remaining || 0}</div>
-            </div>
+            {FEE_TYPE_ORDER.map((feeType) => {
+              const totals = fees.byType?.[feeType] || {};
+              return (
+                <div key={feeType}>
+                  <div className="text-gray-600 text-[11px]">
+                    {FEE_TYPE_LABELS[feeType]}
+                  </div>
+                  <div className="font-semibold">
+                    المستحق: {totals.payable || 0}
+                  </div>
+                  <div>المدفوع: {totals.paid || 0}</div>
+                  <div>المتبقي: {totals.remaining || 0}</div>
+                  {feeType === "academic" && fees.discountEnabled && (
+                    <div className="text-gray-500">
+                      الخصم: {fees.discountAmount || 0} (
+                      {fees.discountPercentage}%)
+                    </div>
+                  )}
+                  {feeType === "transportation" && !fees.busRegistered && (
+                    <div className="text-gray-500">غير مسجل بالحافلة</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {payments.length > 0 && (
             <table className="w-full text-[11px] border border-gray-300 mt-3">
@@ -153,6 +171,9 @@ export default function StudentPrint() {
                   </th>
                   <th className="border border-gray-300 px-2 py-1 text-right">
                     الفصل
+                  </th>
+                  <th className="border border-gray-300 px-2 py-1 text-right">
+                    نوع الرسوم
                   </th>
                   <th className="border border-gray-300 px-2 py-1 text-right">
                     المبلغ
@@ -170,6 +191,9 @@ export default function StudentPrint() {
                     </td>
                     <td className="border border-gray-300 px-2 py-1">
                       {SEMESTER_LABELS[p.semester]}
+                    </td>
+                    <td className="border border-gray-300 px-2 py-1">
+                      {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
                     <td className="border border-gray-300 px-2 py-1">
                       {p.amount}

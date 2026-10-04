@@ -1,5 +1,6 @@
 import { useSettings } from "@/hooks/useSettings";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 const ENTITIES = [
   { key: "students", label: "الطلاب" },
@@ -8,8 +9,18 @@ const ENTITIES = [
 ];
 
 export default function Settings() {
-  const { canEdit, data, loading, preview, setData, save, updateEntity } =
-    useSettings();
+  const {
+    canEdit,
+    data,
+    loading,
+    preview,
+    setData,
+    registrationPaths,
+    setRegistrationPaths,
+    save,
+    updateEntity,
+  } = useSettings();
+  const [newRegistrationPath, setNewRegistrationPath] = useState("");
 
   if (loading || !data)
     return (
@@ -106,6 +117,84 @@ export default function Settings() {
               />
               <span>إعادة تعيين التسلسل كل سنة (السنة الجديدة تبدأ من 1)</span>
             </label>
+          </div>
+
+          <div className="rounded-lg border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">
+              مسارات التسجيل
+            </h3>
+            <div className="space-y-2">
+              {registrationPaths.map((path, index) => (
+                <div
+                  key={`${index}-${path}`}
+                  className="flex items-center gap-2"
+                >
+                  <input
+                    disabled={!canEdit}
+                    value={path}
+                    onChange={(event) =>
+                      setRegistrationPaths((previous) =>
+                        previous.map((item, itemIndex) =>
+                          itemIndex === index ? event.target.value : item,
+                        ),
+                      )
+                    }
+                    data-testid={`registration-path-${index}`}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50"
+                  />
+                  {canEdit && (
+                    <button
+                      type="button"
+                      disabled={registrationPaths.length <= 1}
+                      onClick={() =>
+                        setRegistrationPaths((previous) =>
+                          previous.filter(
+                            (_, itemIndex) => itemIndex !== index,
+                          ),
+                        )
+                      }
+                      title="حذف المسار"
+                      className="rounded-md p-2 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {canEdit && (
+              <form
+                className="mt-3 flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const path = newRegistrationPath.trim();
+                  if (!path || registrationPaths.includes(path)) return;
+                  setRegistrationPaths((previous) => [...previous, path]);
+                  setNewRegistrationPath("");
+                }}
+              >
+                <input
+                  value={newRegistrationPath}
+                  onChange={(event) =>
+                    setNewRegistrationPath(event.target.value)
+                  }
+                  placeholder="أضف مساراً جديداً"
+                  data-testid="new-registration-path"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={
+                    !newRegistrationPath.trim() ||
+                    registrationPaths.includes(newRegistrationPath.trim())
+                  }
+                  title="إضافة المسار"
+                  className="rounded-md p-2 text-[#036A87] hover:bg-brand-light disabled:opacity-40"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </form>
+            )}
           </div>
 
           {canEdit && (

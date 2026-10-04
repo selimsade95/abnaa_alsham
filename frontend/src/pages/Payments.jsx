@@ -6,14 +6,16 @@ import {
   Loader2,
   Pencil,
   Search,
-  Wallet,
-  CircleDollarSign,
   Download,
   Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { SEMESTER_LABELS } from "@/lib/studentDefaults";
+import {
+  FEE_TYPE_LABELS,
+  FEE_TYPE_ORDER,
+  SEMESTER_LABELS,
+} from "@/lib/studentDefaults";
 import { downloadCsv } from "@/lib/csv";
 
 const PaymentBadge = ({ semester }) => {
@@ -30,6 +32,21 @@ const PaymentBadge = ({ semester }) => {
     </span>
   );
 };
+
+const studentFeePayable = (student, feeType) => {
+  const fees = student?.fees || {};
+  if (fees.byType?.[feeType]) return Number(fees.byType[feeType].payable || 0);
+  if (feeType === "academic")
+    return Number(fees.netPayable ?? fees.totalPayable ?? 0);
+  if (feeType === "transportation")
+    return fees.busRegistered ? Number(fees.busFee || 0) : 0;
+  if (feeType === "books") return Number(fees.booksFee || 0);
+  if (feeType === "outfit") return Number(fees.outfitFee || 0);
+  return 0;
+};
+
+const studentFeePaid = (student, feeType) =>
+  Number(student?.fees?.byType?.[feeType]?.paid || 0);
 
 export default function Payments() {
   const { has } = useAuth();
@@ -56,6 +73,10 @@ export default function Payments() {
         { label: "الطالب", value: (p) => p.studentName },
         { label: "الكود", value: (p) => p.studentCode },
         { label: "السنة", value: (p) => p.academicYear },
+        {
+          label: "نوع الرسوم",
+          value: (p) => FEE_TYPE_LABELS[p.feeType || "academic"],
+        },
         {
           label: "الفصل",
           value: (p) => SEMESTER_LABELS[p.semester] || p.semester,
@@ -94,7 +115,9 @@ export default function Payments() {
       if (sem) params.semester = sem;
       const [paymentsResponse, statsResponse] = await Promise.all([
         api.get("/payments", { params }),
-        api.get("/dashboard/stats"),
+        api.get("/payments/summary", {
+          params: { search: debouncedQ, academicYear: year },
+        }),
       ]);
       setItems(paymentsResponse.data);
       setSummary(statsResponse.data);
@@ -110,14 +133,15 @@ export default function Payments() {
   const openNew = async () => {
     if (students.length === 0) {
       try {
-        const r = await api.get("/students");
-        setStudents(r.data?.data);
+        const r = await api.get("/students", { params: { limit: 5000 } });
+        setStudents(r.data?.data || []);
       } catch {}
     }
     setEditing({
       id: null,
       student: "",
       academicYear: "",
+      feeType: "academic",
       semester: "full_year",
       amount: "",
       paymentDate: new Date().toISOString().slice(0, 10),
@@ -140,6 +164,7 @@ export default function Payments() {
     setRefund({
       student: "",
       academicYear: year || "",
+      feeType: "academic",
       semester: sem || "full_year",
       amount: "",
       paymentDate: new Date().toISOString().slice(0, 10),
@@ -163,6 +188,7 @@ export default function Payments() {
           .filter(
             (payment) =>
               payment.academicYear === refund.academicYear &&
+              (payment.feeType || "academic") === refund.feeType &&
               payment.semester === refund.semester,
           )
           .reduce((total, payment) => total + Number(payment.amount || 0), 0);
@@ -177,12 +203,17 @@ export default function Payments() {
     return () => {
       cancelled = true;
     };
-  }, [refund?.student, refund?.academicYear, refund?.semester]);
+  }, [
+    refund?.student,
+    refund?.academicYear,
+    refund?.feeType,
+    refund?.semester,
+  ]);
   const openEdit = async (p) => {
     if (students.length === 0) {
       try {
-        const r = await api.get("/students");
-        setStudents(r.data?.data);
+        const r = await api.get("/students", { params: { limit: 5000 } });
+        setStudents(r.data?.data || []);
       } catch {}
     }
     setEditing({ ...p, paymentDate: (p.paymentDate || "").slice(0, 10) });
@@ -200,6 +231,7 @@ export default function Payments() {
       await api.post("/payments/refund", {
         student: refund.student,
         academicYear: refund.academicYear,
+        feeType: refund.feeType,
         semester: refund.semester,
         amount: Number(refund.amount),
         paymentDate: refund.paymentDate,
@@ -219,6 +251,7 @@ export default function Payments() {
       const body = {
         student: editing.student,
         academicYear: editing.academicYear,
+        feeType: editing.feeType || "academic",
         semester: editing.semester,
         amount: Number(editing.amount),
         paymentDate: editing.paymentDate,
@@ -289,43 +322,47 @@ export default function Payments() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div
-          className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
-          data-testid="payments-total-payable"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-500 mb-2">إجمالي المستحق</div>
-              <div className="text-2xl font-extrabold text-gray-900 tabular-nums">
-                {summary
-                  ? (summary.totalPayable ?? 0).toLocaleString("ar-EG")
-                  : "—"}
-              </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {FEE_TYPE_ORDER.map((feeType) => {
+          const totals = summary?.feeTypes?.[feeType];
+          return (
+            <div
+              key={feeType}
+              className="bg-white rounded-lg border border-gray-200 p-4"
+              data-testid={`payments-fee-${feeType}`}
+            >
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">
+                {FEE_TYPE_LABELS[feeType]}
+              </h2>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-500">المستحق</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {totals
+                      ? Number(totals.payable || 0).toLocaleString("ar-EG")
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-500">المدفوع</dt>
+                  <dd className="font-semibold text-emerald-700 tabular-nums">
+                    {totals
+                      ? Number(totals.paid || 0).toLocaleString("ar-EG")
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-gray-500">المتبقي</dt>
+                  <dd className="font-semibold text-amber-700 tabular-nums">
+                    {totals
+                      ? Number(totals.remaining || 0).toLocaleString("ar-EG")
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
             </div>
-            <div className="h-11 w-11 rounded-lg bg-[#E0F9FF] text-[#036A87] flex items-center justify-center">
-              <Wallet className="h-5 w-5" />
-            </div>
-          </div>
-        </div>
-        <div
-          className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
-          data-testid="payments-total-remaining"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-500 mb-2">إجمالي المتبقي</div>
-              <div className="text-2xl font-extrabold text-amber-700 tabular-nums">
-                {summary
-                  ? (summary.totalRemaining ?? 0).toLocaleString("ar-EG")
-                  : "—"}
-              </div>
-            </div>
-            <div className="h-11 w-11 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
-              <CircleDollarSign className="h-5 w-5" />
-            </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
@@ -366,6 +403,7 @@ export default function Payments() {
                 <th className="px-4 py-3 font-medium">الطالب</th>
                 <th className="px-4 py-3 font-medium">السنة الدراسية</th>
                 <th className="px-4 py-3 font-medium">الفصل</th>
+                <th className="px-4 py-3 font-medium">نوع الرسوم</th>
                 <th className="px-4 py-3 font-medium">المبلغ</th>
                 <th className="px-4 py-3 font-medium">إجمالي المستحق</th>
                 <th className="px-4 py-3 font-medium">المتبقي</th>
@@ -378,7 +416,7 @@ export default function Payments() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
@@ -388,7 +426,7 @@ export default function Payments() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     لا توجد مدفوعات.
@@ -409,6 +447,9 @@ export default function Payments() {
                     </td>
                     <td className="px-4 py-3">
                       <PaymentBadge semester={p.semester} />
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">
+                      {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
                     <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
                       {p.amount}
@@ -482,9 +523,22 @@ export default function Payments() {
                   required
                   data-testid="payment-student-select"
                   value={editing.student}
-                  onChange={(e) =>
-                    setEditing({ ...editing, student: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const selectedStudent = students.find(
+                      (item) => item.id === e.target.value,
+                    );
+                    const availableTypes = FEE_TYPE_ORDER.filter(
+                      (feeType) =>
+                        studentFeePayable(selectedStudent, feeType) > 0,
+                    );
+                    setEditing({
+                      ...editing,
+                      student: e.target.value,
+                      feeType: availableTypes.includes(editing.feeType)
+                        ? editing.feeType
+                        : availableTypes[0] || "academic",
+                    });
+                  }}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
                 >
                   <option value="">اختر الطالب</option>
@@ -499,6 +553,34 @@ export default function Payments() {
                       No options
                     </option>
                   )}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  نوع الرسوم
+                </label>
+                <select
+                  required
+                  value={editing.feeType || "academic"}
+                  onChange={(e) =>
+                    setEditing({ ...editing, feeType: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  data-testid="payment-fee-type-select"
+                >
+                  {FEE_TYPE_ORDER.filter(
+                    (feeType) =>
+                      studentFeePayable(
+                        students.find(
+                          (student) => student.id === editing.student,
+                        ),
+                        feeType,
+                      ) > 0 || feeType === (editing.feeType || "academic"),
+                  ).map((feeType) => (
+                    <option key={feeType} value={feeType}>
+                      {FEE_TYPE_LABELS[feeType]}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -616,9 +698,21 @@ export default function Payments() {
                 <select
                   required
                   value={refund.student}
-                  onChange={(e) =>
-                    setRefund({ ...refund, student: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const selectedStudent = students.find(
+                      (item) => item.id === e.target.value,
+                    );
+                    const refundTypes = FEE_TYPE_ORDER.filter(
+                      (feeType) => studentFeePaid(selectedStudent, feeType) > 0,
+                    );
+                    setRefund({
+                      ...refund,
+                      student: e.target.value,
+                      feeType: refundTypes.includes(refund.feeType)
+                        ? refund.feeType
+                        : refundTypes[0] || "academic",
+                    });
+                  }}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2"
                 >
                   <option value="">اختر الطالب</option>
@@ -630,6 +724,34 @@ export default function Payments() {
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    نوع الرسوم
+                  </label>
+                  <select
+                    required
+                    value={refund.feeType}
+                    onChange={(e) =>
+                      setRefund({ ...refund, feeType: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    data-testid="refund-fee-type-select"
+                  >
+                    {FEE_TYPE_ORDER.filter(
+                      (feeType) =>
+                        studentFeePaid(
+                          students.find(
+                            (student) => student.id === refund.student,
+                          ),
+                          feeType,
+                        ) > 0 || feeType === refund.feeType,
+                    ).map((feeType) => (
+                      <option key={feeType} value={feeType}>
+                        {FEE_TYPE_LABELS[feeType]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     السنة

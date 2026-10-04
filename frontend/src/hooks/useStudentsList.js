@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { useClasses } from "@/hooks/useClasses";
 import { downloadCsv, downloadTemplate, uploadCsv } from "@/lib/csv";
+import { REGISTRATION_PATHS } from "@/lib/studentDefaults";
 
 const DEFAULT_FILTERS = {
   gender: "",
@@ -14,6 +15,7 @@ const DEFAULT_FILTERS = {
   status: "",
   academicYear: "",
   paymentStatus: "",
+  finalRegistrationPath: "",
 };
 
 const studentColumns = [
@@ -24,6 +26,10 @@ const studentColumns = [
   { label: "الحالة", value: (s) => s.student?.status },
   { label: "الصف", value: (s) => s.currentClass?.name || s.student?.newClass },
   { label: "مسار التسجيل", value: (s) => s.student?.registrationPath },
+  {
+    label: "مسار التسجيل النهائي",
+    value: (s) => s.student?.finalRegistrationPath,
+  },
   { label: "الهاتف", value: (s) => s.father?.phone || s.mother?.phone },
   { label: "سبب التعطيل", value: (s) => s.deactivationReason },
 ];
@@ -33,7 +39,8 @@ const studentTemplate = [
   "gender [male|female]",
   "birthdate",
   "birthPlace",
-  "registrationPath [خاص|القرية|الايتام]",
+  "registrationPath [choose a configured registration path]",
+  "finalRegistrationPath [choose a configured registration path]",
   "previousClass",
   "newClass",
   "status [resident|immigrant|displaced|inactive]",
@@ -72,6 +79,9 @@ const studentTemplate = [
   "emergencyPhone",
   "academicYear",
   "totalPayable",
+  "booksFee",
+  "busFee",
+  "outfitFee",
   "currentClassId [existing class ID]",
 ];
 
@@ -79,10 +89,15 @@ export function useStudentsList() {
   const { has } = useAuth();
   const nav = useNavigate();
   const [items, setItems] = useState([]);
+  const [registrationPaths, setRegistrationPaths] =
+    useState(REGISTRATION_PATHS);
   const [summary, setSummary] = useState({
     totalPayable: 0,
     totalPaid: 0,
     totalRemaining: 0,
+    totalBooksFee: 0,
+    totalBusFee: 0,
+    totalOutfitFee: 0,
   });
   const [pagination, setPagination] = useState({
     page: 1,
@@ -102,6 +117,13 @@ export function useStudentsList() {
   const [reactivating, setReactivating] = useState(null);
   const importRef = useRef(null);
 
+  useEffect(() => {
+    api
+      .get("/registration-paths")
+      .then((response) => setRegistrationPaths(response.data.paths || []))
+      .catch(() => {});
+  }, []);
+
   const load = useCallback(
     async (page = 1) => {
       setLoading(true);
@@ -118,6 +140,9 @@ export function useStudentsList() {
             totalPayable: 0,
             totalPaid: 0,
             totalRemaining: 0,
+            totalBooksFee: 0,
+            totalBusFee: 0,
+            totalOutfitFee: 0,
           },
         );
         setPagination(response.data.pagination);
@@ -199,6 +224,7 @@ export function useStudentsList() {
     has,
     nav,
     items,
+    registrationPaths,
     summary,
     pagination,
     loading,

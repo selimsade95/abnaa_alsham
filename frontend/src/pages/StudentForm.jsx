@@ -3,7 +3,6 @@ import { useStudentForm } from "@/hooks/useStudentForm";
 import {
   LANGUAGES,
   STATUS_LABELS,
-  REGISTRATION_PATHS,
   ORPHAN_DOC_TYPES,
 } from "@/lib/studentDefaults";
 
@@ -53,6 +52,7 @@ export default function StudentForm({ mode }) {
     setHobbiesInput,
     errors,
     classes,
+    registrationPaths,
     showFullInfo,
     setShowFullInfo,
     update,
@@ -74,6 +74,20 @@ export default function StudentForm({ mode }) {
     );
 
   const s = data.student;
+  const pathOptions = Array.from(
+    new Set(
+      [
+        ...registrationPaths,
+        s.registrationPath,
+        s.finalRegistrationPath,
+      ].filter(Boolean),
+    ),
+  );
+  const fees = data.fees;
+  const discountPercentage = Number(fees.discountPercentage) || 0;
+  const discountAmount = fees.discountEnabled
+    ? ((Number(fees.totalPayable) || 0) * discountPercentage) / 100
+    : 0;
 
   return (
     <form onSubmit={submit} className="space-y-6" data-testid="student-form">
@@ -104,7 +118,7 @@ export default function StudentForm({ mode }) {
       </div>
 
       <Section title="معلومات الطالب">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="الاسم الكامل" required>
             <input
               data-testid="input-fullName"
@@ -156,16 +170,24 @@ export default function StudentForm({ mode }) {
               <p className="text-xs text-red-600 mt-1">{errors.gender}</p>
             )}
           </Field>
-          <Field label="مسار التسجيل" required>
+          <Field label="مسار التسجيل الأولي" required>
             <select
               data-testid="select-registrationPath"
-              className={inputCls}
+              className={`${inputCls} disabled:bg-gray-50`}
               value={s.registrationPath}
-              onChange={(e) =>
-                update("student.registrationPath", e.target.value)
-              }
+              disabled={mode === "edit" && !!s.registrationPath}
+              onChange={(e) => {
+                const nextPath = e.target.value;
+                update("student.registrationPath", nextPath);
+                if (
+                  !s.finalRegistrationPath ||
+                  s.finalRegistrationPath === s.registrationPath
+                )
+                  update("student.finalRegistrationPath", nextPath);
+              }}
             >
-              {REGISTRATION_PATHS.map((p) => (
+              <option value="">— اختر المسار —</option>
+              {pathOptions.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
@@ -174,6 +196,28 @@ export default function StudentForm({ mode }) {
             {errors.registrationPath && (
               <p className="text-xs text-red-600 mt-1">
                 {errors.registrationPath}
+              </p>
+            )}
+          </Field>
+          <Field label="مسار التسجيل النهائي" required>
+            <select
+              data-testid="select-finalRegistrationPath"
+              className={inputCls}
+              value={s.finalRegistrationPath}
+              onChange={(e) =>
+                update("student.finalRegistrationPath", e.target.value)
+              }
+            >
+              <option value="">— اختر المسار —</option>
+              {pathOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            {errors.finalRegistrationPath && (
+              <p className="text-xs text-red-600 mt-1">
+                {errors.finalRegistrationPath}
               </p>
             )}
           </Field>
@@ -460,7 +504,93 @@ export default function StudentForm({ mode }) {
               onChange={(e) => update("fees.totalPayable", e.target.value)}
             />
           </Field>
+          <Field label="رسوم الكتب">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className={inputCls}
+              value={fees.booksFee || ""}
+              onChange={(e) => update("fees.booksFee", e.target.value)}
+              data-testid="input-booksFee"
+            />
+          </Field>
+          <div className="flex items-center pt-7">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!fees.busRegistered}
+                onChange={(e) => update("fees.busRegistered", e.target.checked)}
+                className="h-4 w-4 accent-[#04CDF9]"
+                data-testid="input-busRegistered"
+              />
+              تسجيل الطالب في الحافلة
+            </label>
+          </div>
+          {fees.busRegistered && (
+            <Field label="رسوم الحافلة">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                className={inputCls}
+                value={fees.busFee || ""}
+                onChange={(e) => update("fees.busFee", e.target.value)}
+                data-testid="input-busFee"
+              />
+            </Field>
+          )}
+          <Field label="رسوم الزي">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className={inputCls}
+              value={fees.outfitFee || ""}
+              onChange={(e) => update("fees.outfitFee", e.target.value)}
+              data-testid="input-outfitFee"
+            />
+          </Field>
+          <div className="flex items-center pt-7">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!fees.discountEnabled}
+                onChange={(e) =>
+                  update("fees.discountEnabled", e.target.checked)
+                }
+                className="h-4 w-4 accent-[#04CDF9]"
+                data-testid="input-discount-enabled"
+              />
+              يستفيد الطالب من خصم
+            </label>
+          </div>
+          {fees.discountEnabled && (
+            <Field label="نسبة الخصم (%)">
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                className={inputCls}
+                value={fees.discountPercentage || ""}
+                onChange={(e) =>
+                  update("fees.discountPercentage", e.target.value)
+                }
+                data-testid="input-discount-percentage"
+              />
+            </Field>
+          )}
         </div>
+        {fees.discountEnabled && (
+          <p className="text-sm text-gray-600">
+            قيمة الخصم: {discountAmount.toLocaleString("ar-EG")} | المستحق بعد
+            الخصم:{" "}
+            {(Number(fees.totalPayable || 0) - discountAmount).toLocaleString(
+              "ar-EG",
+            )}
+          </p>
+        )}
         {mode === "create" && (
           <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
             <div className="text-sm font-medium text-gray-700 mb-3">

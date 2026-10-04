@@ -47,9 +47,18 @@ class StudentIn(BaseModel):
     currentClassId: Optional[str] = None
 
 
+class StudentNoteIn(BaseModel):
+    content: str
+
+
+class RegistrationPathsIn(BaseModel):
+    paths: List[str]
+
+
 class PaymentIn(BaseModel):
     student: str
     academicYear: str
+    feeType: str = "academic"
     semester: str
     amount: float
     paymentDate: str
@@ -59,6 +68,7 @@ class PaymentIn(BaseModel):
 class RefundIn(BaseModel):
     student: str
     academicYear: str
+    feeType: str = "academic"
     semester: str
     amount: float
     paymentDate: str
@@ -86,6 +96,16 @@ class ClassIn(BaseModel):
     capacity: Optional[int] = 0
     status: Optional[str] = "active"
     notes: Optional[str] = ""
+
+
+class ClassPromotionStudentIn(BaseModel):
+    studentId: str
+    totalPayable: float
+
+
+class ClassPromotionIn(BaseModel):
+    destinationClassId: str
+    students: List[ClassPromotionStudentIn]
 
 
 class DeactivationIn(BaseModel):

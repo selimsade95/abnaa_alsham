@@ -135,6 +135,12 @@ export default function StudentFullInfoEdit() {
       payload.fees = {
         academicYear: data.fees?.academicYear || "",
         totalPayable: data.fees?.totalPayable || 0,
+        discountEnabled: data.fees?.discountEnabled || false,
+        discountPercentage: data.fees?.discountPercentage || 0,
+        booksFee: data.fees?.booksFee || 0,
+        busFee: data.fees?.busFee || 0,
+        busRegistered: data.fees?.busRegistered || false,
+        outfitFee: data.fees?.outfitFee || 0,
       };
       delete payload.initialPayment;
       if (payload.student.birthdate?.length === 10)

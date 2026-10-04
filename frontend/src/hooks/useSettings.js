@@ -7,6 +7,7 @@ export function useSettings() {
   const { has } = useAuth();
   const canEdit = has("settings.codeGeneration.update");
   const [data, setData] = useState(null);
+  const [registrationPaths, setRegistrationPaths] = useState([]);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState({});
 
@@ -24,9 +25,13 @@ export function useSettings() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api.get("/settings/code-generation");
-      setData(response.data);
-      refreshPreview(response.data);
+      const [settingsResponse, pathsResponse] = await Promise.all([
+        api.get("/settings/code-generation"),
+        api.get("/settings/registration-paths"),
+      ]);
+      setData(settingsResponse.data);
+      setRegistrationPaths(pathsResponse.data.paths || []);
+      refreshPreview(settingsResponse.data);
     } catch {
       toast.error("تعذر التحميل");
     } finally {
@@ -45,6 +50,9 @@ export function useSettings() {
         classes: data.classes,
         resetYearly: data.resetYearly,
       });
+      await api.put("/settings/registration-paths", {
+        paths: registrationPaths,
+      });
       setData(response.data);
       refreshPreview(response.data);
       toast.success("تم الحفظ");
@@ -57,5 +65,17 @@ export function useSettings() {
     setData(next);
     refreshPreview(next);
   };
-  return { has, canEdit, data, loading, preview, setData, save, updateEntity };
+  return {
+    has,
+    canEdit,
+    data,
+    loading,
+    preview,
+    setData,
+    registrationPaths,
+    setRegistrationPaths,
+    refreshPreview,
+    save,
+    updateEntity,
+  };
 }

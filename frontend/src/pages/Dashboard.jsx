@@ -8,6 +8,9 @@ import {
   Wallet,
   TrendingUp,
   AlertCircle,
+  BookOpen,
+  Bus,
+  Shirt,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -110,7 +113,7 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold text-gray-900 mb-3">
             الملخص المالي
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             <StatCard
               title="إجمالي المستحق"
               value={
@@ -143,6 +146,39 @@ export default function Dashboard() {
               icon={AlertCircle}
               tint={{ bg: "#FEF3E7", fg: "#B45309" }}
               testid="stat-remaining"
+            />
+            <StatCard
+              title="إجمالي رسوم الكتب"
+              value={
+                loading
+                  ? "…"
+                  : (stats?.totalBooksFee ?? 0).toLocaleString("ar-EG")
+              }
+              icon={BookOpen}
+              tint={{ bg: "#F4F7E8", fg: "#58721C" }}
+              testid="stat-books-fee"
+            />
+            <StatCard
+              title="إجمالي رسوم الحافلة"
+              value={
+                loading
+                  ? "…"
+                  : (stats?.totalBusFee ?? 0).toLocaleString("ar-EG")
+              }
+              icon={Bus}
+              tint={{ bg: "#FFF1E8", fg: "#A94E17" }}
+              testid="stat-bus-fee"
+            />
+            <StatCard
+              title="إجمالي رسوم الزي"
+              value={
+                loading
+                  ? "…"
+                  : (stats?.totalOutfitFee ?? 0).toLocaleString("ar-EG")
+              }
+              icon={Shirt}
+              tint={{ bg: "#E8F6EF", fg: "#176B45" }}
+              testid="stat-outfit-fee"
             />
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { emptyStudent } from "@/lib/studentDefaults";
+import { emptyStudent, REGISTRATION_PATHS } from "@/lib/studentDefaults";
 import { useClasses } from "@/hooks/useClasses";
 
 export function useStudentForm(mode) {
@@ -14,7 +14,33 @@ export function useStudentForm(mode) {
   const [hobbiesInput, setHobbiesInput] = useState("");
   const [errors, setErrors] = useState({});
   const [showFullInfo, setShowFullInfo] = useState(false);
+  const [registrationPaths, setRegistrationPaths] =
+    useState(REGISTRATION_PATHS);
   const { classes } = useClasses({ limit: 500 });
+
+  useEffect(() => {
+    api
+      .get("/registration-paths")
+      .then((response) => {
+        const paths = response.data.paths || [];
+        setRegistrationPaths(paths);
+        if (mode === "create" && paths.length) {
+          setData((previous) => {
+            if (paths.includes(previous.student.registrationPath))
+              return previous;
+            return {
+              ...previous,
+              student: {
+                ...previous.student,
+                registrationPath: paths[0],
+                finalRegistrationPath: paths[0],
+              },
+            };
+          });
+        }
+      })
+      .catch(() => setRegistrationPaths(REGISTRATION_PATHS));
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "edit" || !id) return;
@@ -27,13 +53,28 @@ export function useStudentForm(mode) {
         const merged = {
           ...emptyStudent(),
           ...student,
-          student: { ...emptyStudent().student, ...student.student },
+          student: {
+            ...emptyStudent().student,
+            ...student.student,
+            finalRegistrationPath:
+              student.student?.finalRegistrationPath ||
+              student.student?.registrationPath ||
+              "",
+          },
           fullInfo: { ...emptyStudent().fullInfo, ...(student.fullInfo || {}) },
           currentClassId: student.currentClassId || "",
         };
         merged.fees = {
           academicYear: student.fees?.academicYear || "",
           totalPayable: student.fees?.totalPayable || 0,
+          discountEnabled: student.fees?.discountEnabled || false,
+          discountPercentage: student.fees?.discountPercentage || 0,
+          booksFee: student.fees?.booksFee || 0,
+          busFee: student.fees?.busFee || 0,
+          busRegistered:
+            student.fees?.busRegistered ??
+            Number(student.fees?.busFee || 0) > 0,
+          outfitFee: student.fees?.outfitFee || 0,
         };
         setData(merged);
         setHobbiesInput((student.student?.hobbies || []).join("، "));
@@ -116,7 +157,9 @@ export function useStudentForm(mode) {
       nextErrors.newClass = "الصف الجديد مطلوب";
     if (!data.student.status) nextErrors.status = "الوضع مطلوب";
     if (!data.student.registrationPath)
-      nextErrors.registrationPath = "مسار التسجيل مطلوب";
+      nextErrors.registrationPath = "مسار التسجيل الأولي مطلوب";
+    if (!data.student.finalRegistrationPath)
+      nextErrors.finalRegistrationPath = "مسار التسجيل النهائي مطلوب";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -166,6 +209,7 @@ export function useStudentForm(mode) {
     setHobbiesInput,
     errors,
     classes,
+    registrationPaths,
     showFullInfo,
     setShowFullInfo,
     update,

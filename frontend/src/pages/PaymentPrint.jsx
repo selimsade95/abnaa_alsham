@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { Printer } from "lucide-react";
-import { SEMESTER_LABELS, STATUS_LABELS } from "@/lib/studentDefaults";
+import {
+  FEE_TYPE_LABELS,
+  FEE_TYPE_ORDER,
+  SEMESTER_LABELS,
+  STATUS_LABELS,
+} from "@/lib/studentDefaults";
 
 export default function PaymentPrint({ studentHistory = false }) {
   const { id } = useParams();
@@ -81,36 +86,41 @@ export default function PaymentPrint({ studentHistory = false }) {
   const distinctStudents = new Set(records.map((payment) => payment.student))
     .size;
   const multipleStudents = !selectedPayment && distinctStudents > 1;
-  const totalPayable = multipleStudents
-    ? [
-        ...new Map(
-          records.map((payment) => [
-            payment.student,
-            payment.totalPayable || 0,
-          ]),
-        ).values(),
-      ].reduce((sum, value) => sum + value, 0)
-    : fees.totalPayable || 0;
-  const totalRemaining = multipleStudents
-    ? [
-        ...new Map(
-          records.map((payment) => [
-            payment.student,
-            payment.currentTotalRemaining ?? payment.totalRemaining ?? 0,
-          ]),
-        ).values(),
-      ].reduce((sum, value) => sum + value, 0)
-    : fees.remaining || 0;
-  const totalPaid = multipleStudents
-    ? [
-        ...new Map(
-          records.map((payment) => [
-            payment.student,
-            payment.currentTotalPaid ?? payment.totalPaid ?? 0,
-          ]),
-        ).values(),
-      ].reduce((sum, value) => sum + value, 0)
-    : fees.totalPaid || 0;
+  const printedFeeTotals = Object.fromEntries(
+    FEE_TYPE_ORDER.map((feeType) => {
+      if (!multipleStudents) return [feeType, fees.byType?.[feeType] || {}];
+      const studentsByType = new Map();
+      records
+        .filter((payment) => (payment.feeType || "academic") === feeType)
+        .forEach((payment) => {
+          if (!studentsByType.has(payment.student))
+            studentsByType.set(payment.student, payment);
+        });
+      const paymentsForType = [...studentsByType.values()];
+      return [
+        feeType,
+        {
+          payable: paymentsForType.reduce(
+            (sum, payment) => sum + Number(payment.totalPayable || 0),
+            0,
+          ),
+          paid: paymentsForType.reduce(
+            (sum, payment) =>
+              sum + Number(payment.currentTotalPaid ?? payment.totalPaid ?? 0),
+            0,
+          ),
+          remaining: paymentsForType.reduce(
+            (sum, payment) =>
+              sum +
+              Number(
+                payment.currentTotalRemaining ?? payment.totalRemaining ?? 0,
+              ),
+            0,
+          ),
+        },
+      ];
+    }),
+  );
 
   return (
     <div className="min-h-screen bg-white p-6" dir="rtl">
@@ -183,21 +193,23 @@ export default function PaymentPrint({ studentHistory = false }) {
 
         {/* Overall Fees */}
         {!selectedPayment && (student || multipleStudents) && (
-          <section className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">إجمالي المستحق</div>
-              <strong>{totalPayable}</strong>
-            </div>
-
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">إجمالي المدفوع</div>
-              <strong>{totalPaid}</strong>
-            </div>
-
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <div className="text-xs text-amber-700">المتبقي</div>
-              <strong className="text-amber-800">{totalRemaining}</strong>
-            </div>
+          <section className="mt-5 grid grid-cols-2 lg:grid-cols-4 gap-3 text-center">
+            {FEE_TYPE_ORDER.map((feeType) => (
+              <div
+                key={feeType}
+                className="rounded-lg border border-gray-200 p-3"
+              >
+                <div className="text-xs font-semibold text-gray-700 mb-2">
+                  {FEE_TYPE_LABELS[feeType]}
+                </div>
+                <div className="text-xs text-gray-500">مستحق</div>
+                <strong>{printedFeeTotals[feeType].payable || 0}</strong>
+                <div className="text-xs text-gray-500 mt-1">مدفوع / متبقٍ</div>
+                <strong>{printedFeeTotals[feeType].paid || 0}</strong>
+                <span> / </span>
+                <strong>{printedFeeTotals[feeType].remaining || 0}</strong>
+              </div>
+            ))}
           </section>
         )}
 
@@ -205,7 +217,9 @@ export default function PaymentPrint({ studentHistory = false }) {
         {selectedPayment && (
           <section className="mt-5 grid grid-cols-3 gap-3 text-center">
             <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">إجمالي المستحق</div>
+              <div className="text-xs text-gray-500">
+                مستحق {FEE_TYPE_LABELS[selectedPayment.feeType || "academic"]}
+              </div>
               <strong>{selectedPayment.totalPayable || 0}</strong>
             </div>
 
@@ -243,6 +257,9 @@ export default function PaymentPrint({ studentHistory = false }) {
               <th className="border border-gray-300 p-2 text-right">التاريخ</th>
               <th className="border border-gray-300 p-2 text-right">السنة</th>
               <th className="border border-gray-300 p-2 text-right">الفصل</th>
+              <th className="border border-gray-300 p-2 text-right">
+                نوع الرسوم
+              </th>
               <th className="border border-gray-300 p-2 text-right">المبلغ</th>
               <th className="border border-gray-300 p-2 text-right">
                 المدفوع حتى الدفعة
@@ -272,6 +289,10 @@ export default function PaymentPrint({ studentHistory = false }) {
 
                 <td className="border border-gray-300 p-2">
                   {SEMESTER_LABELS[payment.semester] || payment.semester}
+                </td>
+
+                <td className="border border-gray-300 p-2">
+                  {FEE_TYPE_LABELS[payment.feeType || "academic"]}
                 </td>
 
                 <td className="border border-gray-300 p-2 font-semibold">

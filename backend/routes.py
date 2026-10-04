@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io
+import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io, math
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
@@ -60,6 +60,10 @@ PERMISSIONS_CATALOG = [
     ("students.delete", "حذف الطلاب", "students", "delete"),
     ("students.print", "طباعة الطلاب", "students", "print"),
     ("students.fullInformation.view", "عرض المعلومات الكاملة للطالب", "students", "fullInformation.view"),
+    ("students.notes.view", "عرض ملاحظات الطلاب", "students.notes", "view"),
+    ("students.notes.create", "إضافة ملاحظات الطلاب", "students.notes", "create"),
+    ("students.notes.update", "تعديل ملاحظات الطلاب", "students.notes", "update"),
+    ("students.notes.delete", "حذف ملاحظات الطلاب", "students.notes", "delete"),
     ("students.orphanDocument.view", "عرض وثيقة اليتم", "students", "orphanDocument.view"),
     ("students.orphanDocument.upload", "رفع وثيقة اليتم", "students", "orphanDocument.upload"),
     ("students.orphanDocument.delete", "حذف وثيقة اليتم", "students", "orphanDocument.delete"),
@@ -673,6 +677,57 @@ async def update_class(cid: str, body: ClassIn, current=Depends(require_permissi
     await db.classes.update_one({"id": cid}, {"$set": upd})
     return await _class_enrich(await db.classes.find_one({"id": cid}, {"_id": 0}))
 
+@api.post("/classes/{source_id}/promote-students")
+async def promote_class_students(
+    source_id: str,
+    body: ClassPromotionIn,
+    current=Depends(require_permission("students.update")),
+):
+    source_class = await ensure_class_access(source_id, current)
+    destination_class = await ensure_class_access(body.destinationClassId, current)
+    if source_id == body.destinationClassId:
+        raise HTTPException(400, "يجب اختيار صف مختلف للترفيع")
+    if destination_class.get("status") != "active":
+        raise HTTPException(400, "الصف الجديد غير نشط")
+    if not body.students:
+        raise HTTPException(400, "اختر طالباً واحداً على الأقل")
+    student_ids = [selection.studentId for selection in body.students]
+    if len(student_ids) != len(set(student_ids)):
+        raise HTTPException(400, "لا يمكن تكرار الطالب في طلب الترفيع")
+
+    students_to_move = []
+    for selection in body.students:
+        if not math.isfinite(selection.totalPayable) or selection.totalPayable < 0:
+            raise HTTPException(400, "المستحق الجديد يجب أن يكون رقماً غير سالب")
+        student = await ensure_student_access(selection.studentId, current)
+        if student.get("currentClassId") != source_id:
+            raise HTTPException(400, "أحد الطلاب لم يعد في الصف المحدد")
+        if (student.get("student") or {}).get("status") == "inactive":
+            raise HTTPException(400, "لا يمكن ترفيع طالب غير نشط")
+        students_to_move.append((student, selection))
+
+    timestamp = now_iso()
+    source_name = source_class.get("name") or ""
+    destination_name = destination_class.get("name") or ""
+    moved = []
+    for student, selection in students_to_move:
+        fees = student.get("fees") or {}
+        fees["totalPayable"] = float(selection.totalPayable)
+        if destination_class.get("academicYear"):
+            fees["academicYear"] = destination_class["academicYear"]
+        await db.students.update_one(
+            {"id": student["id"], "currentClassId": source_id},
+            {"$set": {
+                "currentClassId": body.destinationClassId,
+                "student.previousClass": source_name,
+                "student.newClass": destination_name,
+                "fees": fees,
+                "updatedAt": timestamp,
+            }},
+        )
+        moved.append({"studentId": student["id"], "totalPayable": float(selection.totalPayable)})
+    return {"ok": True, "moved": len(moved), "students": moved}
+
 @api.delete("/classes/{cid}")
 async def delete_class(cid: str, body: DeactivationIn, current=Depends(require_permission("classes.delete"))):
     reason = body.reason.strip()
@@ -706,33 +761,123 @@ async def _student_payment_totals(sid: str, ay: Optional[str] = None) -> dict:
     q = {"student": sid}
     if ay: q["academicYear"] = ay
     docs = await db.payments.find(q, {"_id": 0}).to_list(1000)
-    return {"totalPaid": sum(float(p.get("amount", 0)) for p in docs), "count": len(docs)}
+    totals_by_type = {fee_type: 0 for fee_type in ("academic", "transportation", "books", "outfit")}
+    for payment in docs:
+        fee_type = payment.get("feeType") or "academic"
+        totals_by_type[fee_type] = totals_by_type.get(fee_type, 0) + float(payment.get("amount", 0))
+    return {"totalPaid": sum(float(p.get("amount", 0)) for p in docs),
+            "byFeeType": totals_by_type, "count": len(docs)}
 
 def _payment_order_key(payment):
     return (payment.get("paymentDate") or "", payment.get("createdAt") or "", payment.get("id") or "")
 
 async def _payment_snapshot(payment, payable):
-    if "totalPaidAtPayment" in payment and "totalRemainingAtPayment" in payment:
+    if payment.get("feeType") and "totalPaidAtPayment" in payment and "totalRemainingAtPayment" in payment:
         return float(payment["totalPaidAtPayment"]), float(payment["totalRemainingAtPayment"])
     docs = await db.payments.find(
         {"student": payment.get("student"), "academicYear": payment.get("academicYear")},
-        {"_id": 0, "id": 1, "amount": 1, "paymentDate": 1, "createdAt": 1},
+        {"_id": 0, "id": 1, "amount": 1, "feeType": 1, "paymentDate": 1, "createdAt": 1},
     ).to_list(1000)
+    fee_type = payment.get("feeType") or "academic"
     cumulative = 0
     for doc in sorted(docs, key=_payment_order_key):
+        if (doc.get("feeType") or "academic") != fee_type:
+            continue
         cumulative += float(doc.get("amount", 0))
         if doc.get("id") == payment.get("id"):
             break
     return cumulative, max(0, payable - cumulative)
 
-async def _augment_student(doc: dict) -> dict:
+def _discounted_payable(fees):
+    total_payable = float(fees.get("totalPayable") or 0)
+    discount_enabled = bool(fees.get("discountEnabled"))
+    discount_percentage = float(fees.get("discountPercentage") or 0)
+    discount_amount = total_payable * discount_percentage / 100 if discount_enabled else 0
+    return total_payable, discount_percentage, discount_amount, max(0, total_payable - discount_amount)
+
+FEE_TYPE_FIELDS = {
+    "academic": "totalPayable",
+    "transportation": "busFee",
+    "books": "booksFee",
+    "outfit": "outfitFee",
+}
+
+def _fee_payables(fees):
+    bus_fee = float(fees.get("busFee") or 0)
+    bus_registered = fees.get("busRegistered", bus_fee > 0)
+    return {
+        "academic": _discounted_payable(fees)[3],
+        "transportation": bus_fee if bus_registered else 0,
+        "books": float(fees.get("booksFee") or 0),
+        "outfit": float(fees.get("outfitFee") or 0),
+    }
+
+def _clean_fee_type(fee_type):
+    if fee_type not in FEE_TYPE_FIELDS:
+        raise HTTPException(400, "نوع الرسوم غير صالح")
+    return fee_type
+
+def _normalize_student_fees(fees):
+    discount_percentage = float(fees.get("discountPercentage") or 0)
+    if not 0 <= discount_percentage <= 100:
+        raise HTTPException(400, "نسبة الخصم يجب أن تكون بين 0 و100")
+    normalized = {
+        "academicYear": fees.get("academicYear") or "",
+        "totalPayable": float(fees.get("totalPayable") or 0),
+        "discountEnabled": bool(fees.get("discountEnabled")),
+        "discountPercentage": discount_percentage,
+    }
+    if normalized["totalPayable"] < 0:
+        raise HTTPException(400, "الرسوم لا يمكن أن تكون سالبة")
+    for field in ("booksFee", "busFee", "outfitFee"):
+        value = float(fees.get(field) or 0)
+        if value < 0:
+            raise HTTPException(400, "الرسوم لا يمكن أن تكون سالبة")
+        normalized[field] = value
+    normalized["busRegistered"] = bool(fees.get("busRegistered", normalized["busFee"] > 0))
+    if not normalized["busRegistered"]:
+        normalized["busFee"] = 0
+    return normalized
+
+def _overall_student_payable(fees):
+    return sum(_fee_payables(fees).values())
+
+async def _augment_student(doc: dict, current=None) -> dict:
+    student = doc.setdefault("student", {})
+    student.setdefault("finalRegistrationPath", student.get("registrationPath") or "")
     fees = doc.get("fees") or {}
     ay = fees.get("academicYear")
-    total_payable = float(fees.get("totalPayable") or 0)
+    total_payable, discount_percentage, discount_amount, net_payable = _discounted_payable(fees)
+    discount_enabled = bool(fees.get("discountEnabled"))
+    books_fee = float(fees.get("booksFee") or 0)
+    bus_registered = bool(fees.get("busRegistered", float(fees.get("busFee") or 0) > 0))
+    bus_fee = float(fees.get("busFee") or 0) if bus_registered else 0
+    outfit_fee = float(fees.get("outfitFee") or 0)
     totals = await _student_payment_totals(doc["id"], ay)
+    payable_by_type = _fee_payables(fees)
+    breakdown = {
+        fee_type: {
+            "payable": payable,
+            "paid": totals["byFeeType"].get(fee_type, 0),
+            "remaining": max(0, payable - totals["byFeeType"].get(fee_type, 0)),
+        }
+        for fee_type, payable in payable_by_type.items()
+    }
     doc["fees"] = {"academicYear": ay, "totalPayable": total_payable,
+                   "discountEnabled": discount_enabled,
+                   "discountPercentage": discount_percentage,
+                   "discountAmount": discount_amount, "netPayable": net_payable,
+                   "booksFee": books_fee, "busFee": bus_fee, "busRegistered": bus_registered,
+                   "outfitFee": outfit_fee, "byType": breakdown,
+                   "overallPayable": net_payable + books_fee + bus_fee + outfit_fee,
                    "totalPaid": totals["totalPaid"],
-                   "remaining": max(0, total_payable - totals["totalPaid"])}
+                   "remaining": max(0, net_payable + books_fee + bus_fee + outfit_fee - totals["totalPaid"])}
+    for field in ("classNotes", "nonClassNotes"):
+        notes = doc.get(field) or []
+        if not current or "students.notes.view" not in (current.get("permissions") or []):
+            doc[field] = []
+        elif current.get("teacherId"):
+            doc[field] = [note for note in notes if note.get("authorId") == current.get("id")]
     if doc.get("currentClassId"):
         c = await db.classes.find_one({"id": doc["currentClassId"]}, {"_id": 0, "name": 1, "grade": 1, "section": 1, "academicYear": 1, "teacherId": 1})
         if c:
@@ -749,6 +894,7 @@ def _payment_status_query(status: str):
 @api.get("/students")
 async def list_students(search: Optional[str] = None, gender: Optional[str] = None,
                         orphan: Optional[str] = None, registrationPath: Optional[str] = None,
+                        finalRegistrationPath: Optional[str] = None,
                         classId: Optional[str] = None, status: Optional[str] = None,
                         academicYear: Optional[str] = None, paymentStatus: Optional[str] = None,
                         teacherId: Optional[str] = None,
@@ -777,10 +923,16 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
     # Payment status and fee totals are derived from payment records, so the
     # complete filtered set must be evaluated before pagination.
     matched_docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).to_list(None)
-    for d in matched_docs: await _augment_student(d)
+    for d in matched_docs: await _augment_student(d, current)
+    if finalRegistrationPath:
+        matched_docs = [
+            d for d in matched_docs
+            if ((d.get("student") or {}).get("finalRegistrationPath")
+                or (d.get("student") or {}).get("registrationPath")) == finalRegistrationPath
+        ]
     if paymentStatus:
         def matches(d):
-            f = d.get("fees", {}); tp = f.get("totalPayable", 0); pp = f.get("totalPaid", 0)
+            f = d.get("fees", {}); tp = f.get("overallPayable", f.get("netPayable", f.get("totalPayable", 0))); pp = f.get("totalPaid", 0)
             if paymentStatus == "paid": return tp > 0 and pp >= tp
             if paymentStatus == "partial": return 0 < pp < tp
             if paymentStatus == "unpaid": return pp == 0
@@ -790,8 +942,11 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
     start = (page - 1) * limit
     docs = matched_docs[start:start + limit]
     summary = {
-        "totalPayable": sum(float((d.get("fees") or {}).get("totalPayable") or 0) for d in matched_docs),
+        "totalPayable": sum(float((d.get("fees") or {}).get("overallPayable", (d.get("fees") or {}).get("totalPayable")) or 0) for d in matched_docs),
         "totalPaid": sum(float((d.get("fees") or {}).get("totalPaid") or 0) for d in matched_docs),
+        "totalBooksFee": sum(float((d.get("fees") or {}).get("booksFee") or 0) for d in matched_docs),
+        "totalBusFee": sum(float((d.get("fees") or {}).get("busFee") or 0) for d in matched_docs),
+        "totalOutfitFee": sum(float((d.get("fees") or {}).get("outfitFee") or 0) for d in matched_docs),
     }
     summary["totalRemaining"] = max(0, summary["totalPayable"] - summary["totalPaid"])
     return {"data": docs, "summary": summary,
@@ -814,8 +969,14 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
         allowed = await allowed_class_ids(current)
         if allowed is not None and class_id not in allowed:
             raise HTTPException(403, f"لا يمكنك إضافة طالب إلى هذا الصف في الصف {index}")
-        try: total_payable = float(row.get("totalPayable") or 0)
+        try:
+            total_payable = float(row.get("totalPayable") or 0)
+            books_fee = float(row.get("booksFee") or 0)
+            bus_fee = float(row.get("busFee") or 0)
+            outfit_fee = float(row.get("outfitFee") or 0)
         except ValueError: raise HTTPException(400, f"إجمالي المستحق غير صحيح في الصف {index}")
+        if min(total_payable, books_fee, bus_fee, outfit_fee) < 0:
+            raise HTTPException(400, f"الرسوم لا يمكن أن تكون سالبة في الصف {index}")
         def csv_bool(value, default=False):
             return str(value or "").strip().lower() in ("true", "1", "yes", "نعم") if value else default
 
@@ -828,6 +989,7 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
                "student": {"fullName": full_name, "gender": row.get("gender", "male").strip() or "male",
                            "birthdate": row.get("birthdate", "").strip(), "birthPlace": row.get("birthPlace", "").strip(),
                            "registrationPath": row.get("registrationPath", "خاص").strip() or "خاص",
+                           "finalRegistrationPath": row.get("finalRegistrationPath", "").strip() or row.get("registrationPath", "خاص").strip() or "خاص",
                            "previousClass": row.get("previousClass", "").strip(),
                            "newClass": row.get("newClass", "").strip() or (class_record or {}).get("name", ""),
                            "status": row.get("status", "resident").strip() or "resident", "currentAddress": row.get("currentAddress", "").strip(),
@@ -842,10 +1004,14 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
                "mother": {"name": row.get("motherName", "").strip(), "alive": not csv_bool(row.get("motherDeceased")), "phone": row.get("motherPhone", "").strip(),
                           "address": row.get("motherAddress", "").strip(), "profession": row.get("motherProfession", "").strip(), "whatsapp": row.get("motherWhatsapp", "").strip(), "telegram": row.get("motherTelegram", "").strip()},
                "general": {"whatsappGroupPhone": row.get("whatsappGroupPhone", "").strip(), "emergencyContact": {"name": row.get("emergencyName", "").strip(), "relation": row.get("emergencyRelation", "").strip(), "phone": row.get("emergencyPhone", "").strip()}},
-               "fees": {"academicYear": row.get("academicYear", "").strip(), "totalPayable": total_payable},
+               "fees": {"academicYear": row.get("academicYear", "").strip(), "totalPayable": total_payable,
+                        "booksFee": books_fee, "busFee": bus_fee,
+                        "busRegistered": csv_bool(row.get("busRegistered"), bus_fee > 0),
+                        "outfitFee": outfit_fee},
                "currentClassId": class_id, "siblings": [], "previousEducation": [], "islamicLegalEducation": "", "bestAchievement": "",
                "otherInfo": {"familySmokers": False, "transportation": "", "notes": ""}, "signing": {"parentName": "", "relationToStudent": ""}, "fullInfo": {}, "createdAt": now_iso(), "updatedAt": now_iso()}
-        _clean_reg_path(doc["student"]["registrationPath"])
+        await _clean_reg_path(doc["student"]["registrationPath"])
+        await _clean_reg_path(doc["student"]["finalRegistrationPath"])
         await db.students.insert_one(doc); created.append(doc["id"])
     return {"ok": True, "created": len(created)}
 
@@ -853,7 +1019,7 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
 async def get_student(sid: str, current=Depends(require_permission("students.view"))):
     d = await ensure_student_access(sid, current)
     d.pop("_id", None)
-    return await _augment_student(d)
+    return await _augment_student(d, current)
 
 @api.get("/public/students/{sid}/validation")
 async def validate_student(sid: str):
@@ -881,23 +1047,38 @@ async def validate_student(sid: str):
 async def get_student_full(sid: str, current=Depends(require_permission("students.fullInformation.view"))):
     d = await ensure_student_access(sid, current)
     d.pop("_id", None)
-    return await _augment_student(d)
+    return await _augment_student(d, current)
 
-def _clean_reg_path(p):
-    if p and p not in ("خاص", "القرية", "الايتام"):
+DEFAULT_REGISTRATION_PATHS = ["خاص", "القرية", "الايتام"]
+
+async def get_registration_paths():
+    doc = await db.settings.find_one({"id": "registration_paths"}, {"_id": 0})
+    if not doc:
+        doc = {"id": "registration_paths", "paths": DEFAULT_REGISTRATION_PATHS,
+               "createdAt": now_iso(), "updatedAt": now_iso()}
+        await db.settings.insert_one(doc)
+    paths = doc.get("paths") or DEFAULT_REGISTRATION_PATHS
+    return list(paths)
+
+async def _clean_reg_path(path, existing=None):
+    if path and path not in await get_registration_paths() and path != existing:
         raise HTTPException(400, "مسار التسجيل غير صالح")
 
 @api.post("/students")
 async def create_student(body: StudentIn, current=Depends(require_permission("students.create"))):
     p = body.model_dump()
-    _clean_reg_path((p.get("student") or {}).get("registrationPath"))
+    student_data = p.setdefault("student", {})
+    if not student_data.get("registrationPath"):
+        raise HTTPException(400, "مسار التسجيل الأولي مطلوب")
+    student_data["finalRegistrationPath"] = student_data.get("finalRegistrationPath") or student_data.get("registrationPath") or ""
+    await _clean_reg_path(student_data.get("registrationPath"))
+    await _clean_reg_path(student_data.get("finalRegistrationPath"))
     p["id"] = str(uuid.uuid4())
     p["code"] = await generate_code("students")
     p["createdAt"] = now_iso(); p["updatedAt"] = now_iso()
     initial = p.pop("initialPayment", None)
-    fees = p.get("fees") or {}
-    p["fees"] = {"academicYear": fees.get("academicYear") or "",
-                 "totalPayable": float(fees.get("totalPayable") or 0)}
+    p["fees"] = _normalize_student_fees(p.get("fees") or {})
+    academic_payable = _fee_payables(p["fees"])["academic"]
     if p.get("currentClassId"):
         if not await db.classes.find_one({"id": p["currentClassId"]}):
             raise HTTPException(400, "الصف غير موجود")
@@ -907,25 +1088,31 @@ async def create_student(body: StudentIn, current=Depends(require_permission("st
     await db.students.insert_one(p)
     if initial and float(initial.get("amount") or 0) > 0:
         amt = float(initial["amount"])
-        if amt > p["fees"]["totalPayable"]:
+        if amt > academic_payable:
             await db.students.delete_one({"id": p["id"]})
             raise HTTPException(400, "الدفعة الأولى تتجاوز إجمالي المستحق")
         await db.payments.insert_one({"id": str(uuid.uuid4()), "student": p["id"],
-            "academicYear": p["fees"]["academicYear"] or "", "semester": initial.get("semester") or "full_year",
+            "academicYear": p["fees"]["academicYear"] or "", "feeType": "academic",
+            "semester": initial.get("semester") or "full_year",
             "amount": amt, "paymentDate": initial.get("paymentDate") or now_iso(),
             "notes": "دفعة أولية عند التسجيل", "createdBy": current["id"],
             "createdAt": now_iso(), "updatedAt": now_iso()})
-    return await _augment_student(await db.students.find_one({"id": p["id"]}, {"_id": 0}))
+    return await _augment_student(await db.students.find_one({"id": p["id"]}, {"_id": 0}), current)
 
 @api.put("/students/{sid}")
 async def update_student(sid: str, body: StudentIn, current=Depends(require_permission("students.update"))):
     existing = await ensure_student_access(sid, current)
     p = body.model_dump()
     p.pop("initialPayment", None)
-    _clean_reg_path((p.get("student") or {}).get("registrationPath"))
-    fees = p.get("fees") or {}
-    p["fees"] = {"academicYear": fees.get("academicYear") or "",
-                 "totalPayable": float(fees.get("totalPayable") or 0)}
+    student_data = p.setdefault("student", {})
+    existing_student = existing.get("student") or {}
+    if existing_student.get("registrationPath"):
+        student_data["registrationPath"] = existing_student["registrationPath"]
+    student_data.setdefault("registrationPath", existing_student.get("registrationPath", ""))
+    student_data.setdefault("finalRegistrationPath", existing_student.get("finalRegistrationPath") or existing_student.get("registrationPath", ""))
+    await _clean_reg_path(student_data.get("registrationPath"), existing_student.get("registrationPath"))
+    await _clean_reg_path(student_data.get("finalRegistrationPath"), existing_student.get("finalRegistrationPath") or existing_student.get("registrationPath"))
+    p["fees"] = _normalize_student_fees(p.get("fees") or {})
     if existing.get("orphanDocument"): p["orphanDocument"] = existing["orphanDocument"]
     if existing.get("code"): p["code"] = existing["code"]
     if p.get("currentClassId"):
@@ -936,7 +1123,74 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
             raise HTTPException(403, "لا يمكنك نقل الطالب إلى هذا الصف")
     p["updatedAt"] = now_iso()
     await db.students.update_one({"id": sid}, {"$set": p})
-    return await _augment_student(await db.students.find_one({"id": sid}, {"_id": 0}))
+    return await _augment_student(await db.students.find_one({"id": sid}, {"_id": 0}), current)
+
+STUDENT_NOTE_FIELDS = {"class": "classNotes", "non-class": "nonClassNotes"}
+
+def _student_note_field(category):
+    field = STUDENT_NOTE_FIELDS.get(category)
+    if not field:
+        raise HTTPException(400, "نوع الملاحظة غير صالح")
+    return field
+
+@api.get("/students/{sid}/notes")
+async def list_student_notes(sid: str, current=Depends(require_permission("students.notes.view"))):
+    student = await ensure_student_access(sid, current)
+    result = {}
+    for category, field in STUDENT_NOTE_FIELDS.items():
+        notes = student.get(field) or []
+        if current.get("teacherId"):
+            notes = [note for note in notes if note.get("authorId") == current["id"]]
+        result[field] = notes
+    return result
+
+@api.post("/students/{sid}/notes/{category}")
+async def create_student_note(sid: str, category: str, body: StudentNoteIn,
+                              current=Depends(require_permission("students.notes.create"))):
+    await ensure_student_access(sid, current)
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "نص الملاحظة مطلوب")
+    if len(content) > 4000:
+        raise HTTPException(400, "الملاحظة طويلة جداً")
+    field = _student_note_field(category)
+    timestamp = now_iso()
+    note = {"id": str(uuid.uuid4()), "content": content, "authorId": current["id"],
+            "authorName": current.get("name") or current.get("username") or "—",
+            "createdAt": timestamp, "updatedAt": timestamp}
+    await db.students.update_one({"id": sid}, {"$push": {field: note}})
+    return note
+
+@api.put("/students/{sid}/notes/{category}/{note_id}")
+async def update_student_note(sid: str, category: str, note_id: str, body: StudentNoteIn,
+                              current=Depends(require_permission("students.notes.update"))):
+    student = await ensure_student_access(sid, current)
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "نص الملاحظة مطلوب")
+    if len(content) > 4000:
+        raise HTTPException(400, "الملاحظة طويلة جداً")
+    field = _student_note_field(category)
+    notes = student.get(field) or []
+    note = next((item for item in notes if item.get("id") == note_id), None)
+    if not note or (current.get("teacherId") and note.get("authorId") != current["id"]):
+        raise HTTPException(404, "الملاحظة غير موجودة")
+    note["content"] = content
+    note["updatedAt"] = now_iso()
+    await db.students.update_one({"id": sid}, {"$set": {field: notes}})
+    return note
+
+@api.delete("/students/{sid}/notes/{category}/{note_id}")
+async def delete_student_note(sid: str, category: str, note_id: str,
+                              current=Depends(require_permission("students.notes.delete"))):
+    student = await ensure_student_access(sid, current)
+    field = _student_note_field(category)
+    notes = student.get(field) or []
+    note = next((item for item in notes if item.get("id") == note_id), None)
+    if not note or (current.get("teacherId") and note.get("authorId") != current["id"]):
+        raise HTTPException(404, "الملاحظة غير موجودة")
+    await db.students.update_one({"id": sid}, {"$set": {field: [item for item in notes if item.get("id") != note_id]}})
+    return {"ok": True}
 
 @api.delete("/students/{sid}")
 async def delete_student(sid: str, body: DeactivationIn, current=Depends(require_permission("students.delete"))):
@@ -1191,10 +1445,15 @@ async def _enrich_payment(p):
     p["studentName"] = (s.get("student") or {}).get("fullName") if s else "—"
     p["studentCode"] = s.get("code") if s else None
     fee_year = p.get("academicYear") or ((s.get("fees") or {}).get("academicYear") if s else "")
-    p["totalPayable"] = float(((s.get("fees") or {}).get("totalPayable")) or 0) if s else 0
+    if not p.get("feeType"):
+        p.pop("totalPaidAtPayment", None)
+        p.pop("totalRemainingAtPayment", None)
+    p["feeType"] = p.get("feeType") or "academic"
+    _clean_fee_type(p["feeType"])
+    p["totalPayable"] = _fee_payables(s.get("fees") or {}).get(p["feeType"], 0) if s else 0
     p["totalPaid"], p["totalRemaining"] = await _payment_snapshot(p, p["totalPayable"]) if s else (0, 0)
     current_totals = await _student_payment_totals(p.get("student"), fee_year) if s else {"totalPaid": 0}
-    p["currentTotalPaid"] = current_totals["totalPaid"]
+    p["currentTotalPaid"] = current_totals.get("byFeeType", {}).get(p["feeType"], 0)
     p["currentTotalRemaining"] = max(0, p["totalPayable"] - p["currentTotalPaid"])
     p["totalPaidAtPayment"] = float(p.get("totalPaidAtPayment") if p.get("totalPaidAtPayment") is not None else p["totalPaid"])
     p["totalRemainingAtPayment"] = float(p.get("totalRemainingAtPayment") if p.get("totalRemainingAtPayment") is not None else p["totalRemaining"])
@@ -1223,6 +1482,53 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
     for d in docs: await _enrich_payment(d)
     return docs
 
+@api.get("/payments/summary")
+async def payment_summary(search: Optional[str] = None, academicYear: Optional[str] = None,
+                          current=Depends(require_permission("payments.view"))):
+    student_query = {"student.status": {"$ne": "inactive"}}
+    if academicYear:
+        student_query["fees.academicYear"] = academicYear
+    if search:
+        student_query["$or"] = [
+            {"student.fullName": {"$regex": search, "$options": "i"}},
+            {"code": {"$regex": search, "$options": "i"}},
+        ]
+    allowed = await allowed_class_ids(current)
+    if allowed is not None:
+        student_query["currentClassId"] = {"$in": allowed}
+    students = await db.students.find(student_query, {"_id": 0, "id": 1, "fees": 1}).to_list(None)
+    student_ids = [student["id"] for student in students]
+    current_fee_years = {
+        student["id"]: (student.get("fees") or {}).get("academicYear") or ""
+        for student in students
+    }
+    categories = {
+        fee_type: {"payable": 0, "paid": 0, "remaining": 0}
+        for fee_type in FEE_TYPE_FIELDS
+    }
+    for student in students:
+        for fee_type, payable in _fee_payables(student.get("fees") or {}).items():
+            categories[fee_type]["payable"] += payable
+    if student_ids:
+        payment_query = {"student": {"$in": student_ids}}
+        if academicYear:
+            payment_query["academicYear"] = academicYear
+        payments = await db.payments.find(
+            payment_query,
+            {"_id": 0, "student": 1, "academicYear": 1, "amount": 1, "feeType": 1},
+        ).to_list(None)
+        for payment in payments:
+            if not academicYear and current_fee_years.get(payment.get("student")) and (
+                payment.get("academicYear") or ""
+            ) != current_fee_years[payment["student"]]:
+                continue
+            fee_type = payment.get("feeType") or "academic"
+            if fee_type in categories:
+                categories[fee_type]["paid"] += float(payment.get("amount") or 0)
+    for values in categories.values():
+        values["remaining"] = max(0, values["payable"] - values["paid"])
+    return {"feeTypes": categories}
+
 @api.get("/payments/{pid}")
 async def get_payment(pid: str, current=Depends(require_permission("payments.view"))):
     p = await db.payments.find_one({"id": pid}, {"_id": 0})
@@ -1237,28 +1543,30 @@ async def list_student_payments(sid: str, current=Depends(require_permission("pa
     for d in docs: await _enrich_payment(d)
     return docs
 
-async def _validate_no_overpayment(sid, ay, amt, exclude=None):
+async def _validate_no_overpayment(sid, ay, amt, fee_type="academic", exclude=None):
     s = await db.students.find_one({"id": sid})
     if not s: raise HTTPException(404, "الطالب غير موجود")
-    tp = float(((s.get("fees") or {}).get("totalPayable")) or 0)
+    fee_type = _clean_fee_type(fee_type)
+    tp = _fee_payables(s.get("fees") or {}).get(fee_type, 0)
     q = {"student": sid, "academicYear": ay}
     if exclude: q["id"] = {"$ne": exclude}
     docs = await db.payments.find(q, {"_id": 0}).to_list(1000)
-    cur = sum(float(p.get("amount", 0)) for p in docs)
+    cur = sum(float(p.get("amount", 0)) for p in docs if (p.get("feeType") or "academic") == fee_type)
     if cur + float(amt) > tp + 0.0001:
         raise HTTPException(400, f"مبلغ الدفعة يتجاوز الرصيد المتبقي (المتبقي: {tp - cur})")
 
 @api.post("/payments")
 async def create_payment(body: PaymentIn, current=Depends(require_permission("payments.create"))):
+    fee_type = _clean_fee_type(body.feeType)
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
     await ensure_student_access(body.student, current)
-    await _validate_no_overpayment(body.student, body.academicYear, body.amount)
+    await _validate_no_overpayment(body.student, body.academicYear, body.amount, fee_type)
     doc = {"id": str(uuid.uuid4()), "student": body.student, "academicYear": body.academicYear,
-           "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
+            "feeType": fee_type, "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
            "notes": body.notes or "", "createdBy": current["id"], "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.payments.insert_one(doc)
-    paid_at_payment, remaining_at_payment = await _payment_snapshot(doc, float(((await db.students.find_one({"id": body.student}) or {}).get("fees") or {}).get("totalPayable") or 0))
+    paid_at_payment, remaining_at_payment = await _payment_snapshot(doc, _fee_payables(((await db.students.find_one({"id": body.student}) or {}).get("fees") or {})).get(fee_type, 0))
     await db.payments.update_one({"id": doc["id"]}, {"$set": {"totalPaidAtPayment": paid_at_payment,
         "totalRemainingAtPayment": remaining_at_payment}})
     doc["totalPaidAtPayment"] = paid_at_payment
@@ -1267,6 +1575,7 @@ async def create_payment(body: PaymentIn, current=Depends(require_permission("pa
 
 @api.post("/payments/refund")
 async def create_refund(body: RefundIn, current=Depends(require_permission("payments.create"))):
+    fee_type = _clean_fee_type(body.feeType)
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "مبلغ الاسترداد يجب أن يكون أكبر من صفر")
     await ensure_student_access(body.student, current)
@@ -1274,17 +1583,18 @@ async def create_refund(body: RefundIn, current=Depends(require_permission("paym
     if not student: raise HTTPException(404, "الطالب غير موجود")
     semester_payments = await db.payments.find(
         {"student": body.student, "academicYear": body.academicYear, "semester": body.semester},
-        {"_id": 0, "amount": 1},
+        {"_id": 0, "amount": 1, "feeType": 1},
     ).to_list(1000)
-    paid_for_semester = max(0, sum(float(p.get("amount", 0)) for p in semester_payments))
+    paid_for_semester = max(0, sum(float(p.get("amount", 0)) for p in semester_payments
+                                   if (p.get("feeType") or "academic") == fee_type))
     if body.amount > paid_for_semester + 0.0001:
         raise HTTPException(400, f"مبلغ الاسترداد يتجاوز المدفوع للفصل (المتاح: {paid_for_semester})")
     doc = {"id": str(uuid.uuid4()), "student": body.student, "academicYear": body.academicYear,
-           "semester": body.semester, "amount": -float(body.amount), "type": "refund",
+            "feeType": fee_type, "semester": body.semester, "amount": -float(body.amount), "type": "refund",
            "paymentDate": body.paymentDate, "notes": body.notes or "", "createdBy": current["id"],
            "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.payments.insert_one(doc)
-    payable = float(((student.get("fees") or {}).get("totalPayable")) or 0)
+    payable = _fee_payables(student.get("fees") or {}).get(fee_type, 0)
     paid_at_payment, remaining_at_payment = await _payment_snapshot(doc, payable)
     await db.payments.update_one({"id": doc["id"]}, {"$set": {"totalPaidAtPayment": paid_at_payment,
         "totalRemainingAtPayment": remaining_at_payment}})
@@ -1298,17 +1608,18 @@ async def update_payment(pid: str, body: PaymentIn, current=Depends(require_perm
     if not existing: raise HTTPException(404, "غير موجود")
     await ensure_student_access(existing.get("student"), current)
     await ensure_student_access(body.student, current)
+    fee_type = _clean_fee_type(body.feeType)
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
-    await _validate_no_overpayment(body.student, body.academicYear, body.amount, exclude=pid)
+    await _validate_no_overpayment(body.student, body.academicYear, body.amount, fee_type, exclude=pid)
     await db.payments.update_one({"id": pid}, {"$set": {"student": body.student, "academicYear": body.academicYear,
-        "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
+        "feeType": fee_type, "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
         "notes": body.notes or "", "updatedAt": now_iso()}})
     updated = await db.payments.find_one({"id": pid}, {"_id": 0})
     student = await db.students.find_one({"id": body.student}, {"_id": 0, "fees": 1})
     updated.pop("totalPaidAtPayment", None)
     updated.pop("totalRemainingAtPayment", None)
-    paid_at_payment, remaining_at_payment = await _payment_snapshot(updated, float(((student or {}).get("fees") or {}).get("totalPayable") or 0))
+    paid_at_payment, remaining_at_payment = await _payment_snapshot(updated, _fee_payables((student or {}).get("fees") or {}).get(fee_type, 0))
     await db.payments.update_one({"id": pid}, {"$set": {"totalPaidAtPayment": paid_at_payment,
         "totalRemainingAtPayment": remaining_at_payment}})
     updated["totalPaidAtPayment"] = paid_at_payment
@@ -1329,6 +1640,29 @@ async def delete_payment(pid: str, current=Depends(require_permission("payments.
 @api.get("/settings/code-generation")
 async def get_settings(current=Depends(require_permission("settings.codeGeneration.view"))):
     return await get_code_settings()
+
+@api.get("/registration-paths")
+async def list_registration_paths(current=Depends(get_current_user)):
+    return {"paths": await get_registration_paths()}
+
+@api.get("/settings/registration-paths")
+async def get_registration_path_settings(current=Depends(require_permission("settings.codeGeneration.view"))):
+    return {"paths": await get_registration_paths()}
+
+@api.put("/settings/registration-paths")
+async def update_registration_path_settings(body: RegistrationPathsIn,
+                                            current=Depends(require_permission("settings.codeGeneration.update"))):
+    paths = [path.strip() for path in body.paths if path and path.strip()]
+    if not paths:
+        raise HTTPException(400, "يجب إضافة مسار تسجيل واحد على الأقل")
+    if len(paths) != len(set(paths)):
+        raise HTTPException(400, "مسارات التسجيل يجب أن تكون فريدة")
+    await db.settings.update_one(
+        {"id": "registration_paths"},
+        {"$set": {"paths": paths, "updatedAt": now_iso()}, "$setOnInsert": {"createdAt": now_iso()}},
+        upsert=True,
+    )
+    return {"paths": paths}
 
 @api.post("/settings/code-generation/preview")
 async def preview_settings(body: CodeSettingsIn, current=Depends(require_permission("settings.codeGeneration.view"))):
@@ -1406,12 +1740,33 @@ async def dashboard_stats(current=Depends(get_current_user)):
         {
             "$group": {
                 "_id": None,
-                "sum": {"$sum": "$fees.totalPayable"}
+                "sum": {"$sum": {"$add": [
+                    {"$subtract": [
+                        {"$ifNull": ["$fees.totalPayable", 0]},
+                        {"$cond": [
+                            {"$eq": ["$fees.discountEnabled", True]},
+                            {"$multiply": [
+                                {"$ifNull": ["$fees.totalPayable", 0]},
+                                {"$divide": [{"$ifNull": ["$fees.discountPercentage", 0]}, 100]},
+                            ]},
+                            0,
+                        ]},
+                    ]},
+                    {"$ifNull": ["$fees.booksFee", 0]},
+                    {"$ifNull": ["$fees.busFee", 0]},
+                    {"$ifNull": ["$fees.outfitFee", 0]},
+                ]}},
+                "books": {"$sum": {"$ifNull": ["$fees.booksFee", 0]}},
+                "bus": {"$sum": {"$ifNull": ["$fees.busFee", 0]}},
+                "outfit": {"$sum": {"$ifNull": ["$fees.outfitFee", 0]}},
             }
         }
     ]).to_list(1)
 
     total_payable = stu_agg[0]["sum"] if stu_agg else 0
+    total_books_fee = stu_agg[0].get("books", 0) if stu_agg else 0
+    total_bus_fee = stu_agg[0].get("bus", 0) if stu_agg else 0
+    total_outfit_fee = stu_agg[0].get("outfit", 0) if stu_agg else 0
 
     return {
         "total": total,
@@ -1421,6 +1776,9 @@ async def dashboard_stats(current=Depends(get_current_user)):
         "teachers": teachers_count,
         "classes": classes_count,
         "totalPayable": total_payable,
+        "totalBooksFee": total_books_fee,
+        "totalBusFee": total_bus_fee,
+        "totalOutfitFee": total_outfit_fee,
         "totalCollected": total_collected,
         "totalRemaining": max(
             0,
@@ -1447,6 +1805,7 @@ async def on_startup():
         {"name": "Teacher", "description": "معلم - الصفوف والطلاب المسندون فقط",
          "permissions": ["students.view", "students.print", "students.fullInformation.view",
                          "students.documents.view", "students.orphanDocument.view",
+                         "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete",
                          "classes.view", "subjects.view", "grades.view", "grades.create", "grades.edit"]},
     ]
     admin_role_id = None
@@ -1474,7 +1833,8 @@ async def on_startup():
     await db.roles.update_one(
         {"name": "Teacher"},
         {"$addToSet": {"permissions": {"$each": [
-            "subjects.view", "grades.view", "grades.create", "grades.edit"
+            "subjects.view", "grades.view", "grades.create", "grades.edit",
+            "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete"
         ]}}},
     )
 

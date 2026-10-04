@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import {
   Download,
   FileText,
   X,
+  Save,
 } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -21,6 +22,8 @@ import {
   ORPHAN_OF_LABELS,
   ORPHAN_DOC_TYPES,
   SEMESTER_LABELS,
+  FEE_TYPE_LABELS,
+  FEE_TYPE_ORDER,
 } from "@/lib/studentDefaults";
 import { useAuth } from "@/lib/auth";
 import { useStudent } from "@/hooks/useStudent";
@@ -44,27 +47,6 @@ const Row = ({ label, value }) => (
   </div>
 );
 
-const StatusBadge = ({ paid, total }) => {
-  const remaining = total - paid;
-  if (total > 0 && remaining <= 0)
-    return (
-      <span className="inline-flex text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-        مسدَّد بالكامل
-      </span>
-    );
-  if (paid > 0)
-    return (
-      <span className="inline-flex text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-        دفع جزئي
-      </span>
-    );
-  return (
-    <span className="inline-flex text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200">
-      غير مدفوع
-    </span>
-  );
-};
-
 const STUDENT_DOCUMENT_TYPES = [
   { key: "student_id", label: "إخراج قيد / هوية الطالب" },
   { key: "family_father", label: "بيان عائلي / دفتر العائلة — صفحة الأب" },
@@ -75,10 +57,128 @@ const STUDENT_DOCUMENT_TYPES = [
   { key: "mother_id_back", label: "هوية الأم — الوجه الخلفي" },
 ];
 
+function StudentNotesSection({
+  title,
+  category,
+  notes,
+  canCreate,
+  canUpdate,
+  canDelete,
+  canManageAll,
+  currentUserId,
+  onSave,
+  onDelete,
+}) {
+  const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!draft.trim()) return;
+    setSaving(true);
+    const saved = await onSave(category, editingId, draft);
+    setSaving(false);
+    if (saved) {
+      setDraft("");
+      setEditingId(null);
+    }
+  };
+
+  const edit = (note) => {
+    setEditingId(note.id);
+    setDraft(note.content);
+  };
+
+  return (
+    <Section title={title}>
+      {canCreate && (
+        <form onSubmit={submit} className="mb-4 space-y-2">
+          <textarea
+            rows={3}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            maxLength={4000}
+            placeholder="اكتب ملاحظة"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#04CDF9]"
+            data-testid={`student-note-input-${category}`}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={saving || !draft.trim()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#036A87] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              <Save className="h-3.5 w-3.5" />
+              {editingId ? "حفظ التعديل" : "إضافة ملاحظة"}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingId(null);
+                  setDraft("");
+                }}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700"
+              >
+                إلغاء
+              </button>
+            )}
+          </div>
+        </form>
+      )}
+      {notes.length === 0 ? (
+        <p className="text-sm text-gray-500">لا توجد ملاحظات.</p>
+      ) : (
+        <div className="space-y-3">
+          {notes.map((note) => {
+            const ownsNote = canManageAll || note.authorId === currentUserId;
+            return (
+              <article key={note.id} className="border-t border-gray-100 pt-3">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="whitespace-pre-wrap break-words text-sm text-gray-800">
+                    {note.content}
+                  </p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {canUpdate && ownsNote && (
+                      <button
+                        type="button"
+                        onClick={() => edit(note)}
+                        title="تعديل الملاحظة"
+                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canDelete && ownsNote && (
+                      <button
+                        type="button"
+                        onClick={() => onDelete(category, note.id)}
+                        title="حذف الملاحظة"
+                        className="rounded-md p-1.5 text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  {note.authorName} ·{" "}
+                  {new Date(note.createdAt).toLocaleString("ar-EG")}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 export default function StudentView() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { has } = useAuth();
+  const { has, user } = useAuth();
   const {
     student: data,
     payments,
@@ -97,6 +197,54 @@ export default function StudentView() {
   const [studentDocumentConfirm, setStudentDocumentConfirm] = useState(null);
   const [studentDocumentPreview, setStudentDocumentPreview] = useState(null);
   const studentDocumentFileRef = useRef(null);
+  const [studentNotes, setStudentNotes] = useState({
+    classNotes: [],
+    nonClassNotes: [],
+  });
+  const canViewNotes = has("students.notes.view");
+
+  useEffect(() => {
+    if (!canViewNotes) {
+      setStudentNotes({ classNotes: [], nonClassNotes: [] });
+      return;
+    }
+    api
+      .get(`/students/${id}/notes`)
+      .then((response) => setStudentNotes(response.data))
+      .catch(() => toast.error("تعذر تحميل ملاحظات الطالب"));
+  }, [id, canViewNotes]);
+
+  const refreshStudentNotes = async () => {
+    const response = await api.get(`/students/${id}/notes`);
+    setStudentNotes(response.data);
+  };
+
+  const saveStudentNote = async (category, noteId, content) => {
+    try {
+      if (noteId)
+        await api.put(`/students/${id}/notes/${category}/${noteId}`, {
+          content,
+        });
+      else await api.post(`/students/${id}/notes/${category}`, { content });
+      await refreshStudentNotes();
+      toast.success("تم حفظ الملاحظة");
+      return true;
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر حفظ الملاحظة");
+      return false;
+    }
+  };
+
+  const deleteStudentNote = async (category, noteId) => {
+    if (!window.confirm("هل تريد حذف هذه الملاحظة؟")) return;
+    try {
+      await api.delete(`/students/${id}/notes/${category}/${noteId}`);
+      await refreshStudentNotes();
+      toast.success("تم حذف الملاحظة");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر حذف الملاحظة");
+    }
+  };
 
   const doDelete = async () => {
     if (!deactivationReason.trim()) return;
@@ -116,6 +264,7 @@ export default function StudentView() {
       id: null,
       student: id,
       academicYear: data.fees?.academicYear || "",
+      feeType: "academic",
       semester: "full_year",
       amount: "",
       paymentDate: new Date().toISOString().slice(0, 10),
@@ -130,6 +279,7 @@ export default function StudentView() {
       const body = {
         student: payModal.student,
         academicYear: payModal.academicYear,
+        feeType: payModal.feeType || "academic",
         semester: payModal.semester,
         amount: Number(payModal.amount),
         paymentDate: payModal.paymentDate,
@@ -339,8 +489,9 @@ export default function StudentView() {
           <h1 className="text-3xl font-bold text-gray-900">{s.fullName}</h1>
           <p className="text-sm text-gray-500 mt-1">
             كود: <span className="font-mono">{data.code || "—"}</span> •{" "}
-            {GENDER_LABELS[s.gender]} • {STATUS_LABELS[s.status]} • مسار:{" "}
-            {s.registrationPath || "—"}
+            {GENDER_LABELS[s.gender]} • {STATUS_LABELS[s.status]} • المسار
+            الأولي: {s.registrationPath || "—"} • النهائي:{" "}
+            {s.finalRegistrationPath || s.registrationPath || "—"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -401,7 +552,11 @@ export default function StudentView() {
           <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
           <Row label="مكان الميلاد" value={s.birthPlace} />
           <Row label="الجنس" value={GENDER_LABELS[s.gender]} />
-          <Row label="مسار التسجيل" value={s.registrationPath} />
+          <Row label="مسار التسجيل الأولي" value={s.registrationPath} />
+          <Row
+            label="مسار التسجيل النهائي"
+            value={s.finalRegistrationPath || s.registrationPath}
+          />
           <Row label="الصف السابق" value={s.previousClass} />
           <Row label="الصف الجديد" value={s.newClass} />
           <Row label="الوضع" value={STATUS_LABELS[s.status]} />
@@ -576,38 +731,62 @@ export default function StudentView() {
                   <Printer className="h-3.5 w-3.5" /> طباعة السجل
                 </button>
               )}
-              <StatusBadge
-                paid={fees.totalPaid || 0}
-                total={fees.totalPayable || 0}
-              />
             </div>
           }
         >
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500 mb-1">السنة الدراسية</div>
-              <div className="text-sm font-semibold text-gray-900">
-                {fees.academicYear || "—"}
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500 mb-1">إجمالي المستحق</div>
-              <div className="text-sm font-semibold text-gray-900 tabular-nums">
-                {(fees.totalPayable || 0).toLocaleString("ar-EG")}
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500 mb-1">المدفوع</div>
-              <div className="text-sm font-semibold text-emerald-700 tabular-nums">
-                {(fees.totalPaid || 0).toLocaleString("ar-EG")}
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500 mb-1">المتبقي</div>
-              <div className="text-sm font-semibold text-amber-700 tabular-nums">
-                {(fees.remaining || 0).toLocaleString("ar-EG")}
-              </div>
-            </div>
+          <div className="mb-3 text-xs text-gray-500">
+            السنة الدراسية: {fees.academicYear || "—"}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+            {FEE_TYPE_ORDER.map((feeType) => {
+              const totals = fees.byType?.[feeType] || {
+                payable: 0,
+                paid: 0,
+                remaining: 0,
+              };
+              return (
+                <div
+                  key={feeType}
+                  className="rounded-lg border border-gray-200 p-3"
+                >
+                  <div className="text-sm font-semibold text-gray-900 mb-2">
+                    {FEE_TYPE_LABELS[feeType]}
+                  </div>
+                  <dl className="space-y-1.5 text-xs">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">المستحق</dt>
+                      <dd className="font-medium tabular-nums">
+                        {Number(totals.payable || 0).toLocaleString("ar-EG")}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">المدفوع</dt>
+                      <dd className="font-medium text-emerald-700 tabular-nums">
+                        {Number(totals.paid || 0).toLocaleString("ar-EG")}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-500">المتبقي</dt>
+                      <dd className="font-medium text-amber-700 tabular-nums">
+                        {Number(totals.remaining || 0).toLocaleString("ar-EG")}
+                      </dd>
+                    </div>
+                  </dl>
+                  {feeType === "academic" && fees.discountEnabled && (
+                    <div className="mt-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
+                      الخصم: {fees.discountPercentage}% (
+                      {Number(fees.discountAmount || 0).toLocaleString("ar-EG")}
+                      )
+                    </div>
+                  )}
+                  {feeType === "transportation" && !fees.busRegistered && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      غير مسجل في الحافلة
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex items-center justify-between mb-2">
@@ -629,6 +808,7 @@ export default function StudentView() {
                   <th className="px-3 py-2 text-right">التاريخ</th>
                   <th className="px-3 py-2 text-right">السنة</th>
                   <th className="px-3 py-2 text-right">الفصل</th>
+                  <th className="px-3 py-2 text-right">نوع الرسوم</th>
                   <th className="px-3 py-2 text-right">المبلغ</th>
                   <th className="px-3 py-2 text-right">سُجّل بواسطة</th>
                   <th className="text-left px-3 py-2">إجراءات</th>
@@ -638,7 +818,7 @@ export default function StudentView() {
                 {payments.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-3 py-4 text-center text-gray-500"
                     >
                       لا توجد مدفوعات مسجلة.
@@ -655,6 +835,9 @@ export default function StudentView() {
                     </td>
                     <td className="px-3 py-2 text-gray-600">
                       {SEMESTER_LABELS[p.semester]}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">
+                      {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
                     <td className="px-3 py-2 font-semibold text-gray-900 tabular-nums">
                       {p.amount}
@@ -832,6 +1015,35 @@ export default function StudentView() {
         </div>
       </Section>
 
+      {canViewNotes && (
+        <>
+          <StudentNotesSection
+            title="ملاحظات صفية"
+            category="class"
+            notes={studentNotes.classNotes || []}
+            canCreate={has("students.notes.create")}
+            canUpdate={has("students.notes.update")}
+            canDelete={has("students.notes.delete")}
+            canManageAll={!user?.teacherId}
+            currentUserId={user?.id}
+            onSave={saveStudentNote}
+            onDelete={deleteStudentNote}
+          />
+          <StudentNotesSection
+            title="ملاحظات غير صفية"
+            category="non-class"
+            notes={studentNotes.nonClassNotes || []}
+            canCreate={has("students.notes.create")}
+            canUpdate={has("students.notes.update")}
+            canDelete={has("students.notes.delete")}
+            canManageAll={!user?.teacherId}
+            currentUserId={user?.id}
+            onSave={saveStudentNote}
+            onDelete={deleteStudentNote}
+          />
+        </>
+      )}
+
       <Section title="التوقيع">
         <Row label="اسم ولي الأمر" value={data.signing?.parentName} />
         <Row label="صلة القرابة" value={data.signing?.relationToStudent} />
@@ -898,6 +1110,30 @@ export default function StudentView() {
               </button>
             </div>
             <form onSubmit={savePayment} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  نوع الرسوم
+                </label>
+                <select
+                  required
+                  value={payModal.feeType || "academic"}
+                  onChange={(e) =>
+                    setPayModal({ ...payModal, feeType: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  data-testid="stu-pay-fee-type"
+                >
+                  {FEE_TYPE_ORDER.filter(
+                    (feeType) =>
+                      Number(data.fees?.byType?.[feeType]?.payable || 0) > 0 ||
+                      feeType === (payModal.feeType || "academic"),
+                  ).map((feeType) => (
+                    <option key={feeType} value={feeType}>
+                      {FEE_TYPE_LABELS[feeType]}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   السنة الدراسية

@@ -9,6 +9,8 @@ import {
   RotateCcw,
   Download,
   Upload,
+  GraduationCap,
+  X,
 } from "lucide-react";
 import { downloadTemplate } from "@/lib/csv";
 
@@ -40,6 +42,14 @@ export default function Classes() {
     save,
     doDelete,
     doReactivate,
+    promotion,
+    promotionLoading,
+    promotionSaving,
+    openPromotion,
+    updatePromotion,
+    updatePromotionStudent,
+    submitPromotion,
+    setPromotion,
     clearFilters,
     classTemplate,
     hasActiveFilters,
@@ -258,6 +268,16 @@ export default function Classes() {
                     </td>
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
+                        {c.status === "active" && has("students.update") && (
+                          <button
+                            onClick={() => openPromotion(c)}
+                            data-testid={`promote-class-${c.id}`}
+                            title="ترفيع الطلاب"
+                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                          >
+                            <GraduationCap className="h-4 w-4" />
+                          </button>
+                        )}
                         {has("classes.update") && (
                           <button
                             onClick={() => openEdit(c)}
@@ -301,6 +321,163 @@ export default function Classes() {
           </table>
         </div>
       </div>
+
+      {promotion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-lg border border-gray-200 bg-white shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  ترفيع طلاب {promotion.sourceClass.name}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  اختر الصف التالي والطلاب المراد نقلهم، ثم حدد المستحق الدراسي الجديد لكل طالب.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPromotion(null)}
+                title="إغلاق"
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto p-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  الصف الجديد
+                </label>
+                <select
+                  value={promotion.destinationClassId}
+                  onChange={(event) =>
+                    updatePromotion({ destinationClassId: event.target.value })
+                  }
+                  className="w-full max-w-xl rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  data-testid="promotion-destination-class"
+                >
+                  <option value="">اختر الصف التالي</option>
+                  {promotion.destinations.map((destination) => (
+                    <option key={destination.id} value={destination.id}>
+                      {destination.name}
+                      {destination.section ? ` — ${destination.section}` : ""}
+                      {destination.academicYear ? ` — ${destination.academicYear}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {promotionLoading ? (
+                <div className="py-10 text-center text-sm text-gray-500">
+                  <Loader2 className="ms-2 inline h-4 w-4 animate-spin" /> جاري تحميل الطلاب...
+                </div>
+              ) : promotion.students.length === 0 ? (
+                <div className="py-10 text-center text-sm text-gray-500">
+                  لا يوجد طلاب في هذا الصف.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                  <table className="min-w-full text-sm text-right">
+                    <thead className="bg-gray-50 text-xs text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            aria-label="تحديد كل الطلاب"
+                            checked={promotion.students.every((student) => student.selected)}
+                            onChange={(event) =>
+                              updatePromotion({
+                                students: promotion.students.map((student) => ({
+                                  ...student,
+                                  selected: event.target.checked,
+                                })),
+                              })
+                            }
+                            className="h-4 w-4 accent-[#04CDF9]"
+                          />
+                        </th>
+                        <th className="px-3 py-2">الطالب</th>
+                        <th className="px-3 py-2">المستحق الحالي</th>
+                        <th className="px-3 py-2">المستحق الجديد</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {promotion.students.map((student) => (
+                        <tr key={student.id} className="border-t border-gray-100">
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              checked={student.selected}
+                              onChange={(event) =>
+                                updatePromotionStudent(student.id, {
+                                  selected: event.target.checked,
+                                })
+                              }
+                              aria-label={`تحديد ${student.student?.fullName}`}
+                              data-testid={`promotion-student-${student.id}`}
+                              className="h-4 w-4 accent-[#04CDF9]"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="font-medium text-gray-900">{student.student?.fullName}</div>
+                            <div className="text-xs text-gray-500">{student.code}</div>
+                          </td>
+                          <td className="px-3 py-2 tabular-nums text-gray-600">
+                            {Number(student.fees?.totalPayable || 0).toLocaleString("ar-EG")}
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              disabled={!student.selected}
+                              value={student.newTotalPayable}
+                              onChange={(event) =>
+                                updatePromotionStudent(student.id, {
+                                  newTotalPayable: event.target.value,
+                                })
+                              }
+                              data-testid={`promotion-payable-${student.id}`}
+                              aria-label={`المستحق الجديد لـ ${student.student?.fullName}`}
+                              className="w-36 rounded-lg border border-gray-300 px-2 py-1.5 tabular-nums disabled:bg-gray-50"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 p-5">
+              <span className="text-sm text-gray-500">
+                المحدد: {promotion.students.filter((student) => student.selected).length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPromotion(null)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={submitPromotion}
+                  disabled={promotionSaving || promotion.students.every((student) => !student.selected)}
+                  data-testid="submit-promotion"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {promotionSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  ترفيع المحددين
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 overflow-y-auto">

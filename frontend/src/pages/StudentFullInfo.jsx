@@ -211,7 +211,11 @@ export default function StudentFullInfo() {
           <Row label="الأمانة" value={fi.registrationAmana} />
           <Row label="مكان القيد" value={fi.registrationPlace} />
           <Row label="رقم القيد" value={fi.registrationNumber} />
-          <Row label="مسار التسجيل" value={s.registrationPath} />
+          <Row label="مسار التسجيل الأولي" value={s.registrationPath} />
+          <Row
+            label="مسار التسجيل النهائي"
+            value={s.finalRegistrationPath || s.registrationPath}
+          />
           <Row label="كود الطالب" value={data.code} />
         </div>
       </Section>

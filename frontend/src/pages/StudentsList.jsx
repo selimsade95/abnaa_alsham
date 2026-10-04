@@ -13,11 +13,7 @@ import {
   Download,
   Upload,
 } from "lucide-react";
-import {
-  STATUS_LABELS,
-  GENDER_LABELS,
-  REGISTRATION_PATHS,
-} from "@/lib/studentDefaults";
+import { STATUS_LABELS, GENDER_LABELS } from "@/lib/studentDefaults";
 import { downloadTemplate } from "@/lib/csv";
 import { useStudentsList } from "@/hooks/useStudentsList";
 
@@ -26,6 +22,7 @@ export default function StudentsList() {
     has,
     nav,
     items,
+    registrationPaths,
     summary,
     pagination,
     loading,
@@ -176,7 +173,29 @@ export default function StudentsList() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
                 <option value="">الكل</option>
-                {REGISTRATION_PATHS.map((p) => (
+                {registrationPaths.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">
+                مسار التسجيل النهائي
+              </label>
+              <select
+                value={filters.finalRegistrationPath}
+                onChange={(e) =>
+                  setFilters({
+                    ...filters,
+                    finalRegistrationPath: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">الكل</option>
+                {registrationPaths.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
@@ -260,7 +279,7 @@ export default function StudentsList() {
         )}
 
         {activeCount > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border-b border-gray-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 p-4 border-b border-gray-200">
             <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
               <div className="text-sm text-sky-700">إجمالي المستحق</div>
               <div className="mt-1 text-2xl font-bold text-sky-900">
@@ -277,6 +296,24 @@ export default function StudentsList() {
               <div className="text-sm text-amber-700">إجمالي المتبقي</div>
               <div className="mt-1 text-2xl font-bold text-amber-900">
                 {summary.totalRemaining.toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-sm text-gray-700">إجمالي رسوم الكتب</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">
+                {(summary.totalBooksFee || 0).toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-sm text-gray-700">إجمالي رسوم الحافلة</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">
+                {(summary.totalBusFee || 0).toLocaleString()}
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-sm text-gray-700">إجمالي رسوم الزي</div>
+              <div className="mt-1 text-2xl font-bold text-gray-900">
+                {(summary.totalOutfitFee || 0).toLocaleString()}
               </div>
             </div>
           </div>
@@ -347,7 +384,13 @@ export default function StudentsList() {
                       {s.currentClass?.name || s.student?.newClass || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {s.student?.registrationPath || "—"}
+                      <div>{s.student?.registrationPath || "—"}</div>
+                      <div className="text-xs text-gray-500">
+                        النهائي:{" "}
+                        {s.student?.finalRegistrationPath ||
+                          s.student?.registrationPath ||
+                          "—"}
+                      </div>
                     </td>
                     <td
                       className={`px-4 py-3 ${s.student?.status === "inactive" ? "text-red-600" : "text-gray-600"}`}

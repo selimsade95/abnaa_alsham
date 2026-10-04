@@ -51,6 +51,9 @@ export function useClassesList() {
   const [confirmId, setConfirmId] = useState(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [reactivating, setReactivating] = useState(null);
+  const [promotion, setPromotion] = useState(null);
+  const [promotionLoading, setPromotionLoading] = useState(false);
+  const [promotionSaving, setPromotionSaving] = useState(false);
   const importRef = useRef(null);
 
   const load = useCallback(
@@ -179,6 +182,77 @@ export function useClassesList() {
       setReactivating(null);
     }
   };
+  const openPromotion = async (sourceClass) => {
+    setPromotionLoading(true);
+    try {
+      const [studentsResponse, classesResponse] = await Promise.all([
+        api.get("/students", { params: { classId: sourceClass.id, limit: 5000 } }),
+        api.get("/classes", { params: { status: "active", limit: 500 } }),
+      ]);
+      setPromotion({
+        sourceClass,
+        destinationClassId: "",
+        destinations: (classesResponse.data.data || []).filter(
+          (item) => item.id !== sourceClass.id && item.status === "active",
+        ),
+        students: (studentsResponse.data.data || []).map((student) => ({
+          ...student,
+          selected: false,
+          newTotalPayable: Number(student.fees?.totalPayable || 0),
+        })),
+      });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر تحميل طلاب الصف");
+    } finally {
+      setPromotionLoading(false);
+    }
+  };
+  const updatePromotion = (update) =>
+    setPromotion((previous) => ({ ...previous, ...update }));
+  const updatePromotionStudent = (studentId, update) =>
+    setPromotion((previous) => ({
+      ...previous,
+      students: previous.students.map((student) =>
+        student.id === studentId ? { ...student, ...update } : student,
+      ),
+    }));
+  const submitPromotion = async () => {
+    if (!promotion?.destinationClassId) {
+      toast.error("اختر الصف الجديد");
+      return;
+    }
+    const selectedStudents = promotion.students.filter((student) => student.selected);
+    if (!selectedStudents.length) {
+      toast.error("اختر طالباً واحداً على الأقل");
+      return;
+    }
+    if (selectedStudents.some((student) =>
+      !Number.isFinite(Number(student.newTotalPayable)) || Number(student.newTotalPayable) < 0,
+    )) {
+      toast.error("أدخل مستحقاً جديداً صالحاً لكل طالب محدد");
+      return;
+    }
+    setPromotionSaving(true);
+    try {
+      const response = await api.post(
+        `/classes/${promotion.sourceClass.id}/promote-students`,
+        {
+          destinationClassId: promotion.destinationClassId,
+          students: selectedStudents.map((student) => ({
+            studentId: student.id,
+            totalPayable: Number(student.newTotalPayable),
+          })),
+        },
+      );
+      toast.success(`تم ترفيع ${response.data.moved} طالب`);
+      setPromotion(null);
+      load(pagination.page);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر ترفيع الطلاب");
+    } finally {
+      setPromotionSaving(false);
+    }
+  };
   const clearFilters = () => setFilters(DEFAULT_FILTERS);
 
   return {
@@ -208,6 +282,14 @@ export function useClassesList() {
     save,
     doDelete,
     doReactivate,
+    promotion,
+    promotionLoading,
+    promotionSaving,
+    openPromotion,
+    updatePromotion,
+    updatePromotionStudent,
+    submitPromotion,
+    setPromotion,
     clearFilters,
     classTemplate,
     hasActiveFilters: Object.values(filters).some(Boolean),

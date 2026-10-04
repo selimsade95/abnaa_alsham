@@ -4,7 +4,8 @@ export const emptyStudent = () => ({
     orphanOf: "",
     orphanDocType: "",
     orphanDocDescription: "",
-    registrationPath: "خاص",
+    registrationPath: "",
+    finalRegistrationPath: "",
     previousClass: "",
     newClass: "",
     status: "resident",
@@ -55,7 +56,16 @@ export const emptyStudent = () => ({
   bestAchievement: "",
   otherInfo: { familySmokers: false, transportation: "", notes: "" },
   signing: { parentName: "", relationToStudent: "" },
-  fees: { academicYear: "", totalPayable: 0 },
+  fees: {
+    academicYear: "",
+    totalPayable: 0,
+    discountEnabled: false,
+    discountPercentage: 0,
+    booksFee: 0,
+    busFee: 0,
+    busRegistered: false,
+    outfitFee: 0,
+  },
   initialPayment: { amount: 0, semester: "full_year", paymentDate: "" },
   currentClassId: "",
   fullInfo: {
@@ -140,3 +150,10 @@ export const SEMESTER_LABELS = {
   second: "الفصل الثاني",
   full_year: "السنة كاملة",
 };
+export const FEE_TYPE_LABELS = {
+  academic: "رسوم دراسية",
+  transportation: "رسوم الحافلة",
+  books: "رسوم الكتب",
+  outfit: "رسوم الزي",
+};
+export const FEE_TYPE_ORDER = ["academic", "transportation", "books", "outfit"];

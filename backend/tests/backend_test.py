@@ -301,6 +301,71 @@ class TestStudents:
         r = requests.post(f"{API}/students", headers=admin_headers, json=body)
         assert r.status_code == 400
 
+    def test_dynamic_registration_paths_create_edit_and_import(self, admin_headers):
+        original_paths = requests.get(f"{API}/registration-paths", headers=admin_headers).json()["paths"]
+        suffix = uuid.uuid4().hex[:8]
+        initial_path = f"TEST_INITIAL_{suffix}"
+        final_path = f"TEST_FINAL_{suffix}"
+        updated_path = f"TEST_UPDATED_{suffix}"
+        try:
+            configured = [*original_paths, initial_path, final_path, updated_path]
+            saved_paths = requests.put(
+                f"{API}/settings/registration-paths", headers=admin_headers,
+                json={"paths": configured},
+            )
+            assert saved_paths.status_code == 200, saved_paths.text
+
+            student_body = {
+                "student": {"fullName": f"TEST Dynamic Path {suffix}", "gender": "male",
+                            "registrationPath": initial_path, "finalRegistrationPath": final_path},
+                "fees": {"academicYear": "2026-2027", "totalPayable": 0},
+            }
+            created = requests.post(f"{API}/students", headers=admin_headers, json=student_body)
+            assert created.status_code == 200, created.text
+            student = created.json()
+            assert student["student"]["registrationPath"] == initial_path
+            assert student["student"]["finalRegistrationPath"] == final_path
+
+            student_body["student"]["registrationPath"] = final_path
+            student_body["student"]["finalRegistrationPath"] = updated_path
+            updated = requests.put(
+                f"{API}/students/{student['id']}", headers=admin_headers, json=student_body,
+            )
+            assert updated.status_code == 200, updated.text
+            assert updated.json()["student"]["registrationPath"] == initial_path
+            assert updated.json()["student"]["finalRegistrationPath"] == updated_path
+            final_path_filter = requests.get(
+                f"{API}/students", headers=admin_headers,
+                params={"search": student["student"]["fullName"],
+                        "finalRegistrationPath": updated_path, "limit": 10},
+            )
+            assert final_path_filter.status_code == 200
+            assert [item["id"] for item in final_path_filter.json()["data"]] == [student["id"]]
+
+            csv_body = (
+                "fullName,gender,birthdate,registrationPath,finalRegistrationPath,status,"
+                f"academicYear,totalPayable\nTEST Imported Path {suffix},male,2015-01-01,"
+                f"{initial_path},{final_path},resident,2026-2027,0\n"
+            )
+            imported = requests.post(
+                f"{API}/students/import", headers=admin_headers,
+                files={"file": ("students.csv", csv_body.encode("utf-8"), "text/csv")},
+            )
+            assert imported.status_code == 200, imported.text
+            assert imported.json()["created"] == 1
+            imported_student = requests.get(
+                f"{API}/students", headers=admin_headers,
+                params={"search": f"TEST Imported Path {suffix}", "limit": 10},
+            ).json()["data"][0]
+            assert imported_student["student"]["registrationPath"] == initial_path
+            assert imported_student["student"]["finalRegistrationPath"] == final_path
+        finally:
+            restored = requests.put(
+                f"{API}/settings/registration-paths", headers=admin_headers,
+                json={"paths": original_paths},
+            )
+            assert restored.status_code == 200, restored.text
+
     def test_list_students_search_and_filters(self, admin_headers, created_student, created_class):
         r = requests.get(f"{API}/students?search=TEST&orphan=true&registrationPath=الايتام"
                          f"&classId={created_class['id']}&page=1&limit=10",
@@ -309,6 +374,71 @@ class TestStudents:
         j = r.json()
         assert "pagination" in j
         assert any(x["id"] == created_student["id"] for x in j["data"])
+
+    def test_bulk_promote_students_updates_class_and_payable(self, admin_headers):
+        suffix = uuid.uuid4().hex[:8]
+        source_response = requests.post(
+            f"{API}/classes", headers=admin_headers,
+            json={"name": f"TEST Promote Source {suffix}", "grade": "Grade 1",
+                  "academicYear": "2026-2027", "status": "active"},
+        )
+        destination_response = requests.post(
+            f"{API}/classes", headers=admin_headers,
+            json={"name": f"TEST Promote Destination {suffix}", "grade": "Grade 2",
+                  "academicYear": "2027-2028", "status": "active"},
+        )
+        assert source_response.status_code == destination_response.status_code == 200
+        source_class = source_response.json()
+        destination_class = destination_response.json()
+
+        def create_test_student(name, class_id):
+            response = requests.post(
+                f"{API}/students", headers=admin_headers,
+                json={
+                    "student": {"fullName": f"TEST Promote {name} {suffix}", "gender": "male",
+                                "registrationPath": "خاص", "finalRegistrationPath": "خاص"},
+                    "fees": {"academicYear": "2026-2027", "totalPayable": 500},
+                    "currentClassId": class_id,
+                },
+            )
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        selected_student = create_test_student("Selected", source_class["id"])
+        wrong_class_student = create_test_student("WrongClass", destination_class["id"])
+        request_body = {
+            "destinationClassId": destination_class["id"],
+            "students": [
+                {"studentId": selected_student["id"], "totalPayable": 1250},
+                {"studentId": wrong_class_student["id"], "totalPayable": 1400},
+            ],
+        }
+        rejected = requests.post(
+            f"{API}/classes/{source_class['id']}/promote-students",
+            headers=admin_headers, json=request_body,
+        )
+        assert rejected.status_code == 400, rejected.text
+        unchanged = requests.get(
+            f"{API}/students/{selected_student['id']}", headers=admin_headers,
+        ).json()
+        assert unchanged["currentClassId"] == source_class["id"]
+        assert unchanged["fees"]["totalPayable"] == 500
+
+        request_body["students"] = request_body["students"][:1]
+        promoted = requests.post(
+            f"{API}/classes/{source_class['id']}/promote-students",
+            headers=admin_headers, json=request_body,
+        )
+        assert promoted.status_code == 200, promoted.text
+        assert promoted.json()["moved"] == 1
+        result = requests.get(
+            f"{API}/students/{selected_student['id']}", headers=admin_headers,
+        ).json()
+        assert result["currentClassId"] == destination_class["id"]
+        assert result["student"]["previousClass"] == source_class["name"]
+        assert result["student"]["newClass"] == destination_class["name"]
+        assert result["fees"]["totalPayable"] == 1250
+        assert result["fees"]["academicYear"] == "2027-2028"
 
     def test_list_students_by_teacher(self, admin_headers, created_student, created_teacher):
         r = requests.get(f"{API}/students?teacherId={created_teacher['id']}",
@@ -370,10 +500,194 @@ class TestStudents:
         active = requests.get(f"{API}/students", headers=admin_headers)
         assert any(s["id"] == sid for s in active.json()["data"])
 
+    def test_student_notes_are_private_to_their_teacher_author(self, admin_headers):
+        suffix = uuid.uuid4().hex[:8]
+        teacher_ids = []
+        for label in ("A", "B"):
+            teacher_response = requests.post(
+                f"{API}/teachers", headers=admin_headers,
+                json={"fullName": f"TEST Notes Teacher {label} {suffix}", "gender": "male"},
+            )
+            assert teacher_response.status_code == 200, teacher_response.text
+            teacher_ids.append(teacher_response.json()["id"])
+
+        roles = requests.get(f"{API}/roles", headers=admin_headers).json()
+        teacher_role = next(role for role in roles if role["name"] == "Teacher")
+        teacher_headers = []
+        teacher_user_ids = []
+        for label, teacher_id in zip(("A", "B"), teacher_ids):
+            username = f"TEST_notes_{label}_{suffix}"
+            create_user = requests.post(
+                f"{API}/users", headers=admin_headers,
+                json={"name": f"Notes Teacher {label}", "username": username,
+                      "password": "pass1234", "roles": [teacher_role["id"]],
+                      "teacherId": teacher_id},
+            )
+            assert create_user.status_code == 200, create_user.text
+            teacher_user_ids.append(create_user.json()["id"])
+            login = requests.post(f"{API}/auth/login", json={"username": username, "password": "pass1234"})
+            assert login.status_code == 200, login.text
+            teacher_headers.append({"Authorization": f"Bearer {login.json()['token']}"})
+
+        class_response = requests.post(
+            f"{API}/classes", headers=admin_headers,
+            json={"name": f"TEST Notes Class {suffix}", "grade": "Grade 1",
+                  "academicYear": "2026-2027", "teacherId": teacher_ids[0],
+                  "teacherIds": teacher_ids, "capacity": 10, "status": "active"},
+        )
+        assert class_response.status_code == 200, class_response.text
+        student_response = requests.post(
+            f"{API}/students", headers=admin_headers,
+            json={"student": {"fullName": f"TEST Notes Student {suffix}", "gender": "male",
+                              "registrationPath": "خاص", "finalRegistrationPath": "خاص"},
+                  "fees": {"academicYear": "2026-2027", "totalPayable": 100},
+                  "currentClassId": class_response.json()["id"]},
+        )
+        assert student_response.status_code == 200, student_response.text
+        student_id = student_response.json()["id"]
+
+        created_note = requests.post(
+            f"{API}/students/{student_id}/notes/class", headers=teacher_headers[0],
+            json={"content": "Teacher A class note"},
+        )
+        assert created_note.status_code == 200, created_note.text
+        note = created_note.json()
+        assert note["authorId"] == teacher_user_ids[0]
+        assert note["authorName"] == "Notes Teacher A"
+        assert note["createdAt"] and note["updatedAt"]
+
+        first_teacher_notes = requests.get(f"{API}/students/{student_id}/notes", headers=teacher_headers[0])
+        second_teacher_notes = requests.get(f"{API}/students/{student_id}/notes", headers=teacher_headers[1])
+        assert first_teacher_notes.status_code == second_teacher_notes.status_code == 200
+        assert [item["id"] for item in first_teacher_notes.json()["classNotes"]] == [note["id"]]
+        assert second_teacher_notes.json()["classNotes"] == []
+
+        student_view = requests.get(f"{API}/students/{student_id}", headers=teacher_headers[1])
+        assert student_view.status_code == 200
+        assert student_view.json()["classNotes"] == []
+        edit_attempt = requests.put(
+            f"{API}/students/{student_id}/notes/class/{note['id']}",
+            headers=teacher_headers[1], json={"content": "Unauthorized edit"},
+        )
+        delete_attempt = requests.delete(
+            f"{API}/students/{student_id}/notes/class/{note['id']}", headers=teacher_headers[1],
+        )
+        assert edit_attempt.status_code == delete_attempt.status_code == 404
+
+        owner_edit = requests.put(
+            f"{API}/students/{student_id}/notes/class/{note['id']}",
+            headers=teacher_headers[0], json={"content": "Teacher A updated note"},
+        )
+        assert owner_edit.status_code == 200, owner_edit.text
+        assert owner_edit.json()["content"] == "Teacher A updated note"
+        assert owner_edit.json()["authorId"] == teacher_user_ids[0]
+
+        visible_to_admin = requests.get(f"{API}/students/{student_id}/notes", headers=admin_headers)
+        admin_note = visible_to_admin.json()["classNotes"][0]
+        assert admin_note["id"] == note["id"]
+        assert admin_note["content"] == "Teacher A updated note"
+
 
 # ---------- Payments ----------
 
 class TestPayments:
+    def test_discount_reduces_student_payable_and_payment_limit(self, admin_headers):
+        student_body = {
+            "student": {"fullName": f"TEST Discount {uuid.uuid4().hex[:8]}", "gender": "male",
+                        "registrationPath": "خاص", "finalRegistrationPath": "خاص"},
+            "fees": {
+                "academicYear": "2026-2027",
+                "totalPayable": 1000,
+                "discountEnabled": True,
+                "discountPercentage": 20,
+                "booksFee": 100,
+                "busFee": 200,
+                "outfitFee": 50,
+            },
+        }
+        student_response = requests.post(f"{API}/students", headers=admin_headers, json=student_body)
+        assert student_response.status_code == 200, student_response.text
+        student = student_response.json()
+        assert student["fees"]["totalPayable"] == 1000
+        assert student["fees"]["discountAmount"] == 200
+        assert student["fees"]["netPayable"] == 800
+        assert student["fees"]["overallPayable"] == 1150
+        assert student["fees"]["remaining"] == 1150
+        assert student["fees"]["byType"]["academic"]["payable"] == 800
+        assert student["fees"]["byType"]["transportation"]["payable"] == 200
+        assert student["fees"]["byType"]["books"]["payable"] == 100
+        assert student["fees"]["byType"]["outfit"]["payable"] == 50
+        student_list = requests.get(
+            f"{API}/students", headers=admin_headers,
+            params={"search": student["student"]["fullName"], "limit": 10},
+        )
+        assert student_list.status_code == 200
+        summary = student_list.json()["summary"]
+        assert summary["totalPayable"] == 1150
+        assert summary["totalBooksFee"] == 100
+        assert summary["totalBusFee"] == 200
+        assert summary["totalOutfitFee"] == 50
+
+        payment_body = {
+            "student": student["id"],
+            "academicYear": "2026-2027",
+            "semester": "first",
+            "paymentDate": datetime.utcnow().isoformat(),
+        }
+        for fee_type, amount in (("academic", 800), ("books", 100),
+                                 ("transportation", 200), ("outfit", 50)):
+            payment_body.update({"feeType": fee_type, "amount": amount + 1})
+            rejected = requests.post(f"{API}/payments", headers=admin_headers, json=payment_body)
+            assert rejected.status_code == 400
+
+            payment_body["amount"] = amount
+            accepted = requests.post(f"{API}/payments", headers=admin_headers, json=payment_body)
+            assert accepted.status_code == 200, accepted.text
+            assert accepted.json()["feeType"] == fee_type
+            assert accepted.json()["totalPayable"] == amount
+            assert accepted.json()["currentTotalRemaining"] == 0
+
+        cross_category_refund = requests.post(
+            f"{API}/payments/refund", headers=admin_headers,
+            json={"student": student["id"], "academicYear": "2026-2027",
+                  "feeType": "outfit", "semester": "first", "amount": 51,
+                  "paymentDate": datetime.utcnow().isoformat()},
+        )
+        assert cross_category_refund.status_code == 400
+
+        category_summary = requests.get(
+            f"{API}/payments/summary", headers=admin_headers,
+            params={"search": student["student"]["fullName"]},
+        )
+        assert category_summary.status_code == 200
+        for fee_type, amount in (("academic", 800), ("books", 100),
+                                 ("transportation", 200), ("outfit", 50)):
+            assert category_summary.json()["feeTypes"][fee_type]["payable"] == amount
+            assert category_summary.json()["feeTypes"][fee_type]["paid"] == amount
+            assert category_summary.json()["feeTypes"][fee_type]["remaining"] == 0
+
+    def test_bus_fee_is_ignored_without_bus_registration(self, admin_headers):
+        student_response = requests.post(
+            f"{API}/students", headers=admin_headers,
+            json={
+                "student": {"fullName": f"TEST No Bus {uuid.uuid4().hex[:8]}",
+                            "gender": "male", "registrationPath": "خاص"},
+                "fees": {"academicYear": "2026-2027", "busRegistered": False, "busFee": 300},
+            },
+        )
+        assert student_response.status_code == 200, student_response.text
+        student = student_response.json()
+        assert student["fees"]["busRegistered"] is False
+        assert student["fees"]["busFee"] == 0
+        assert student["fees"]["byType"]["transportation"]["payable"] == 0
+        rejected = requests.post(
+            f"{API}/payments", headers=admin_headers,
+            json={"student": student["id"], "academicYear": "2026-2027",
+                  "feeType": "transportation", "semester": "full_year", "amount": 1,
+                  "paymentDate": datetime.utcnow().isoformat()},
+        )
+        assert rejected.status_code == 400
+
     def test_overpayment_prevented(self, admin_headers, created_student):
         # totalPayable=1200 (after update), already paid 200 -> remaining 1000
         body = {"student": created_student["id"], "academicYear": "2025-2026",
@@ -402,8 +716,11 @@ class TestPayments:
         payments = requests.get(f"{API}/payments", headers=admin_headers)
         assert payments.status_code == 200
         created_payment = next(p for p in payments.json() if p["student"] == created_student["id"])
-        assert created_payment["totalPayable"] == 1000
-        assert created_payment["totalRemaining"] == 800
+        student_response = requests.get(f"{API}/students/{created_student['id']}", headers=admin_headers)
+        assert student_response.status_code == 200
+        academic_totals = student_response.json()["fees"]["byType"]["academic"]
+        assert created_payment["totalPayable"] == academic_totals["payable"]
+        assert created_payment["totalRemaining"] == academic_totals["remaining"]
 
     def test_refund_returns_successful_serializable_response(self, admin_headers, created_student):
         body = {"student": created_student["id"], "academicYear": "2025-2026",
@@ -483,7 +800,8 @@ class TestDashboard:
         assert r.status_code == 200
         d = r.json()
         for k in ("total", "female", "male", "orphans", "teachers", "classes",
-                  "totalPayable", "totalCollected", "totalRemaining"):
+                "totalPayable", "totalBooksFee", "totalBusFee", "totalOutfitFee",
+                "totalCollected", "totalRemaining"):
             assert k in d
 
 
