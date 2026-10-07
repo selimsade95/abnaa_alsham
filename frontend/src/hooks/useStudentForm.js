@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
-import { emptyStudent, REGISTRATION_PATHS } from "@/lib/studentDefaults";
+import {
+  appendStudentSibling,
+  emptyStudent,
+  REGISTRATION_PATHS,
+} from "@/lib/studentDefaults";
 import { useClasses } from "@/hooks/useClasses";
 
 function syncParentOrphanData(next) {
@@ -44,9 +48,27 @@ export function useStudentForm(mode) {
   const [hobbiesInput, setHobbiesInput] = useState("");
   const [errors, setErrors] = useState({});
   const [showFullInfo, setShowFullInfo] = useState(false);
+  const [students, setStudents] = useState([]);
   const [registrationPaths, setRegistrationPaths] =
     useState(REGISTRATION_PATHS);
+  const [discountOptions, setDiscountOptions] = useState([]);
   const { classes } = useClasses({ limit: 500 });
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/students", { params: { limit: 5000 } })
+      .then((response) => {
+        if (!cancelled) setStudents(response.data?.data || []);
+      })
+      .catch((error) => {
+        if (!cancelled)
+          toast.error(error?.response?.data?.detail || "تعذر تحميل قائمة الطلاب");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     api
@@ -71,6 +93,22 @@ export function useStudentForm(mode) {
       })
       .catch(() => setRegistrationPaths(REGISTRATION_PATHS));
   }, [mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/discount-options")
+      .then((response) => {
+        if (!cancelled) setDiscountOptions(response.data.options || []);
+      })
+      .catch((error) => {
+        if (!cancelled)
+          toast.error(error?.response?.data?.detail || "تعذر تحميل خيارات الخصم");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (mode !== "edit" || !id) return;
@@ -108,6 +146,7 @@ export function useStudentForm(mode) {
           totalPayable: student.fees?.totalPayable || 0,
           discountEnabled: student.fees?.discountEnabled || false,
           discountPercentage: student.fees?.discountPercentage || 0,
+          discountName: student.fees?.discountName || "",
           booksFee: student.fees?.booksFee || 0,
           busFee: student.fees?.busFee || 0,
           busRegistered:
@@ -166,16 +205,14 @@ export function useStudentForm(mode) {
     else selected.add(language);
     update("student.languages", Array.from(selected));
   };
-  const addSibling = () =>
-    update("siblings", [
-      ...data.siblings,
-      {
-        order: data.siblings.length + 1,
-        fullName: "",
-        gender: "male",
-        class: "",
-      },
-    ]);
+  const addSibling = (student) => {
+    if (!student) return;
+    setData((previous) => {
+      const siblings = appendStudentSibling(previous.siblings || [], student);
+      if (siblings === previous.siblings) return previous;
+      return { ...previous, siblings };
+    });
+  };
   const removeSibling = (index) =>
     update(
       "siblings",
@@ -277,7 +314,9 @@ export function useStudentForm(mode) {
     setHobbiesInput,
     errors,
     classes,
+    students,
     registrationPaths,
+    discountOptions,
     showFullInfo,
     setShowFullInfo,
     update,

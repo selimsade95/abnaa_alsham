@@ -42,7 +42,8 @@ export default function Roles() {
     permissions: "الصلاحيات",
     subjects: "المواد",
     grades: "الدرجات",
-    messages: "رسائل التحقق",
+    homework: "الواجبات",
+    messages: "الرسائل",
   };
 
   const openNew = () =>

@@ -1,5 +1,5 @@
 import { useStudent } from "@/hooks/useStudent";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Loader2, Pencil } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -142,7 +142,18 @@ export default function StudentFullInfo() {
               {data.siblings.map((sib, i) => (
                 <tr key={i} className="border-t border-gray-100">
                   <td className="px-3 py-2 text-gray-600">{sib.order}</td>
-                  <td className="px-3 py-2 text-gray-900">{sib.fullName}</td>
+                  <td className="px-3 py-2 text-gray-900">
+                    {sib.studentId ? (
+                      <Link
+                        to={`/students/${sib.studentId}`}
+                        className="text-[#036A87] hover:underline"
+                      >
+                        {sib.fullName}
+                      </Link>
+                    ) : (
+                      sib.fullName
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">
                     {GENDER_LABELS[sib.gender]}
                   </td>

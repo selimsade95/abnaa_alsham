@@ -1,5 +1,8 @@
 import { Loader2, Plus, Trash2, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 import { useStudentForm } from "@/hooks/useStudentForm";
+import StudentSearchSelect from "@/components/StudentSearchSelect";
 import {
   LANGUAGES,
   STATUS_LABELS,
@@ -42,6 +45,7 @@ const Radio = ({ name, checked, onChange, label, testid }) => (
 );
 
 export default function StudentForm({ mode }) {
+  const { has } = useAuth();
   const {
     nav,
     id,
@@ -52,14 +56,15 @@ export default function StudentForm({ mode }) {
     setHobbiesInput,
     errors,
     classes,
+    students,
     registrationPaths,
+    discountOptions,
     showFullInfo,
     setShowFullInfo,
     update,
     toggleLanguage,
     addSibling,
     removeSibling,
-    updateSibling,
     addEdu,
     removeEdu,
     updateEdu,
@@ -85,6 +90,17 @@ export default function StudentForm({ mode }) {
   );
   const fees = data.fees;
   const discountPercentage = Number(fees.discountPercentage) || 0;
+  const selectedDiscount =
+    discountOptions.find(
+      (option) =>
+        option.name === fees.discountName &&
+        Number(option.percentage) === discountPercentage,
+    ) ||
+    discountOptions.find(
+      (option) => Number(option.percentage) === discountPercentage,
+    );
+  const legacyDiscount =
+    fees.discountEnabled && discountPercentage > 0 && !selectedDiscount;
   const discountAmount = fees.discountEnabled
     ? ((Number(fees.totalPayable) || 0) * discountPercentage) / 100
     : 0;
@@ -525,7 +541,7 @@ export default function StudentForm({ mode }) {
               data-testid="input-booksFee"
             />
           </Field>
-          <div className="flex items-center pt-7">
+          <div className="pt-7">
             <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input
                 type="checkbox"
@@ -566,29 +582,62 @@ export default function StudentForm({ mode }) {
               <input
                 type="checkbox"
                 checked={!!fees.discountEnabled}
-                onChange={(e) =>
-                  update("fees.discountEnabled", e.target.checked)
-                }
+                disabled={!discountOptions.length && !fees.discountEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  update("fees.discountEnabled", enabled);
+                  if (enabled && !discountPercentage && discountOptions[0]) {
+                    update(
+                      "fees.discountPercentage",
+                      discountOptions[0].percentage,
+                    );
+                    update("fees.discountName", discountOptions[0].name);
+                  }
+                }}
                 className="h-4 w-4 accent-[#04CDF9]"
                 data-testid="input-discount-enabled"
               />
               يستفيد الطالب من خصم
             </label>
+            {!discountOptions.length && !fees.discountEnabled && (
+              <p className="mt-1 text-xs text-gray-500">
+                أضف فئات الخصم من إعدادات النظام لتفعيل هذا الخيار.
+              </p>
+            )}
           </div>
           {fees.discountEnabled && (
-            <Field label="نسبة الخصم (%)">
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
+            <Field label="فئة الخصم">
+              <select
                 className={inputCls}
-                value={fees.discountPercentage || ""}
-                onChange={(e) =>
-                  update("fees.discountPercentage", e.target.value)
-                }
-                data-testid="input-discount-percentage"
-              />
+                value={selectedDiscount?.name || (legacyDiscount ? "__legacy" : "")}
+                onChange={(e) => {
+                  const option = discountOptions.find(
+                    (item) => item.name === e.target.value,
+                  );
+                  if (!option) return;
+                  update("fees.discountName", option.name);
+                  update("fees.discountPercentage", option.percentage);
+                }}
+                data-testid="input-discount-option"
+                required
+              >
+                {!selectedDiscount && !legacyDiscount && (
+                  <option value="">اختر فئة الخصم</option>
+                )}
+                {legacyDiscount && (
+                  <option value="__legacy" disabled>
+                    خصم سابق ({discountPercentage}%)
+                  </option>
+                )}
+                {discountOptions.map((option) => (
+                  <option
+                    key={`${option.name}-${option.percentage}`}
+                    value={option.name}
+                  >
+                    {option.name} ({option.percentage}%)
+                  </option>
+                ))}
+              </select>
             </Field>
           )}
         </div>
@@ -675,38 +724,28 @@ export default function StudentForm({ mode }) {
                 </tr>
               )}
               {data.siblings.map((sib, idx) => (
-                <tr key={idx} className="border-t border-gray-100">
+                <tr key={sib.studentId || idx} className="border-t border-gray-100">
                   <td className="px-3 py-2 text-gray-600">{sib.order}</td>
                   <td className="px-3 py-2">
-                    <input
-                      className={inputCls}
-                      value={sib.fullName}
-                      onChange={(e) =>
-                        updateSibling(idx, "fullName", e.target.value)
-                      }
-                    />
+                    {sib.studentId && has("students.view") ? (
+                      <Link
+                        to={`/students/${sib.studentId}`}
+                        className="text-[#036A87] hover:underline"
+                      >
+                        {sib.fullName || "—"}
+                      </Link>
+                    ) : (
+                      <span className="text-gray-700">{sib.fullName || "—"}</span>
+                    )}
                   </td>
-                  <td className="px-3 py-2">
-                    <select
-                      className={inputCls}
-                      value={sib.gender}
-                      onChange={(e) =>
-                        updateSibling(idx, "gender", e.target.value)
-                      }
-                    >
-                      <option value="male">ذكر</option>
-                      <option value="female">أنثى</option>
-                    </select>
+                  <td className="px-3 py-2 text-gray-600">
+                    {sib.gender === "male"
+                      ? "ذكر"
+                      : sib.gender === "female"
+                        ? "أنثى"
+                        : "—"}
                   </td>
-                  <td className="px-3 py-2">
-                    <input
-                      className={inputCls}
-                      value={sib.class}
-                      onChange={(e) =>
-                        updateSibling(idx, "class", e.target.value)
-                      }
-                    />
-                  </td>
+                  <td className="px-3 py-2 text-gray-600">{sib.class || "—"}</td>
                   <td className="px-3 py-2">
                     <button
                       type="button"
@@ -721,14 +760,17 @@ export default function StudentForm({ mode }) {
             </tbody>
           </table>
         </div>
-        <button
-          type="button"
-          onClick={addSibling}
-          data-testid="add-sibling-btn"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          <Plus className="h-4 w-4" /> إضافة أخ / أخت
-        </button>
+        <div className="max-w-xl">
+          <StudentSearchSelect
+            students={students}
+            excludeIds={[
+              id,
+              ...data.siblings.map((sibling) => sibling.studentId),
+            ].filter(Boolean)}
+            onSelect={addSibling}
+            placeholder="ابحث عن طالب لإضافته كأخ أو أخت"
+          />
+        </div>
       </Section>
 
       {["father", "mother"].map((who) => (

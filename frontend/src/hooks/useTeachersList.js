@@ -4,6 +4,10 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { downloadCsv, uploadCsv } from "@/lib/csv";
+import {
+  persistSessionStorageValue,
+  useSessionStorageState,
+} from "@/hooks/useSessionStorageState";
 
 const DEFAULT_FILTERS = {
   gender: "",
@@ -34,31 +38,57 @@ export function useTeachersList() {
   const { has } = useAuth();
   const nav = useNavigate();
   const [items, setItems] = useState([]);
+  const [savedPage, setSavedPage] = useSessionStorageState(
+    "teachers-list-page",
+    1,
+  );
   const [pagination, setPagination] = useState({
-    page: 1,
+    page: savedPage,
     limit: 20,
     total: 0,
     totalPages: 1,
   });
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [debQ, setDebQ] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [q, setQ] = useSessionStorageState("teachers-list-search", "");
+  const [debQ, setDebQ] = useState(q.trim());
+  const [showFilters, setShowFilters] = useSessionStorageState(
+    "teachers-list-show-filters",
+    false,
+  );
+  const [filters, setFilters] = useSessionStorageState(
+    "teachers-list-filters",
+    DEFAULT_FILTERS,
+  );
   const [confirmId, setConfirmId] = useState(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [reactivating, setReactivating] = useState(null);
   const importRef = useRef(null);
+  const currentPage = useRef(Math.max(1, Number(savedPage) || 1));
 
   const load = useCallback(
     async (page = 1) => {
+      currentPage.current = page;
+      setSavedPage(page);
+      persistSessionStorageValue("teachers-list-page", page);
       setLoading(true);
       try {
         const params = { page, limit: 20, ...(debQ ? { search: debQ } : {}) };
         Object.entries(filters).forEach(([key, value]) => {
           if (value) params[key] = value;
         });
-        const response = await api.get("/teachers", { params });
+        let response = await api.get("/teachers", { params });
+        const lastPage = Math.max(
+          1,
+          response.data.pagination?.totalPages || 1,
+        );
+        if (page > lastPage) {
+          page = lastPage;
+          currentPage.current = page;
+          params.page = page;
+          setSavedPage(page);
+          persistSessionStorageValue("teachers-list-page", page);
+          response = await api.get("/teachers", { params });
+        }
         setItems(response.data.data);
         setPagination(response.data.pagination);
       } catch {
@@ -67,14 +97,14 @@ export function useTeachersList() {
         setLoading(false);
       }
     },
-    [debQ, filters],
+    [debQ, filters, setSavedPage],
   );
   useEffect(() => {
     const timer = setTimeout(() => setDebQ(q.trim()), 300);
     return () => clearTimeout(timer);
   }, [q]);
   useEffect(() => {
-    load(1);
+    load(currentPage.current);
   }, [load]);
 
   const exportTeachers = async () => {

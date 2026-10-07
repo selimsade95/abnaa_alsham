@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { STATUS_LABELS, GENDER_LABELS } from "@/lib/studentDefaults";
 import { downloadTemplate } from "@/lib/csv";
+import Pagination from "@/components/Pagination";
 import { useStudentsList } from "@/hooks/useStudentsList";
 
 export default function StudentsList() {
@@ -372,7 +373,12 @@ export default function StudentsList() {
                       {s.code || "—"}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">
-                      {s.student?.fullName}
+                      <Link
+                        to={`/students/${s.id}`}
+                        className="text-[#036A87] hover:underline"
+                      >
+                        {s.student?.fullName}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {GENDER_LABELS[s.student?.gender] || "—"}
@@ -381,7 +387,16 @@ export default function StudentsList() {
                       {s.student?.birthdate?.slice(0, 10) || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {s.currentClass?.name || s.student?.newClass || "—"}
+                      {has("classes.view") && s.currentClassId ? (
+                        <Link
+                          to={`/classes/${s.currentClassId}`}
+                          className="text-[#036A87] hover:underline"
+                        >
+                          {s.currentClass.name}
+                        </Link>
+                      ) : (
+                        s.currentClass?.name || s.student?.newClass || "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       <div>{s.student?.registrationPath || "—"}</div>
@@ -494,30 +509,11 @@ export default function StudentsList() {
             </tbody>
           </table>
         </div>
-        {pagination.totalPages > 1 && (
-          <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-xs text-gray-500">
-              صفحة {pagination.page} من {pagination.totalPages} • الإجمالي{" "}
-              {pagination.total}
-            </div>
-            <div className="flex gap-1">
-              <button
-                disabled={pagination.page <= 1}
-                onClick={() => load(pagination.page - 1)}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40"
-              >
-                السابق
-              </button>
-              <button
-                disabled={pagination.page >= pagination.totalPages}
-                onClick={() => load(pagination.page + 1)}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1 text-sm disabled:opacity-40"
-              >
-                التالي
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          pagination={pagination}
+          onPageChange={load}
+          testId="students-pagination"
+        />
       </div>
 
       {confirmId && (

@@ -1,3 +1,18 @@
+export const appendStudentSibling = (siblings, student) => {
+  if (!student || siblings.some((sibling) => sibling.studentId === student.id))
+    return siblings;
+  return [
+    ...siblings,
+    {
+      order: siblings.length + 1,
+      studentId: student.id,
+      fullName: student.student?.fullName || student.fullName || "",
+      gender: student.student?.gender || "",
+      class: student.currentClass?.name || student.student?.newClass || "",
+    },
+  ];
+};
+
 export const emptyStudent = () => ({
   student: {
     orphan: false,
@@ -62,6 +77,7 @@ export const emptyStudent = () => ({
     totalPayable: 0,
     discountEnabled: false,
     discountPercentage: 0,
+    discountName: "",
     booksFee: 0,
     busFee: 0,
     busRegistered: false,

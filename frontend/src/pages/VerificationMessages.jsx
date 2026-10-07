@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, MessageSquareText, Send, RefreshCw } from "lucide-react";
+import {
+  Filter,
+  Loader2,
+  MessageSquareText,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Send,
+} from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -28,6 +36,11 @@ export default function VerificationMessages() {
   const [sendingId, setSendingId] = useState(null);
   const [resendingId, setResendingId] = useState(null);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const loadMessages = useCallback(async () => {
     setError("");
@@ -44,6 +57,45 @@ export default function VerificationMessages() {
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredMessages = messages.filter((message) => {
+    const matchesSearch =
+      !normalizedSearch ||
+      [
+        message.name,
+        message.phone,
+        message.email,
+        message.studentName,
+        message.studentCode,
+        message.content,
+        message.response,
+      ].some((value) =>
+        String(value || "").toLocaleLowerCase().includes(normalizedSearch),
+      );
+    const messageDate = message.createdAt?.slice(0, 10) || "";
+    const matchesStatus =
+      !statusFilter ||
+      (statusFilter === "responded"
+        ? Boolean(message.response)
+        : !message.response);
+    return (
+      matchesSearch &&
+      (!typeFilter || message.messageType === typeFilter) &&
+      matchesStatus &&
+      (!dateFrom || messageDate >= dateFrom) &&
+      (!dateTo || messageDate <= dateTo)
+    );
+  });
+  const hasFilters =
+    search || typeFilter || statusFilter || dateFrom || dateTo;
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("");
+    setStatusFilter("");
+    setDateFrom("");
+    setDateTo("");
+  };
 
   const sendReply = async (message) => {
     const response = drafts[message.id]?.trim();
@@ -89,11 +141,86 @@ export default function VerificationMessages() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">رسائل التحقق</h1>
+        <h1 className="text-3xl font-bold text-gray-900">الرسائل</h1>
         <p className="mt-1 text-sm text-gray-500">
-          الرسائل الواردة من صفحة التحقق من بيانات الطلاب
+          عرض الرسائل الواردة والبحث فيها والرد عليها.
         </p>
       </div>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="ابحث بالاسم أو الهاتف أو البريد أو محتوى الرسالة..."
+              aria-label="البحث في الرسائل"
+              className="w-full rounded-lg border border-gray-300 py-2 pe-9 ps-3 text-sm"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value)}
+            aria-label="تصفية حسب نوع الرسالة"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="">كل أنواع الرسائل</option>
+            {Object.entries(TYPE_LABELS).map(([type, label]) => (
+              <option key={type} value={type}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            aria-label="تصفية حسب حالة الرد"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          >
+            <option value="">كل الحالات</option>
+            <option value="open">بحاجة إلى رد</option>
+            <option value="responded">تم الرد</option>
+          </select>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="shrink-0">من تاريخ</span>
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="shrink-0">إلى تاريخ</span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(event) => setDateTo(event.target.value)}
+              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </label>
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-1 text-sm text-gray-500">
+              <Filter className="h-4 w-4" />
+              {`${filteredMessages.length} رسالة`}
+            </span>
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center gap-1 text-sm text-[#036A87] hover:underline"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                مسح الفلاتر
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
 
       {error && (
         <div
@@ -114,9 +241,13 @@ export default function VerificationMessages() {
           <MessageSquareText className="mx-auto mb-3 h-8 w-8 text-gray-400" />
           لا توجد رسائل حتى الآن.
         </div>
+      ) : filteredMessages.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500">
+          لا توجد رسائل مطابقة للبحث والفلاتر المحددة.
+        </div>
       ) : (
         <div className="space-y-4">
-          {messages.map((message) => (
+          {filteredMessages.map((message) => (
             <article
               key={message.id}
               className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
@@ -129,10 +260,12 @@ export default function VerificationMessages() {
                   <h2 className="mt-2 text-lg font-bold text-gray-900">
                     {message.name}
                   </h2>
-                  <p className="text-sm text-gray-600">
-                    {message.studentName || "طالب"}{" "}
-                    {message.studentCode ? `(${message.studentCode})` : ""}
-                  </p>
+                  {(message.studentName || message.studentCode) && (
+                    <p className="text-sm text-gray-600">
+                      {message.studentName}
+                      {message.studentCode ? ` (${message.studentCode})` : ""}
+                    </p>
+                  )}
                 </div>
                 <time className="text-xs text-gray-500">
                   {new Date(message.createdAt).toLocaleString("ar-EG")}

@@ -3,6 +3,10 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { downloadCsv, uploadCsv } from "@/lib/csv";
+import {
+  persistSessionStorageValue,
+  useSessionStorageState,
+} from "@/hooks/useSessionStorageState";
 
 const DEFAULT_FILTERS = {
   grade: "",
@@ -36,17 +40,27 @@ export function useClassesList() {
   const { has } = useAuth();
   const [items, setItems] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [savedPage, setSavedPage] = useSessionStorageState(
+    "classes-list-page",
+    1,
+  );
   const [pagination, setPagination] = useState({
-    page: 1,
+    page: savedPage,
     limit: 50,
     total: 0,
     totalPages: 1,
   });
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [debQ, setDebQ] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [q, setQ] = useSessionStorageState("classes-list-search", "");
+  const [debQ, setDebQ] = useState(q.trim());
+  const [showFilters, setShowFilters] = useSessionStorageState(
+    "classes-list-show-filters",
+    false,
+  );
+  const [filters, setFilters] = useSessionStorageState(
+    "classes-list-filters",
+    DEFAULT_FILTERS,
+  );
   const [editing, setEditing] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [deactivationReason, setDeactivationReason] = useState("");
@@ -55,16 +69,32 @@ export function useClassesList() {
   const [promotionLoading, setPromotionLoading] = useState(false);
   const [promotionSaving, setPromotionSaving] = useState(false);
   const importRef = useRef(null);
+  const currentPage = useRef(Math.max(1, Number(savedPage) || 1));
 
   const load = useCallback(
     async (page = 1) => {
+      currentPage.current = page;
+      setSavedPage(page);
+      persistSessionStorageValue("classes-list-page", page);
       setLoading(true);
       try {
         const params = { page, limit: 50, ...(debQ ? { search: debQ } : {}) };
         Object.entries(filters).forEach(([key, value]) => {
           if (value) params[key] = value;
         });
-        const response = await api.get("/classes", { params });
+        let response = await api.get("/classes", { params });
+        const lastPage = Math.max(
+          1,
+          response.data.pagination?.totalPages || 1,
+        );
+        if (page > lastPage) {
+          page = lastPage;
+          currentPage.current = page;
+          params.page = page;
+          setSavedPage(page);
+          persistSessionStorageValue("classes-list-page", page);
+          response = await api.get("/classes", { params });
+        }
         setItems(response.data.data);
         setPagination(response.data.pagination);
       } catch {
@@ -73,7 +103,7 @@ export function useClassesList() {
         setLoading(false);
       }
     },
-    [debQ, filters],
+    [debQ, filters, setSavedPage],
   );
 
   useEffect(() => {
@@ -87,7 +117,7 @@ export function useClassesList() {
       .catch(() => {});
   }, []);
   useEffect(() => {
-    load(1);
+    load(currentPage.current);
   }, [load]);
 
   const exportClasses = async () => {

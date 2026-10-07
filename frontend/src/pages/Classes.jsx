@@ -14,15 +14,23 @@ import {
   Download,
   Upload,
   GraduationCap,
+  ClipboardPlus,
   X,
 } from "lucide-react";
 import { downloadTemplate } from "@/lib/csv";
+import { toast } from "sonner";
+import Pagination from "@/components/Pagination";
 
 export default function Classes() {
   const [classDetails, setClassDetails] = useState(null);
   const [classDetailsLoading, setClassDetailsLoading] = useState(false);
   const [classDetailsError, setClassDetailsError] = useState("");
   const [classGradesError, setClassGradesError] = useState(false);
+  const [homeworkModal, setHomeworkModal] = useState(null);
+  const [homeworkLoading, setHomeworkLoading] = useState(false);
+  const [homeworkSaving, setHomeworkSaving] = useState(false);
+  const [homeworkSubjectId, setHomeworkSubjectId] = useState("");
+  const [undoneStudentIds, setUndoneStudentIds] = useState([]);
   const {
     has,
     items,
@@ -63,6 +71,46 @@ export default function Classes() {
     hasActiveFilters,
     load,
   } = useClassesList();
+
+  const openHomeworkModal = async (classItem) => {
+    setHomeworkModal({ classItem, students: [], subjects: [] });
+    setHomeworkSubjectId("");
+    setUndoneStudentIds([]);
+    setHomeworkLoading(true);
+    try {
+      const response = await api.get(
+        `/classes/${classItem.id}/homework-options`,
+      );
+      setHomeworkModal({ classItem, ...response.data });
+      if (response.data.subjects.length === 1) {
+        setHomeworkSubjectId(response.data.subjects[0].id);
+      }
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر تحميل بيانات الواجب");
+      setHomeworkModal(null);
+    } finally {
+      setHomeworkLoading(false);
+    }
+  };
+
+  const saveHomework = async (event) => {
+    event.preventDefault();
+    if (!homeworkSubjectId || undoneStudentIds.length === 0) return;
+    setHomeworkSaving(true);
+    try {
+      await api.post("/homework", {
+        classId: homeworkModal.classItem.id,
+        subjectId: homeworkSubjectId,
+        studentIds: undoneStudentIds,
+      });
+      toast.success(`تم تسجيل الواجب لـ ${undoneStudentIds.length} طالب`);
+      setHomeworkModal(null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر حفظ الواجب");
+    } finally {
+      setHomeworkSaving(false);
+    }
+  };
 
   const openClassDetails = async (classItem) => {
     setClassDetails({
@@ -293,7 +341,12 @@ export default function Classes() {
                       {c.code}
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-900">
-                      {c.name}
+                      <Link
+                        to={`/classes/${c.id}`}
+                        className="text-[#036A87] hover:underline"
+                      >
+                        {c.name}
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {c.grade} {c.section ? `— ${c.section}` : ""}
@@ -302,7 +355,21 @@ export default function Classes() {
                       {c.academicYear || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {c.teacherName || "—"}
+                      {has("teachers.view") && (c.teacherIds || []).length > 0 ? (
+                        <div className="flex flex-wrap gap-x-2">
+                          {(c.teacherIds || []).map((teacherId, index) => (
+                            <Link
+                              key={teacherId}
+                              to={`/teachers/${teacherId}`}
+                              className="text-[#036A87] hover:underline"
+                            >
+                              {c.teacherNames?.[index] || c.teacherName}
+                            </Link>
+                          ))}
+                        </div>
+                      ) : (
+                        c.teacherName || "—"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600 tabular-nums">
                       {c.studentCount || 0}
@@ -324,6 +391,18 @@ export default function Classes() {
                     </td>
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
+                        {c.status === "active" && has("homework.create") && (
+                          <button
+                            onClick={() => openHomeworkModal(c)}
+                            data-testid={`add-homework-${c.id}`}
+                            title="إضافة واجب"
+                            aria-label={`إضافة واجب لصف ${c.name}`}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-[#036A87] hover:bg-brand-light"
+                          >
+                            <ClipboardPlus className="h-4 w-4" />
+                            إضافة واجب
+                          </button>
+                        )}
                         {has("students.view") && (
                           <button
                             onClick={() => openClassDetails(c)}
@@ -386,6 +465,11 @@ export default function Classes() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          pagination={pagination}
+          onPageChange={load}
+          testId="classes-pagination"
+        />
       </div>
 
       {promotion && (
@@ -803,7 +887,26 @@ export default function Classes() {
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                   <div className="text-sm text-gray-500">المعلمون</div>
                   <div className="mt-1 text-base font-semibold text-gray-900">
-                    {classDetails.classItem.teacherName || "—"}
+                    {has("teachers.view") &&
+                    classDetails.classItem.teacherIds?.length ? (
+                      <div className="flex flex-wrap gap-x-2">
+                        {classDetails.classItem.teacherIds.map(
+                          (teacherId, index) => (
+                            <Link
+                              key={teacherId}
+                              to={`/teachers/${teacherId}`}
+                              onClick={() => setClassDetails(null)}
+                              className="text-[#036A87] hover:underline"
+                            >
+                              {classDetails.classItem.teacherNames?.[index] ||
+                                classDetails.classItem.teacherName}
+                            </Link>
+                          ),
+                        )}
+                      </div>
+                    ) : (
+                      classDetails.classItem.teacherName || "—"
+                    )}
                   </div>
                 </div>
               </div>
@@ -891,6 +994,180 @@ export default function Classes() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {homeworkModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-3 sm:p-5">
+          <form
+            onSubmit={saveHomework}
+            className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl"
+            dir="rtl"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  إضافة واجب — {homeworkModal.classItem.name}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  حدد المادة والطلاب الذين لم يؤدوا الواجب.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHomeworkModal(null)}
+                disabled={homeworkSaving}
+                title="إغلاق"
+                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-5 overflow-y-auto p-5">
+              {homeworkLoading ? (
+                <div className="py-10 text-center text-sm text-gray-500">
+                  <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
+                  جاري تحميل الصف والمواد...
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label
+                      htmlFor="homework-subject"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
+                      المادة
+                    </label>
+                    <select
+                      id="homework-subject"
+                      value={homeworkSubjectId}
+                      onChange={(event) =>
+                        setHomeworkSubjectId(event.target.value)
+                      }
+                      required
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      <option value="">اختر المادة</option>
+                      {homeworkModal.subjects.map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                    {homeworkModal.subjects.length === 0 && (
+                      <p className="mt-2 text-sm text-amber-700">
+                        لا توجد مواد مسندة إليك في هذا الصف.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-800">
+                          الطلاب الذين لم يؤدوا الواجب
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                          المحدد: {undoneStudentIds.length}
+                        </p>
+                      </div>
+                      {homeworkModal.students.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setUndoneStudentIds((selected) =>
+                              selected.length === homeworkModal.students.length
+                                ? []
+                                : homeworkModal.students.map(
+                                    (student) => student.id,
+                                  ),
+                            )
+                          }
+                          className="text-xs font-medium text-[#036A87] hover:underline"
+                        >
+                          {undoneStudentIds.length ===
+                          homeworkModal.students.length
+                            ? "إلغاء تحديد الكل"
+                            : "تحديد الكل"}
+                        </button>
+                      )}
+                    </div>
+                    {homeworkModal.students.length === 0 ? (
+                      <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
+                        لا يوجد طلاب نشطون في هذا الصف.
+                      </p>
+                    ) : (
+                      <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                        {homeworkModal.students.map((student) => {
+                          const checked = undoneStudentIds.includes(
+                            student.id,
+                          );
+                          return (
+                            <label
+                              key={student.id}
+                              className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${
+                                checked
+                                  ? "border-amber-300 bg-amber-50"
+                                  : "border-gray-200 bg-white hover:bg-gray-50"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setUndoneStudentIds((selected) =>
+                                    checked
+                                      ? selected.filter(
+                                          (id) => id !== student.id,
+                                        )
+                                      : [...selected, student.id],
+                                  )
+                                }
+                                className="h-4 w-4 accent-[#04CDF9]"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-gray-900">
+                                  {student.student?.fullName || "—"}
+                                </span>
+                                {student.code && (
+                                  <span className="block font-mono text-xs text-gray-500">
+                                    {student.code}
+                                  </span>
+                                )}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 p-4">
+              <button
+                type="button"
+                onClick={() => setHomeworkModal(null)}
+                disabled={homeworkSaving}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  homeworkLoading ||
+                  homeworkSaving ||
+                  !homeworkSubjectId ||
+                  undoneStudentIds.length === 0
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white hover:bg-[#02566E] disabled:opacity-50"
+              >
+                {homeworkSaving && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                حفظ الواجب
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

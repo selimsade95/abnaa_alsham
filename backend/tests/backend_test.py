@@ -117,6 +117,30 @@ class TestAuthAndCatalog:
 # ---------- Code Generation Settings ----------
 
 class TestCodeGenerationSettings:
+    def test_discount_options_can_be_configured(self, admin_headers):
+        options = [
+            {"name": "خصم الإخوة", "percentage": 10},
+            {"name": "خصم خاص", "percentage": 25},
+        ]
+        saved = requests.put(
+            f"{API}/settings/discount-options",
+            headers=admin_headers,
+            json={"options": options},
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["options"] == options
+
+        loaded = requests.get(f"{API}/discount-options", headers=admin_headers)
+        assert loaded.status_code == 200, loaded.text
+        assert loaded.json()["options"] == options
+
+        invalid = requests.put(
+            f"{API}/settings/discount-options",
+            headers=admin_headers,
+            json={"options": [{"name": "خصم غير صالح", "percentage": 101}]},
+        )
+        assert invalid.status_code == 400, invalid.text
+
     def test_get_defaults(self, admin_headers):
         r = requests.get(f"{API}/settings/code-generation", headers=admin_headers)
         assert r.status_code == 200
@@ -470,6 +494,91 @@ class TestStudents:
         assert d["id"] == created_student["id"]
         assert d.get("fullInfo", {}).get("note") == "excel-field-1"
 
+    def test_student_sibling_links_are_synchronized_in_both_directions(self, admin_headers):
+        sibling_students = []
+        for index in range(2):
+            response = requests.post(
+                f"{API}/students",
+                headers=admin_headers,
+                json={
+                    "student": {
+                        "fullName": f"TEST Sibling {index} {uuid.uuid4().hex[:8]}",
+                        "gender": "male",
+                        "registrationPath": "خاص",
+                    }
+                },
+            )
+            assert response.status_code == 200, response.text
+            sibling_students.append(response.json())
+
+        student = requests.post(
+            f"{API}/students",
+            headers=admin_headers,
+            json={
+                "student": {
+                    "fullName": f"TEST Sibling Parent {uuid.uuid4().hex[:8]}",
+                    "gender": "female",
+                    "registrationPath": "خاص",
+                },
+                "siblings": [{
+                    "studentId": sibling["id"],
+                    "fullName": sibling["student"]["fullName"],
+                    "gender": sibling["student"]["gender"],
+                    "class": "",
+                } for sibling in sibling_students],
+            },
+        )
+        assert student.status_code == 200, student.text
+        linked_student = student.json()
+
+        group_students = [linked_student, *sibling_students]
+        for group_student in group_students:
+            linked_record = requests.get(
+                f"{API}/students/{group_student['id']}", headers=admin_headers
+            )
+            assert linked_record.status_code == 200
+            actual_sibling_ids = {
+                item.get("studentId")
+                for item in linked_record.json()["siblings"]
+                if item.get("studentId")
+            }
+            assert actual_sibling_ids == {
+                other["id"]
+                for other in group_students
+                if other["id"] != group_student["id"]
+            }
+
+        update = requests.put(
+            f"{API}/students/{linked_student['id']}",
+            headers=admin_headers,
+            json={
+                "student": linked_student["student"],
+                "fees": linked_student.get("fees", {}),
+                "siblings": [{
+                    "studentId": sibling_students[0]["id"],
+                    "fullName": sibling_students[0]["student"]["fullName"],
+                    "gender": sibling_students[0]["student"]["gender"],
+                    "class": "",
+                }],
+            },
+        )
+        assert update.status_code == 200, update.text
+
+        retained_sibling = requests.get(
+            f"{API}/students/{sibling_students[0]['id']}", headers=admin_headers
+        )
+        removed_sibling = requests.get(
+            f"{API}/students/{sibling_students[1]['id']}", headers=admin_headers
+        )
+        assert retained_sibling.status_code == 200
+        assert removed_sibling.status_code == 200
+        assert linked_student["id"] in {
+            item.get("studentId") for item in retained_sibling.json()["siblings"]
+        }
+        assert linked_student["id"] not in {
+            item.get("studentId") for item in removed_sibling.json()["siblings"]
+        }
+
     def test_update_student_preserves_code(self, admin_headers, created_student, created_class):
         orig_code = created_student["code"]
         body = {
@@ -591,6 +700,53 @@ class TestStudents:
 # ---------- Payments ----------
 
 class TestPayments:
+    def test_split_payment_allocates_paid_total_to_students(self, admin_headers):
+        students = []
+        for index in range(2):
+            response = requests.post(
+                f"{API}/students",
+                headers=admin_headers,
+                json={
+                    "student": {
+                        "fullName": f"TEST Split {index} {uuid.uuid4().hex[:8]}",
+                        "gender": "male",
+                        "registrationPath": "خاص",
+                    },
+                    "fees": {"academicYear": "2026-2027", "totalPayable": 100},
+                },
+            )
+            assert response.status_code == 200, response.text
+            students.append(response.json())
+
+        body = {
+            "academicYear": "2026-2027",
+            "feeType": "academic",
+            "semester": "full_year",
+            "totalAmount": 100,
+            "allocations": [
+                {"student": students[0]["id"], "amount": 33.33},
+                {"student": students[1]["id"], "amount": 66.67},
+            ],
+            "paymentDate": datetime.utcnow().isoformat(),
+        }
+        invalid = requests.post(
+            f"{API}/payments/split",
+            headers=admin_headers,
+            json={**body, "totalAmount": 99},
+        )
+        assert invalid.status_code == 400
+
+        created = requests.post(
+            f"{API}/payments/split", headers=admin_headers, json=body
+        )
+        assert created.status_code == 200, created.text
+        payments = created.json()
+        assert len(payments) == 2
+        assert {payment["student"] for payment in payments} == {
+            student["id"] for student in students
+        }
+        assert sum(payment["amount"] for payment in payments) == 100
+
     def test_discount_reduces_student_payable_and_payment_limit(self, admin_headers):
         student_body = {
             "student": {"fullName": f"TEST Discount {uuid.uuid4().hex[:8]}", "gender": "male",

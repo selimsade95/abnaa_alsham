@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+import requests
 from models import *
 from services import (
     configure as configure_services,
@@ -102,8 +103,10 @@ PERMISSIONS_CATALOG = [
     ("grades.create", "إضافة الدرجات", "grades", "create"),
     ("grades.edit", "تعديل الدرجات", "grades", "edit"),
     ("grades.accept", "فتح فترة قبول الدرجات", "grades", "accept"),
-    ("messages.view", "عرض رسائل التحقق", "messages", "view"),
-    ("messages.reply", "الرد على رسائل التحقق", "messages", "reply"),
+    ("homework.view", "عرض الواجبات غير المنجزة", "homework", "view"),
+    ("homework.create", "تسجيل واجب غير منجز", "homework", "create"),
+    ("messages.view", "عرض الرسائل", "messages", "view"),
+    ("messages.reply", "الرد على الرسائل", "messages", "reply"),
 ]
 ALL_PERMS = [p[0] for p in PERMISSIONS_CATALOG]
 
@@ -586,7 +589,10 @@ async def delete_class_subject_assignment(assignment_id: str,
 #region Classes
 async def _class_enrich(c: dict) -> dict:
     teacher_ids = c.get("teacherIds") or ([c["teacherId"]] if c.get("teacherId") else [])
-    teachers = await db.teachers.find({"id": {"$in": teacher_ids}}, {"_id": 0, "fullName": 1, "code": 1}).to_list(100)
+    teachers = await db.teachers.find({"id": {"$in": teacher_ids}}, {"_id": 0, "id": 1, "fullName": 1, "code": 1}).to_list(100)
+    teachers_by_id = {teacher["id"]: teacher for teacher in teachers}
+    teacher_ids = [teacher_id for teacher_id in teacher_ids if teacher_id in teachers_by_id]
+    teachers = [teachers_by_id[teacher_id] for teacher_id in teacher_ids]
     c["teacherIds"] = teacher_ids
     c["teacherNames"] = [t.get("fullName") for t in teachers]
     c["teacherName"] = ", ".join(c["teacherNames"]) or None
@@ -758,6 +764,132 @@ async def reactivate_class(cid: str, current=Depends(require_permission("classes
     return {"ok": True, "reactivated": True}
 #endregion
 
+@api.get("/classes/{cid}/homework-options")
+async def homework_options(cid: str, current=Depends(require_permission("homework.create"))):
+    class_record = await ensure_class_access(cid, current)
+    if class_record.get("status") == "inactive":
+        raise HTTPException(400, "لا يمكن تسجيل واجب لصف غير نشط")
+
+    assignments = await db.class_subject_assignments.find(
+        {"classId": cid}, {"_id": 0, "subjectId": 1, "teacherIds": 1}
+    ).to_list(5000)
+    teacher_id = current.get("teacherId")
+    if teacher_id:
+        teacher_subjects = await db.teacher_subject_assignments.find(
+            {"teacherId": teacher_id}, {"_id": 0, "subjectId": 1}
+        ).to_list(5000)
+        assigned_subject_ids = {item["subjectId"] for item in teacher_subjects}
+        assignments = [
+            item for item in assignments
+            if teacher_id in (item.get("teacherIds") or [])
+            and item["subjectId"] in assigned_subject_ids
+        ]
+
+    subject_ids = list(dict.fromkeys(item["subjectId"] for item in assignments))
+    subjects = await db.subjects.find(
+        {"id": {"$in": subject_ids}, "status": {"$ne": "inactive"}},
+        {"_id": 0, "id": 1, "name": 1},
+    ).sort("name", 1).to_list(None)
+    students = await db.students.find(
+        {"currentClassId": cid, "student.status": {"$ne": "inactive"}},
+        {"_id": 0, "id": 1, "code": 1, "student.fullName": 1},
+    ).sort("student.fullName", 1).to_list(None)
+    return {"subjects": subjects, "students": students}
+
+@api.post("/homework")
+async def create_homework(body: HomeworkIn, current=Depends(require_permission("homework.create"))):
+    class_record = await ensure_class_access(body.classId, current)
+    if class_record.get("status") == "inactive":
+        raise HTTPException(400, "لا يمكن تسجيل واجب لصف غير نشط")
+    if len(body.studentIds) != len(set(body.studentIds)):
+        raise HTTPException(400, "لا يمكن تكرار الطالب في الطلب")
+
+    subject = await db.subjects.find_one(
+        {"id": body.subjectId, "status": {"$ne": "inactive"}},
+        {"_id": 0, "id": 1, "name": 1},
+    )
+    if not subject:
+        raise HTTPException(400, "المادة غير موجودة")
+    assignment = await db.class_subject_assignments.find_one(
+        {"classId": body.classId, "subjectId": body.subjectId}
+    )
+    if not assignment:
+        raise HTTPException(400, "المادة غير مسندة إلى هذا الصف")
+    teacher_id = current.get("teacherId")
+    if teacher_id:
+        if teacher_id not in (assignment.get("teacherIds") or []):
+            raise HTTPException(403, "المادة غير مسندة إليك في هذا الصف")
+        if not await db.teacher_subject_assignments.find_one(
+            {"teacherId": teacher_id, "subjectId": body.subjectId}
+        ):
+            raise HTTPException(403, "غير مخول لتدريس هذه المادة")
+
+    students = await db.students.find(
+        {
+            "id": {"$in": body.studentIds},
+            "currentClassId": body.classId,
+            "student.status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "student.fullName": 1, "classNotes": 1},
+    ).to_list(None)
+    if len(students) != len(body.studentIds):
+        raise HTTPException(400, "يجب اختيار طلاب نشطين من هذا الصف فقط")
+
+    timestamp = now_iso()
+    homework_date = timestamp[:10]
+    saved = []
+    for student in students:
+        homework_id = str(uuid.uuid4())
+        content = f"لم يؤدِ الطالب الواجب في مادة {subject['name']} بتاريخ {homework_date}"
+        note = {
+            "id": str(uuid.uuid4()),
+            "content": content,
+            "authorId": current["id"],
+            "authorName": current.get("name") or current.get("username") or "—",
+            "createdAt": timestamp,
+            "updatedAt": timestamp,
+            "homeworkId": homework_id,
+        }
+        record = {
+            "id": homework_id,
+            "classId": body.classId,
+            "className": class_record.get("name") or "—",
+            "studentId": student["id"],
+            "studentName": (student.get("student") or {}).get("fullName") or "—",
+            "studentCode": student.get("code"),
+            "subjectId": body.subjectId,
+            "subjectName": subject["name"],
+            "teacherId": current.get("teacherId"),
+            "teacherName": current.get("name") or current.get("username") or "—",
+            "homeworkDate": homework_date,
+            "status": "undone",
+            "createdAt": timestamp,
+            "createdBy": current["id"],
+        }
+        await db.homework.insert_one(record)
+        await db.students.update_one(
+            {"id": student["id"], "currentClassId": body.classId},
+            {"$push": {"classNotes": note}, "$set": {"updatedAt": timestamp}},
+        )
+        saved.append({key: value for key, value in record.items() if key != "_id"})
+    return {"ok": True, "created": len(saved), "homework": saved}
+
+@api.get("/homework")
+async def list_homework(current=Depends(require_permission("homework.view"))):
+    query = {"status": "undone"}
+    allowed = await grade_scope(current)
+    if allowed is not None:
+        if not allowed:
+            return []
+        query["$or"] = [
+            {"classId": class_id, "subjectId": subject_id}
+            for class_id, subject_id in allowed
+        ]
+    records = await db.homework.find(query, {"_id": 0}).sort(
+        [("homeworkDate", -1), ("studentName", 1)]
+    ).to_list(None)
+    return records
+
 #region Students
 async def _student_payment_totals(sid: str, ay: Optional[str] = None) -> dict:
     q = {"student": sid}
@@ -828,6 +960,7 @@ def _normalize_student_fees(fees):
         "totalPayable": float(fees.get("totalPayable") or 0),
         "discountEnabled": bool(fees.get("discountEnabled")),
         "discountPercentage": discount_percentage,
+        "discountName": (fees.get("discountName") or "").strip(),
     }
     if normalized["totalPayable"] < 0:
         raise HTTPException(400, "الرسوم لا يمكن أن تكون سالبة")
@@ -1068,25 +1201,41 @@ MESSAGE_TYPE_LABELS = {
 
 
 async def _send_message_email(recipient, subject, content):
-    if not os.environ.get("GMAIL_USER") or not os.environ.get("GMAIL_APP_PASSWORD"):
+    api_key = os.environ.get("RESEND_API_KEY")
+    sender = os.environ.get("MAIL_FROM")
+    if not api_key or not sender:
         raise RuntimeError("إعدادات البريد الإلكتروني غير مكتملة")
 
-    script = ROOT_DIR / "send_email.js"
-    process = await asyncio.create_subprocess_exec(
-        os.environ.get("NODE_BIN", "node"),
-        str(script),
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    payload = json.dumps(
-        {"to": recipient, "subject": subject, "text": content},
-        ensure_ascii=False,
-    ).encode("utf-8")
-    stdout, stderr = await process.communicate(payload)
-    if process.returncode:
-        logging.error("Nodemailer send failed: %s", stderr.decode("utf-8", errors="replace")[:1000])
-        raise RuntimeError("تعذر إرسال البريد الإلكتروني")
+    payload = {
+        "from": sender,
+        "to": recipient,
+        "subject": subject,
+        "text": content,
+    }
+
+    def send_request():
+        try:
+            response = requests.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "User-Agent": "abnaa-alsham-backend/1.0",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            response = error.response
+            detail = response.text[:1000] if response is not None else str(error)
+            status_code = response.status_code if response is not None else "unknown"
+            raise RuntimeError(
+                f"Resend returned HTTP {status_code}: {detail}"
+            ) from error
+        except requests.RequestException as error:
+            raise RuntimeError(f"Could not reach Resend: {error}") from error
+
+    await asyncio.to_thread(send_request)
 
 
 @api.post("/public/students/{sid}/messages")
@@ -1228,6 +1377,96 @@ async def _clean_reg_path(path, existing=None):
     if path and path not in await get_registration_paths() and path != existing:
         raise HTTPException(400, "مسار التسجيل غير صالح")
 
+async def _sync_sibling_links(student_id, student_doc, current, previous_siblings=None):
+    siblings = student_doc.get("siblings") or []
+    linked_ids = [
+        sibling.get("studentId")
+        for sibling in siblings
+        if isinstance(sibling, dict) and sibling.get("studentId")
+    ]
+    if student_id in linked_ids:
+        raise HTTPException(400, "لا يمكن ربط الطالب بنفسه كأخ أو أخت")
+    if len(linked_ids) != len(set(linked_ids)):
+        raise HTTPException(400, "لا يمكن ربط الطالب نفسه أكثر من مرة")
+
+    linked_students = {}
+    for sibling_id in linked_ids:
+        linked_students[sibling_id] = await ensure_student_access(sibling_id, current)
+
+    previous_ids = {
+        sibling.get("studentId")
+        for sibling in (previous_siblings or [])
+        if isinstance(sibling, dict) and sibling.get("studentId")
+    }
+    desired_ids = set(linked_ids)
+    for sibling_id in previous_ids - desired_ids:
+        sibling_doc = await db.students.find_one({"id": sibling_id}, {"_id": 0})
+        if not sibling_doc:
+            continue
+        sibling_doc["siblings"] = [
+            sibling
+            for sibling in sibling_doc.get("siblings") or []
+            if not isinstance(sibling, dict)
+            or sibling.get("studentId") != student_id
+        ]
+        sibling_doc["siblings"] = [
+            {**sibling, "order": index + 1}
+            if isinstance(sibling, dict)
+            else sibling
+            for index, sibling in enumerate(sibling_doc["siblings"])
+        ]
+        await db.students.update_one(
+            {"id": sibling_id}, {"$set": {"siblings": sibling_doc["siblings"]}}
+        )
+
+    group = {student_id: student_doc, **linked_students}
+    group_links = {}
+    for group_student_id, group_student in group.items():
+        student_data = group_student.get("student") or {}
+        class_name = student_data.get("newClass") or ""
+        if group_student.get("currentClassId"):
+            class_doc = await db.classes.find_one(
+                {"id": group_student["currentClassId"]}, {"_id": 0, "name": 1}
+            )
+            class_name = (class_doc or {}).get("name") or class_name
+        group_links[group_student_id] = {
+            "studentId": group_student_id,
+            "fullName": student_data.get("fullName") or "",
+            "gender": student_data.get("gender") or "",
+            "class": class_name,
+        }
+
+    for group_student_id, group_student in linked_students.items():
+        sibling_siblings = [
+            sibling
+            for sibling in group_student.get("siblings") or []
+            if isinstance(sibling, dict)
+        ]
+        sibling_indexes = {
+            sibling.get("studentId"): index
+            for index, sibling in enumerate(sibling_siblings)
+            if sibling.get("studentId")
+        }
+        for related_student_id, related_link in group_links.items():
+            if related_student_id == group_student_id:
+                continue
+            if related_student_id in sibling_indexes:
+                sibling_index = sibling_indexes[related_student_id]
+                sibling_siblings[sibling_index] = {
+                    **sibling_siblings[sibling_index],
+                    **related_link,
+                }
+            else:
+                sibling_indexes[related_student_id] = len(sibling_siblings)
+                sibling_siblings.append(related_link)
+        sibling_siblings = [
+            {**sibling, "order": index + 1}
+            for index, sibling in enumerate(sibling_siblings)
+        ]
+        await db.students.update_one(
+            {"id": group_student_id}, {"$set": {"siblings": sibling_siblings}}
+        )
+
 @api.post("/students")
 async def create_student(body: StudentIn, current=Depends(require_permission("students.create"))):
     p = body.model_dump()
@@ -1250,6 +1489,7 @@ async def create_student(body: StudentIn, current=Depends(require_permission("st
         if allowed is not None and p["currentClassId"] not in allowed:
             raise HTTPException(403, "لا يمكنك إضافة طالب إلى هذا الصف")
     await db.students.insert_one(p)
+    await _sync_sibling_links(p["id"], p, current)
     if initial and float(initial.get("amount") or 0) > 0:
         amt = float(initial["amount"])
         if amt > academic_payable:
@@ -1287,6 +1527,7 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
             raise HTTPException(403, "لا يمكنك نقل الطالب إلى هذا الصف")
     p["updatedAt"] = now_iso()
     await db.students.update_one({"id": sid}, {"$set": p})
+    await _sync_sibling_links(sid, p, current, existing.get("siblings") or [])
     return await _augment_student(await db.students.find_one({"id": sid}, {"_id": 0}), current)
 
 STUDENT_NOTE_FIELDS = {"class": "classNotes", "non-class": "nonClassNotes"}
@@ -1738,6 +1979,81 @@ async def create_payment(body: PaymentIn, current=Depends(require_permission("pa
     doc["totalRemainingAtPayment"] = remaining_at_payment
     return await _enrich_payment({k: v for k, v in doc.items() if k != "_id"})
 
+@api.post("/payments/split")
+async def create_split_payment(body: PaymentSplitIn, current=Depends(require_permission("payments.create"))):
+    fee_type = _clean_fee_type(body.feeType)
+    if body.semester not in ("first", "second", "full_year"):
+        raise HTTPException(400, "الفصل غير صالح")
+    if not math.isfinite(body.totalAmount) or body.totalAmount <= 0:
+        raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
+    if any(
+        not math.isfinite(item.amount) or item.amount <= 0
+        for item in body.allocations
+    ):
+        raise HTTPException(400, "يجب أن يكون مبلغ كل طالب أكبر من صفر")
+    total_cents = round(body.totalAmount * 100)
+    allocations_cents = [round(item.amount * 100) for item in body.allocations]
+    if abs(body.totalAmount * 100 - total_cents) > 0.000001 or any(
+        abs(item.amount * 100 - cents) > 0.000001
+        for item, cents in zip(body.allocations, allocations_cents)
+    ):
+        raise HTTPException(400, "المبالغ يجب أن تكون بدقة منزلتين عشريتين")
+    if sum(allocations_cents) != total_cents:
+        raise HTTPException(400, "مجموع مبالغ الطلاب يجب أن يساوي إجمالي الدفعة")
+    student_ids = [item.student for item in body.allocations]
+    if len(student_ids) != len(set(student_ids)):
+        raise HTTPException(400, "لا يمكن إضافة الطالب أكثر من مرة")
+
+    for allocation in body.allocations:
+        await ensure_student_access(allocation.student, current)
+        await _validate_no_overpayment(
+            allocation.student,
+            body.academicYear,
+            allocation.amount,
+            fee_type,
+        )
+
+    created_at = now_iso()
+    documents = [
+        {
+            "id": str(uuid.uuid4()),
+            "student": allocation.student,
+            "academicYear": body.academicYear,
+            "feeType": fee_type,
+            "semester": body.semester,
+            "amount": allocations_cents[index] / 100,
+            "paymentDate": body.paymentDate,
+            "notes": body.notes or "",
+            "createdBy": current["id"],
+            "createdAt": created_at,
+            "updatedAt": created_at,
+        }
+        for index, allocation in enumerate(body.allocations)
+    ]
+    await db.payments.insert_many(documents)
+    result = []
+    for document in documents:
+        student = await db.students.find_one(
+            {"id": document["student"]}, {"_id": 0, "fees": 1}
+        )
+        payable = _fee_payables((student or {}).get("fees") or {}).get(fee_type, 0)
+        paid_at_payment, remaining_at_payment = await _payment_snapshot(
+            document, payable
+        )
+        document["totalPaidAtPayment"] = paid_at_payment
+        document["totalRemainingAtPayment"] = remaining_at_payment
+        await db.payments.update_one(
+            {"id": document["id"]},
+            {
+                "$set": {
+                    "totalPaidAtPayment": paid_at_payment,
+                    "totalRemainingAtPayment": remaining_at_payment,
+                }
+            },
+        )
+        result.append(await _enrich_payment(document))
+    return result
+
 @api.post("/payments/refund")
 async def create_refund(body: RefundIn, current=Depends(require_permission("payments.create"))):
     fee_type = _clean_fee_type(body.feeType)
@@ -1809,6 +2125,43 @@ async def get_settings(current=Depends(require_permission("settings.codeGenerati
 @api.get("/registration-paths")
 async def list_registration_paths(current=Depends(get_current_user)):
     return {"paths": await get_registration_paths()}
+
+DEFAULT_DISCOUNT_OPTIONS = []
+
+async def get_discount_options():
+    doc = await db.settings.find_one({"id": "discount_options"}, {"_id": 0})
+    return doc.get("options", DEFAULT_DISCOUNT_OPTIONS) if doc else DEFAULT_DISCOUNT_OPTIONS
+
+@api.get("/discount-options")
+async def list_discount_options(current=Depends(get_current_user)):
+    return {"options": await get_discount_options()}
+
+@api.put("/settings/discount-options")
+async def update_discount_options(
+    body: DiscountOptionsIn,
+    current=Depends(require_permission("settings.codeGeneration.update")),
+):
+    options = []
+    names = set()
+    for option in body.options:
+        name = option.name.strip()
+        if not name:
+            raise HTTPException(400, "اسم الخصم مطلوب")
+        if name in names:
+            raise HTTPException(400, "أسماء الخصومات يجب أن تكون فريدة")
+        if not math.isfinite(option.percentage) or not 0 < option.percentage <= 100:
+            raise HTTPException(400, "نسبة الخصم يجب أن تكون أكبر من صفر ولا تتجاوز 100")
+        names.add(name)
+        options.append({"name": name, "percentage": option.percentage})
+    await db.settings.update_one(
+        {"id": "discount_options"},
+        {
+            "$set": {"options": options, "updatedAt": now_iso()},
+            "$setOnInsert": {"createdAt": now_iso()},
+        },
+        upsert=True,
+    )
+    return {"options": options}
 
 @api.get("/settings/registration-paths")
 async def get_registration_path_settings(current=Depends(require_permission("settings.codeGeneration.view"))):
@@ -1971,7 +2324,8 @@ async def on_startup():
          "permissions": ["students.view", "students.print", "students.fullInformation.view",
                          "students.documents.view", "students.orphanDocument.view",
                          "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete",
-                         "classes.view", "subjects.view", "grades.view", "grades.create", "grades.edit"]},
+                         "classes.view", "subjects.view", "grades.view", "grades.create", "grades.edit",
+                         "homework.view", "homework.create"]},
     ]
     admin_role_id = None
     for r in defaults:
@@ -1999,7 +2353,8 @@ async def on_startup():
         {"name": "Teacher"},
         {"$addToSet": {"permissions": {"$each": [
             "subjects.view", "grades.view", "grades.create", "grades.edit",
-            "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete"
+            "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete",
+            "homework.view", "homework.create"
         ]}}},
     )
 
@@ -2025,6 +2380,7 @@ async def on_startup():
         await db.teacher_subject_assignments.create_index([("teacherId", 1), ("subjectId", 1)], unique=True)
         await db.class_subject_assignments.create_index([("classId", 1), ("subjectId", 1)], unique=True)
         await db.grades.create_index([("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
+        await db.homework.create_index([("classId", 1), ("subjectId", 1), ("status", 1), ("homeworkDate", -1)])
         await db.verification_messages.create_index([("createdAt", -1)])
     except Exception as e:
         logging.warning(f"index setup: {e}")

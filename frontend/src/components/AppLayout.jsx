@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import {
@@ -14,6 +14,7 @@ import {
   Presentation,
   Settings as SettingsIcon,
   ClipboardCheck,
+  ClipboardList,
   MessageSquareText,
 } from "lucide-react";
 
@@ -21,6 +22,24 @@ export default function AppLayout() {
   const { user, logout, has } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if (
+        !event.ctrlKey ||
+        event.key !== "Enter" ||
+        event.isComposing ||
+        !(event.target instanceof Element)
+      )
+        return;
+      const form = event.target.closest("form");
+      if (!form) return;
+      event.preventDefault();
+      form.requestSubmit();
+    };
+    document.addEventListener("keydown", handleShortcut, true);
+    return () => document.removeEventListener("keydown", handleShortcut, true);
+  }, []);
 
   const NAV = [
     {
@@ -66,10 +85,17 @@ export default function AppLayout() {
       show: has("grades.view"),
     },
     {
-      to: "/verification-messages",
-      label: "رسائل التحقق",
+      to: "/homework",
+      label: "الواجبات",
+      icon: ClipboardList,
+      testid: "nav-homework",
+      show: has("homework.view"),
+    },
+    {
+      to: "/messages",
+      label: "الرسائل",
       icon: MessageSquareText,
-      testid: "nav-verification-messages",
+      testid: "nav-messages",
       show: has("messages.view"),
     },
     {
@@ -122,7 +148,7 @@ export default function AppLayout() {
           <div className="text-xs text-gray-500">نظام إدارة المدرسة</div>
         </div>
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {NAV.filter((i) => i.show).map((item) => {
           const Icon = item.icon;
           return (

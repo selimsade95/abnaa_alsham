@@ -51,8 +51,23 @@ class StudentNoteIn(BaseModel):
     content: str
 
 
+class HomeworkIn(BaseModel):
+    classId: str
+    subjectId: str
+    studentIds: List[str] = Field(min_length=1)
+
+
 class RegistrationPathsIn(BaseModel):
     paths: List[str]
+
+
+class DiscountOptionIn(BaseModel):
+    name: str
+    percentage: float
+
+
+class DiscountOptionsIn(BaseModel):
+    options: List[DiscountOptionIn]
 
 
 class PaymentIn(BaseModel):
@@ -61,6 +76,21 @@ class PaymentIn(BaseModel):
     feeType: str = "academic"
     semester: str
     amount: float
+    paymentDate: str
+    notes: Optional[str] = ""
+
+
+class PaymentAllocationIn(BaseModel):
+    student: str
+    amount: float
+
+
+class PaymentSplitIn(BaseModel):
+    academicYear: str
+    feeType: str = "academic"
+    semester: str
+    totalAmount: float
+    allocations: List[PaymentAllocationIn] = Field(min_length=1)
     paymentDate: str
     notes: Optional[str] = ""
 

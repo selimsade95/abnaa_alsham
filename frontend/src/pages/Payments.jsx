@@ -11,12 +11,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { Link } from "react-router-dom";
+import StudentSearchSelect from "@/components/StudentSearchSelect";
 import {
   FEE_TYPE_LABELS,
   FEE_TYPE_ORDER,
   SEMESTER_LABELS,
 } from "@/lib/studentDefaults";
 import { downloadCsv } from "@/lib/csv";
+import { useSessionStorageState } from "@/hooks/useSessionStorageState";
 
 const PaymentBadge = ({ semester }) => {
   const styles = {
@@ -48,14 +51,24 @@ const studentFeePayable = (student, feeType) => {
 const studentFeePaid = (student, feeType) =>
   Number(student?.fees?.byType?.[feeType]?.paid || 0);
 
+const splitAmount = (amount, count) => {
+  if (!count) return [];
+  const cents = Math.max(0, Math.round((Number(amount) || 0) * 100));
+  const each = Math.floor(cents / count);
+  const remainder = cents % count;
+  return Array.from({ length: count }, (_, index) =>
+    ((each + (index === count - 1 ? remainder : 0)) / 100).toFixed(2),
+  );
+};
+
 export default function Payments() {
   const { has } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [year, setYear] = useState("");
-  const [sem, setSem] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
+  const [q, setQ] = useSessionStorageState("payments-list-search", "");
+  const [year, setYear] = useSessionStorageState("payments-list-year", "");
+  const [sem, setSem] = useSessionStorageState("payments-list-semester", "");
+  const [debouncedQ, setDebouncedQ] = useState(q.trim());
   const [editing, setEditing] = useState(null);
   const [students, setStudents] = useState([]);
   const [confirmId, setConfirmId] = useState(null);
@@ -135,11 +148,15 @@ export default function Payments() {
       try {
         const r = await api.get("/students", { params: { limit: 5000 } });
         setStudents(r.data?.data || []);
-      } catch {}
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "تعذر تحميل الطلاب");
+        return;
+      }
     }
     setEditing({
       id: null,
-      student: "",
+      split: true,
+      allocations: [],
       academicYear: "",
       feeType: "academic",
       semester: "full_year",
@@ -214,7 +231,10 @@ export default function Payments() {
       try {
         const r = await api.get("/students", { params: { limit: 5000 } });
         setStudents(r.data?.data || []);
-      } catch {}
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "تعذر تحميل الطلاب");
+        return;
+      }
     }
     setEditing({ ...p, paymentDate: (p.paymentDate || "").slice(0, 10) });
   };
@@ -248,8 +268,22 @@ export default function Payments() {
   const save = async (e) => {
     e.preventDefault();
     try {
+      if (!editing.id && editing.split) {
+        const totalCents = Math.round(Number(editing.amount) * 100);
+        const allocationsCents = editing.allocations.map((item) =>
+          Math.round(Number(item.amount) * 100),
+        );
+        if (
+          !editing.allocations.length ||
+          allocationsCents.some((amount) => amount <= 0) ||
+          allocationsCents.reduce((sum, amount) => sum + amount, 0) !==
+            totalCents
+        ) {
+          toast.error("يجب أن يساوي مجموع مبالغ الطلاب إجمالي الدفعة");
+          return;
+        }
+      }
       const body = {
-        student: editing.student,
         academicYear: editing.academicYear,
         feeType: editing.feeType || "academic",
         semester: editing.semester,
@@ -257,8 +291,20 @@ export default function Payments() {
         paymentDate: editing.paymentDate,
         notes: editing.notes || "",
       };
-      if (editing.id) await api.put(`/payments/${editing.id}`, body);
-      else await api.post("/payments", body);
+      if (editing.id)
+        await api.put(`/payments/${editing.id}`, {
+          ...body,
+          student: editing.student,
+        });
+      else
+        await api.post("/payments/split", {
+          ...body,
+          totalAmount: Number(editing.amount),
+          allocations: editing.allocations.map((item) => ({
+            student: item.student,
+            amount: Number(item.amount),
+          })),
+        });
       toast.success("تم الحفظ");
       setEditing(null);
       load();
@@ -440,7 +486,16 @@ export default function Payments() {
                     data-testid={`payment-row-${p.id}`}
                   >
                     <td className="px-4 py-3 font-medium text-gray-900">
-                      {p.studentName}
+                      {has("students.view") ? (
+                        <Link
+                          to={`/students/${p.student}`}
+                          className="text-[#036A87] hover:underline"
+                        >
+                          {p.studentName}
+                        </Link>
+                      ) : (
+                        p.studentName
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {p.academicYear || "—"}
@@ -516,50 +571,155 @@ export default function Payments() {
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 border border-gray-200">
             <h3 className="text-lg font-bold text-gray-900 mb-4">
               {editing.id ? "تعديل دفعة" : "إضافة دفعة"}
             </h3>
             <form onSubmit={save} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  الطالب
+                  {editing.id ? "الطالب" : "الطلاب"}
                 </label>
-                <select
-                  required
-                  data-testid="payment-student-select"
-                  value={editing.student}
-                  onChange={(e) => {
-                    const selectedStudent = students.find(
-                      (item) => item.id === e.target.value,
-                    );
-                    const availableTypes = FEE_TYPE_ORDER.filter(
-                      (feeType) =>
-                        studentFeePayable(selectedStudent, feeType) > 0,
-                    );
-                    setEditing({
-                      ...editing,
-                      student: e.target.value,
-                      feeType: availableTypes.includes(editing.feeType)
-                        ? editing.feeType
-                        : availableTypes[0] || "academic",
-                    });
-                  }}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
-                >
-                  <option value="">اختر الطالب</option>
-                  {students?.length > 0 ? (
-                    students?.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.student?.fullName}
+                {editing.id ? (
+                  <select
+                    required
+                    data-testid="payment-student-select"
+                    value={editing.student}
+                    onChange={(e) => {
+                      const selectedStudent = students.find(
+                        (item) => item.id === e.target.value,
+                      );
+                      const availableTypes = FEE_TYPE_ORDER.filter(
+                        (feeType) =>
+                          studentFeePayable(selectedStudent, feeType) > 0,
+                      );
+                      setEditing({
+                        ...editing,
+                        student: e.target.value,
+                        feeType: availableTypes.includes(editing.feeType)
+                          ? editing.feeType
+                          : availableTypes[0] || "academic",
+                      });
+                    }}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  >
+                    <option value="">اختر الطالب</option>
+                    {students.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.student?.fullName}
                       </option>
-                    ))
-                  ) : (
-                    <option value="" disabled>
-                      No options
-                    </option>
-                  )}
-                </select>
+                    ))}
+                  </select>
+                ) : (
+                  <StudentSearchSelect
+                    students={students}
+                    excludeIds={editing.allocations.map((item) => item.student)}
+                    onSelect={(student) => {
+                      const allocations = [
+                        ...editing.allocations,
+                        { student: student.id, amount: "0.00" },
+                      ];
+                      const amounts = splitAmount(editing.amount, allocations.length);
+                      setEditing({
+                        ...editing,
+                        allocations: allocations.map((item, index) => ({
+                          ...item,
+                          amount: amounts[index],
+                        })),
+                      });
+                    }}
+                    placeholder="ابحث عن طالب لإضافته للدفعة"
+                  />
+                )}
+                {!editing.id && editing.allocations.length > 0 && (
+                  <>
+                    <div className="mt-3 space-y-2">
+                      {editing.allocations.map((allocation, index) => {
+                        const student = students.find(
+                          (item) => item.id === allocation.student,
+                        );
+                        return (
+                          <div
+                            key={allocation.student}
+                            className="flex items-center gap-2 rounded-lg border border-gray-200 p-2"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
+                              {student?.student?.fullName || "طالب"}
+                            </span>
+                            <input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              aria-label={`مبلغ ${student?.student?.fullName || "الطالب"}`}
+                              value={allocation.amount}
+                              onChange={(event) =>
+                                setEditing({
+                                  ...editing,
+                                  allocations: editing.allocations.map(
+                                    (item, itemIndex) =>
+                                      itemIndex === index
+                                        ? {
+                                            ...item,
+                                            amount: event.target.value,
+                                          }
+                                        : item,
+                                  ),
+                                })
+                              }
+                              className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allocations = editing.allocations.filter(
+                                  (_, itemIndex) => itemIndex !== index,
+                                );
+                                const amounts = splitAmount(
+                                  editing.amount,
+                                  allocations.length,
+                                );
+                                setEditing({
+                                  ...editing,
+                                  allocations: allocations.map(
+                                    (item, itemIndex) => ({
+                                      ...item,
+                                      amount: amounts[itemIndex],
+                                    }),
+                                  ),
+                                });
+                              }}
+                              aria-label="إزالة الطالب من الدفعة"
+                              className="rounded-md p-1.5 text-red-500 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p
+                      className={`mt-2 text-xs ${
+                        editing.allocations.reduce(
+                          (sum, item) =>
+                            sum + Math.round(Number(item.amount || 0) * 100),
+                          0,
+                        ) === Math.round(Number(editing.amount || 0) * 100)
+                          ? "text-emerald-700"
+                          : "text-amber-700"
+                      }`}
+                    >
+                      مجموع التوزيع:{" "}
+                      {(
+                        editing.allocations.reduce(
+                          (sum, item) =>
+                            sum + Math.round(Number(item.amount || 0) * 100),
+                          0,
+                        ) / 100
+                      ).toFixed(2)}{" "}
+                      / {Number(editing.amount || 0).toFixed(2)}
+                    </p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -574,15 +734,24 @@ export default function Payments() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2"
                   data-testid="payment-fee-type-select"
                 >
-                  {FEE_TYPE_ORDER.filter(
-                    (feeType) =>
-                      studentFeePayable(
-                        students.find(
-                          (student) => student.id === editing.student,
-                        ),
-                        feeType,
-                      ) > 0 || feeType === (editing.feeType || "academic"),
-                  ).map((feeType) => (
+                  {FEE_TYPE_ORDER.filter((feeType) => {
+                    const feeStudents = editing.split
+                      ? editing.allocations.map((allocation) =>
+                          students.find(
+                            (student) => student.id === allocation.student,
+                          ),
+                        )
+                      : [
+                          students.find(
+                            (student) => student.id === editing.student,
+                          ),
+                        ];
+                    return (
+                      feeStudents.some(
+                        (student) => studentFeePayable(student, feeType) > 0,
+                      ) || feeType === (editing.feeType || "academic")
+                    );
+                  }).map((feeType) => (
                     <option key={feeType} value={feeType}>
                       {FEE_TYPE_LABELS[feeType]}
                     </option>
@@ -625,7 +794,7 @@ export default function Payments() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    المبلغ
+                  {editing.split ? "إجمالي المبلغ" : "المبلغ"}
                   </label>
                   <input
                     required
@@ -634,9 +803,27 @@ export default function Payments() {
                     step="0.01"
                     data-testid="payment-amount-input"
                     value={editing.amount}
-                    onChange={(e) =>
-                      setEditing({ ...editing, amount: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const amount = e.target.value;
+                      const amounts = splitAmount(
+                        amount,
+                        editing.allocations?.length || 0,
+                      );
+                      setEditing({
+                        ...editing,
+                        amount,
+                        ...(editing.split
+                          ? {
+                              allocations: editing.allocations.map(
+                                (item, index) => ({
+                                  ...item,
+                                  amount: amounts[index],
+                                }),
+                              ),
+                            }
+                          : {}),
+                      });
+                    }}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
                   />
                 </div>

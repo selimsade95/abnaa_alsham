@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -560,7 +560,21 @@ export default function StudentView() {
           />
           <Row label="الصف السابق" value={s.previousClass} />
           <Row label="رقم الحافلة" value={s.busNumber} />
-          <Row label="الصف الجديد" value={s.newClass} />
+          <Row
+            label="الصف الجديد"
+            value={
+              data.currentClassId && s.newClass && has("classes.view") ? (
+                <Link
+                  to={`/classes/${data.currentClassId}`}
+                  className="text-[#036A87] hover:underline"
+                >
+                  {s.newClass}
+                </Link>
+              ) : (
+                s.newClass
+              )
+            }
+          />
           <Row label="الوضع" value={STATUS_LABELS[s.status]} />
           <Row
             label="يتيم"
@@ -904,7 +918,18 @@ export default function StudentView() {
                 {data.siblings.map((sib, i) => (
                   <tr key={i} className="border-t border-gray-100">
                     <td className="px-3 py-2 text-gray-600">{sib.order}</td>
-                    <td className="px-3 py-2 text-gray-900">{sib.fullName}</td>
+                    <td className="px-3 py-2 text-gray-900">
+                      {sib.studentId ? (
+                        <Link
+                          to={`/students/${sib.studentId}`}
+                          className="text-[#036A87] hover:underline"
+                        >
+                          {sib.fullName}
+                        </Link>
+                      ) : (
+                        sib.fullName
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-gray-600">
                       {GENDER_LABELS[sib.gender]}
                     </td>

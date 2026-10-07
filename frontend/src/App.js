@@ -23,10 +23,13 @@ import Payments from "@/pages/Payments";
 import PaymentPrint from "@/pages/PaymentPrint";
 import Teachers from "@/pages/Teachers";
 import TeacherForm from "@/pages/TeacherForm";
+import TeacherView from "@/pages/TeacherView";
 import Classes from "@/pages/Classes";
+import ClassView from "@/pages/ClassView";
 import Settings from "@/pages/Settings";
 import Subjects from "@/pages/Subjects";
 import Grades from "@/pages/Grades";
+import Homework from "@/pages/Homework";
 import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
@@ -176,10 +179,26 @@ function App() {
               }
             />
             <Route
+              path="/teachers/:id"
+              element={
+                <Protected perm="teachers.view">
+                  <TeacherView />
+                </Protected>
+              }
+            />
+            <Route
               path="/teachers/:id/edit"
               element={
                 <Protected perm="teachers.update">
                   <TeacherForm mode="edit" />
+                </Protected>
+              }
+            />
+            <Route
+              path="/classes/:id"
+              element={
+                <Protected perm="classes.view">
+                  <ClassView />
                 </Protected>
               }
             />
@@ -208,12 +227,24 @@ function App() {
               }
             />
             <Route
-              path="/verification-messages"
+              path="/homework"
+              element={
+                <Protected perm="homework.view">
+                  <Homework />
+                </Protected>
+              }
+            />
+            <Route
+              path="/messages"
               element={
                 <Protected perm="messages.view">
                   <VerificationMessages />
                 </Protected>
               }
+            />
+            <Route
+              path="/verification-messages"
+              element={<Navigate to="/messages" replace />}
             />
             <Route
               path="/payments"
