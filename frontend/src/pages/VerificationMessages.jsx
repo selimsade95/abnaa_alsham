@@ -71,7 +71,9 @@ export default function VerificationMessages() {
         message.content,
         message.response,
       ].some((value) =>
-        String(value || "").toLocaleLowerCase().includes(normalizedSearch),
+        String(value || "")
+          .toLocaleLowerCase()
+          .includes(normalizedSearch),
       );
     const messageDate = message.createdAt?.slice(0, 10) || "";
     const matchesStatus =
@@ -87,8 +89,7 @@ export default function VerificationMessages() {
       (!dateTo || messageDate <= dateTo)
     );
   });
-  const hasFilters =
-    search || typeFilter || statusFilter || dateFrom || dateTo;
+  const hasFilters = search || typeFilter || statusFilter || dateFrom || dateTo;
   const clearFilters = () => {
     setSearch("");
     setTypeFilter("");
@@ -109,7 +110,9 @@ export default function VerificationMessages() {
         response,
       });
       setMessages((current) =>
-        current.map((item) => (item.id === result.data.id ? result.data : item)),
+        current.map((item) =>
+          item.id === result.data.id ? result.data : item,
+        ),
       );
       setDrafts((current) => ({ ...current, [message.id]: "" }));
       toast.success("تم حفظ الرد وإرساله بالبريد الإلكتروني");
@@ -128,7 +131,9 @@ export default function VerificationMessages() {
     try {
       const result = await api.post(`/messages/${message.id}/resend`);
       setMessages((current) =>
-        current.map((item) => (item.id === result.data.id ? result.data : item)),
+        current.map((item) =>
+          item.id === result.data.id ? result.data : item,
+        ),
       );
       toast.success("تم إرسال الرد بالبريد الإلكتروني");
     } catch (sendError) {

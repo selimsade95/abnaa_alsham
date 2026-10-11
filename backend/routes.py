@@ -8,7 +8,7 @@ import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io, math, asyncio, js
 from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 import requests
 from models import *
 from services import (
@@ -105,6 +105,10 @@ PERMISSIONS_CATALOG = [
     ("grades.accept", "فتح فترة قبول الدرجات", "grades", "accept"),
     ("homework.view", "عرض الواجبات غير المنجزة", "homework", "view"),
     ("homework.create", "تسجيل واجب غير منجز", "homework", "create"),
+    ("attendance.view", "عرض الحضور", "attendance", "view"),
+    ("attendance.manage", "إدارة الحضور", "attendance", "manage"),
+    ("attendance.reports.view", "عرض تقارير الغياب المتكرر", "attendance.reports", "view"),
+    ("attendance.reports.print", "طباعة تقارير الغياب المتكرر", "attendance.reports", "print"),
     ("messages.view", "عرض الرسائل", "messages", "view"),
     ("messages.reply", "الرد على الرسائل", "messages", "reply"),
 ]
@@ -2207,6 +2211,214 @@ async def update_settings(body: CodeSettingsIn, current=Depends(require_permissi
 #endregion
 
 #region Dashboard
+ATTENDANCE_REPEAT_ABSENCE_THRESHOLD = 3
+
+async def _attendance_class_scope(current):
+    allowed = await allowed_class_ids(current)
+    if allowed is None:
+        return None
+    return {"id": {"$in": allowed}}
+
+async def _repeated_absence_reports(current, class_id=None, date_from=None, date_to=None):
+    class_scope = await _attendance_class_scope(current)
+    query = {}
+    if class_scope is not None:
+        query["classId"] = class_scope["id"]
+    if class_id:
+        await ensure_class_access(class_id, current)
+        query["classId"] = class_id
+    if date_from or date_to:
+        query["attendanceDate"] = {
+            **({"$gte": date_from.isoformat()} if date_from else {}),
+            **({"$lte": date_to.isoformat()} if date_to else {}),
+        }
+
+    sessions = await db.attendance_sessions.find(
+        query,
+        {"_id": 0, "classId": 1, "className": 1, "attendanceDate": 1, "records": 1},
+    ).to_list(100000)
+    by_student = {}
+    for session in sessions:
+        for record in session.get("records", []):
+            if record.get("status") != "absent":
+                continue
+            student_id = record.get("studentId")
+            if not student_id:
+                continue
+            report = by_student.setdefault(student_id, {
+                "studentId": student_id,
+                "studentName": record.get("studentName") or "—",
+                "studentCode": record.get("studentCode") or "",
+                "absenceDates": set(),
+                "absences": [],
+            })
+            report["absenceDates"].add(session["attendanceDate"])
+            report["absences"].append({
+                "date": session["attendanceDate"],
+                "classId": session["classId"],
+                "className": session.get("className") or "—",
+                "reason": record.get("absenceReason"),
+            })
+
+    reports = [
+        report for report in by_student.values()
+        if len(report["absenceDates"]) >= ATTENDANCE_REPEAT_ABSENCE_THRESHOLD
+    ]
+    for report in reports:
+        report["absences"].sort(key=lambda absence: absence["date"])
+        report["absenceCount"] = len(report["absenceDates"])
+        report.pop("absenceDates")
+        report["lastAbsenceDate"] = report["absences"][-1]["date"]
+    return sorted(
+        reports,
+        key=lambda report: (-report["absenceCount"], report["studentName"].casefold()),
+    )
+
+def require_any_permission(*permissions):
+    async def checker(current=Depends(get_current_user)):
+        if not any(permission in (current.get("permissions") or []) for permission in permissions):
+            raise HTTPException(403, "لا تملك صلاحية الوصول إلى الحضور")
+        return current
+    return checker
+
+@api.get("/attendance/classes")
+async def list_attendance_classes(
+    current=Depends(require_any_permission("attendance.view", "attendance.manage")),
+):
+    query = await _attendance_class_scope(current)
+    classes = await db.classes.find(
+        {**(query or {}), "status": {"$ne": "inactive"}},
+        {"_id": 0, "id": 1, "name": 1, "grade": 1, "section": 1, "academicYear": 1},
+    ).sort("name", 1).to_list(5000)
+    return classes
+
+@api.get("/attendance/classes/{class_id}")
+async def get_class_attendance(
+    class_id: str,
+    attendance_date: date = Query(alias="date"),
+    current=Depends(require_any_permission("attendance.view", "attendance.manage")),
+):
+    class_doc = await ensure_class_access(class_id, current)
+    records = await db.students.find(
+        {
+            "currentClassId": class_id,
+            "student.status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "code": 1, "student.fullName": 1},
+    ).sort("student.fullName", 1).to_list(5000)
+    session = await db.attendance_sessions.find_one(
+        {"classId": class_id, "attendanceDate": attendance_date.isoformat()},
+        {"_id": 0},
+    )
+    saved_records = {
+        record["studentId"]: record
+        for record in (session or {}).get("records", [])
+    }
+    return {
+        "classId": class_id,
+        "className": class_doc["name"],
+        "attendanceDate": attendance_date.isoformat(),
+        "markedAt": (session or {}).get("markedAt"),
+        "students": [
+            {
+                "studentId": student["id"],
+                "studentName": (student.get("student") or {}).get("fullName") or "—",
+                "studentCode": student.get("code") or "",
+                "status": saved_records.get(student["id"], {}).get("status"),
+                "absenceReason": saved_records.get(student["id"], {}).get("absenceReason"),
+                "lateMinutes": saved_records.get(student["id"], {}).get("lateMinutes"),
+            }
+            for student in records
+        ],
+    }
+
+@api.put("/attendance/classes/{class_id}")
+async def save_class_attendance(
+    class_id: str,
+    body: AttendanceSaveIn,
+    current=Depends(require_permission("attendance.manage")),
+):
+    class_doc = await ensure_class_access(class_id, current)
+    if body.attendanceDate > date.today():
+        raise HTTPException(400, "لا يمكن تسجيل الحضور لتاريخ مستقبلي")
+    date_value = body.attendanceDate.isoformat()
+    students = await db.students.find(
+        {
+            "currentClassId": class_id,
+            "student.status": {"$ne": "inactive"},
+        },
+        {"_id": 0, "id": 1, "code": 1, "student.fullName": 1},
+    ).to_list(5000)
+    submitted = [record.studentId for record in body.records]
+    if len(submitted) != len(set(submitted)):
+        raise HTTPException(400, "لا يمكن تسجيل الطالب أكثر من مرة")
+    students_by_id = {student["id"]: student for student in students}
+    if set(submitted) != set(students_by_id):
+        raise HTTPException(400, "يجب تحديد حالة الحضور لكل طالب نشط في الصف")
+
+    for record in body.records:
+        if record.status == "absent" and not record.absenceReason:
+            raise HTTPException(400, "يرجى تحديد ما إذا كان الغياب بعذر أو دون عذر")
+        if record.status == "absent" and record.lateMinutes is not None:
+            raise HTTPException(400, "لا يمكن تسجيل مدة تأخر للطالب الغائب")
+        if record.status == "present" and record.absenceReason is not None:
+            raise HTTPException(400, "سبب الغياب متاح للطالب الغائب فقط")
+
+    records_by_id = {record.studentId: record for record in body.records}
+    timestamp = now_iso()
+    session_records = [
+        {
+            "studentId": student_id,
+            "studentName": (student.get("student") or {}).get("fullName") or "—",
+            "studentCode": student.get("code") or "",
+            "status": records_by_id[student_id].status,
+            "absenceReason": records_by_id[student_id].absenceReason,
+            "lateMinutes": records_by_id[student_id].lateMinutes,
+        }
+        for student_id, student in students_by_id.items()
+    ]
+    await db.attendance_sessions.update_one(
+        {"classId": class_id, "attendanceDate": date_value},
+        {
+            "$set": {
+                "className": class_doc["name"],
+                "records": session_records,
+                "markedBy": current["id"],
+                "markedAt": timestamp,
+                "updatedAt": timestamp,
+            },
+            "$setOnInsert": {
+                "id": str(uuid.uuid4()),
+                "createdAt": timestamp,
+            },
+        },
+        upsert=True,
+    )
+    return {
+        "ok": True,
+        "classId": class_id,
+        "attendanceDate": date_value,
+        "total": len(session_records),
+        "absent": sum(record["status"] == "absent" for record in session_records),
+        "markedAt": timestamp,
+    }
+
+@api.get("/attendance/reports")
+async def repeated_absence_reports(
+    class_id: Optional[str] = Query(default=None, alias="classId"),
+    date_from: Optional[date] = Query(default=None, alias="dateFrom"),
+    date_to: Optional[date] = Query(default=None, alias="dateTo"),
+    current=Depends(require_permission("attendance.reports.view")),
+):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(400, "نطاق التاريخ غير صالح")
+    reports = await _repeated_absence_reports(current, class_id, date_from, date_to)
+    return {
+        "threshold": ATTENDANCE_REPEAT_ABSENCE_THRESHOLD,
+        "count": len(reports),
+        "reports": reports,
+    }
+
 @api.get("/dashboard/stats")
 async def dashboard_stats(current=Depends(get_current_user)):
     allowed = await allowed_class_ids(current)
@@ -2286,7 +2498,7 @@ async def dashboard_stats(current=Depends(get_current_user)):
     total_bus_fee = stu_agg[0].get("bus", 0) if stu_agg else 0
     total_outfit_fee = stu_agg[0].get("outfit", 0) if stu_agg else 0
 
-    return {
+    result = {
         "total": total,
         "female": female,
         "male": male,
@@ -2303,6 +2515,46 @@ async def dashboard_stats(current=Depends(get_current_user)):
             (total_payable or 0) - (total_collected or 0)
         )
     }
+    permissions = current.get("permissions") or []
+    if "attendance.view" in permissions or "attendance.manage" in permissions:
+        today = datetime.now().date().isoformat()
+        attendance_scope = await _attendance_class_scope(current)
+        session_query = {"attendanceDate": today}
+        if attendance_scope is not None:
+            session_query["classId"] = attendance_scope["id"]
+        sessions = await db.attendance_sessions.find(
+            session_query, {"_id": 0, "records": 1}
+        ).to_list(5000)
+        attendance_counts = [
+            record
+            for session in sessions
+            for record in session.get("records", [])
+        ]
+        marked_classes = len(sessions)
+        active_classes_filter = {**(attendance_scope or {}), "status": {"$ne": "inactive"}}
+        active_classes = await db.classes.count_documents(active_classes_filter)
+        present_count = sum(record.get("status") == "present" for record in attendance_counts)
+        absent_count = sum(record.get("status") == "absent" for record in attendance_counts)
+        late_count = sum(
+            record.get("status") == "present" and record.get("lateMinutes") is not None
+            for record in attendance_counts
+        )
+        result["attendance"] = {
+            "date": today,
+            "markedClasses": marked_classes,
+            "totalClasses": active_classes,
+            "present": present_count,
+            "absent": absent_count,
+            "late": late_count,
+            "markedStudents": present_count + absent_count,
+            "attendanceRate": (
+                round(present_count * 100 / (present_count + absent_count), 1)
+                if present_count + absent_count else 0
+            ),
+        }
+    if "attendance.reports.view" in permissions:
+        result["repeatedAbsenceReports"] = len(await _repeated_absence_reports(current))
+    return result
 #endregion
 
 #region Startup / seed
@@ -2325,7 +2577,7 @@ async def on_startup():
                          "students.documents.view", "students.orphanDocument.view",
                          "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete",
                          "classes.view", "subjects.view", "grades.view", "grades.create", "grades.edit",
-                         "homework.view", "homework.create"]},
+                         "homework.view", "homework.create", "attendance.view", "attendance.manage"]},
     ]
     admin_role_id = None
     for r in defaults:
@@ -2354,7 +2606,7 @@ async def on_startup():
         {"$addToSet": {"permissions": {"$each": [
             "subjects.view", "grades.view", "grades.create", "grades.edit",
             "students.notes.view", "students.notes.create", "students.notes.update", "students.notes.delete",
-            "homework.view", "homework.create"
+            "homework.view", "homework.create", "attendance.view", "attendance.manage"
         ]}}},
     )
 
@@ -2381,6 +2633,8 @@ async def on_startup():
         await db.class_subject_assignments.create_index([("classId", 1), ("subjectId", 1)], unique=True)
         await db.grades.create_index([("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
         await db.homework.create_index([("classId", 1), ("subjectId", 1), ("status", 1), ("homeworkDate", -1)])
+        await db.attendance_sessions.create_index([("classId", 1), ("attendanceDate", 1)], unique=True)
+        await db.attendance_sessions.create_index([("attendanceDate", -1)])
         await db.verification_messages.create_index([("createdAt", -1)])
     except Exception as e:
         logging.warning(f"index setup: {e}")

@@ -73,6 +73,9 @@ body {
   .no-print * {
     display: none !important;
   }
+  aside {
+    display: none !important;
+  }
   .print-area {
     display: block !important;
     box-shadow: none !important;

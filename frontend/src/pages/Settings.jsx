@@ -18,7 +18,8 @@ const ENTITIES = [
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#04CDF9] focus:outline-none focus:ring-2 focus:ring-[#04CDF9]/20 disabled:bg-gray-50";
-const cardClass = "rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6";
+const cardClass =
+  "rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6";
 
 export default function Settings() {
   const {
@@ -73,7 +74,9 @@ export default function Settings() {
             <Hash className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">توليد الأكواد</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              توليد الأكواد
+            </h2>
             <p className="mt-1 text-sm text-gray-500">
               خصص بادئة وصيغة الرمز لكل نوع من السجلات.
             </p>
@@ -320,7 +323,10 @@ export default function Settings() {
           ))}
         </div>
         {canEdit && (
-          <form className="mt-3 flex items-center gap-2" onSubmit={addRegistrationPath}>
+          <form
+            className="mt-3 flex items-center gap-2"
+            onSubmit={addRegistrationPath}
+          >
             <input
               value={newRegistrationPath}
               onChange={(event) => setNewRegistrationPath(event.target.value)}

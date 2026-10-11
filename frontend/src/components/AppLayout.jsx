@@ -15,11 +15,12 @@ import {
   Settings as SettingsIcon,
   ClipboardCheck,
   ClipboardList,
+  CalendarCheck,
   MessageSquareText,
 } from "lucide-react";
 
 export default function AppLayout() {
-  const { user, logout, has } = useAuth();
+  const { user, logout, has, hasAny } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
@@ -90,6 +91,17 @@ export default function AppLayout() {
       icon: ClipboardList,
       testid: "nav-homework",
       show: has("homework.view"),
+    },
+    {
+      to: "/attendance",
+      label: "الحضور",
+      icon: CalendarCheck,
+      testid: "nav-attendance",
+      show: hasAny([
+        "attendance.view",
+        "attendance.manage",
+        "attendance.reports.view",
+      ]),
     },
     {
       to: "/messages",
@@ -231,7 +243,7 @@ export default function AppLayout() {
           </div>
         </div>
       )}
-      <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14">
+      <header className="no-print lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14">
         <div className="flex items-center gap-2">
           <img
             src="/assets/logo.png"

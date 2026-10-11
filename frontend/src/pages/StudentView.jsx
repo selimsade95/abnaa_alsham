@@ -855,7 +855,9 @@ export default function StudentView() {
                     <td className="px-3 py-2 text-gray-600">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
-                    <td className={`px-3 py-2 font-semibold tabular-nums ${p.type === "refund" || Number(p.amount) < 0 ? "text-red-600" : "text-gray-900"}`}>
+                    <td
+                      className={`px-3 py-2 font-semibold tabular-nums ${p.type === "refund" || Number(p.amount) < 0 ? "text-red-600" : "text-gray-900"}`}
+                    >
                       {p.amount}
                     </td>
                     <td className="px-3 py-2 text-gray-600">

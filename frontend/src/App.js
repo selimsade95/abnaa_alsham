@@ -30,6 +30,7 @@ import Settings from "@/pages/Settings";
 import Subjects from "@/pages/Subjects";
 import Grades from "@/pages/Grades";
 import Homework from "@/pages/Homework";
+import Attendance from "@/pages/Attendance";
 import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
@@ -44,7 +45,12 @@ function Protected({ children, perm }) {
       </div>
     );
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
-  if (perm && !has(perm))
+  if (
+    perm &&
+    !(Array.isArray(perm)
+      ? perm.some((permission) => has(permission))
+      : has(perm))
+  )
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
         لا تملك صلاحية الوصول إلى هذه الصفحة
@@ -223,6 +229,20 @@ function App() {
               element={
                 <Protected perm="grades.view">
                   <Grades />
+                </Protected>
+              }
+            />
+            <Route
+              path="/attendance"
+              element={
+                <Protected
+                  perm={[
+                    "attendance.view",
+                    "attendance.manage",
+                    "attendance.reports.view",
+                  ]}
+                >
+                  <Attendance />
                 </Protected>
               }
             />

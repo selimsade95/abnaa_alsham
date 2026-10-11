@@ -152,10 +152,7 @@ export function useStudentsList() {
           if (value) params[key] = value;
         });
         let response = await api.get("/students", { params });
-        const lastPage = Math.max(
-          1,
-          response.data.pagination?.totalPages || 1,
-        );
+        const lastPage = Math.max(1, response.data.pagination?.totalPages || 1);
         if (page > lastPage) {
           page = lastPage;
           currentPage.current = page;

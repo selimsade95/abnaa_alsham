@@ -28,7 +28,9 @@ export default function TeacherView() {
       .get(`/teachers/${id}`)
       .then((response) => setTeacher(response.data))
       .catch((error) => {
-        toast.error(error?.response?.data?.detail || "تعذر تحميل بيانات المعلم");
+        toast.error(
+          error?.response?.data?.detail || "تعذر تحميل بيانات المعلم",
+        );
       });
   }, [id]);
 

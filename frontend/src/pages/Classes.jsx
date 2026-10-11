@@ -355,7 +355,8 @@ export default function Classes() {
                       {c.academicYear || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {has("teachers.view") && (c.teacherIds || []).length > 0 ? (
+                      {has("teachers.view") &&
+                      (c.teacherIds || []).length > 0 ? (
                         <div className="flex flex-wrap gap-x-2">
                           {(c.teacherIds || []).map((teacherId, index) => (
                             <Link
@@ -481,7 +482,8 @@ export default function Classes() {
                   ترفيع طلاب {promotion.sourceClass.name}
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  اختر الصف التالي والطلاب المراد نقلهم، ثم حدد المستحق الدراسي الجديد لكل طالب.
+                  اختر الصف التالي والطلاب المراد نقلهم، ثم حدد المستحق الدراسي
+                  الجديد لكل طالب.
                 </p>
               </div>
               <button
@@ -512,7 +514,9 @@ export default function Classes() {
                     <option key={destination.id} value={destination.id}>
                       {destination.name}
                       {destination.section ? ` — ${destination.section}` : ""}
-                      {destination.academicYear ? ` — ${destination.academicYear}` : ""}
+                      {destination.academicYear
+                        ? ` — ${destination.academicYear}`
+                        : ""}
                     </option>
                   ))}
                 </select>
@@ -520,7 +524,8 @@ export default function Classes() {
 
               {promotionLoading ? (
                 <div className="py-10 text-center text-sm text-gray-500">
-                  <Loader2 className="ms-2 inline h-4 w-4 animate-spin" /> جاري تحميل الطلاب...
+                  <Loader2 className="ms-2 inline h-4 w-4 animate-spin" /> جاري
+                  تحميل الطلاب...
                 </div>
               ) : promotion.students.length === 0 ? (
                 <div className="py-10 text-center text-sm text-gray-500">
@@ -535,7 +540,9 @@ export default function Classes() {
                           <input
                             type="checkbox"
                             aria-label="تحديد كل الطلاب"
-                            checked={promotion.students.every((student) => student.selected)}
+                            checked={promotion.students.every(
+                              (student) => student.selected,
+                            )}
                             onChange={(event) =>
                               updatePromotion({
                                 students: promotion.students.map((student) => ({
@@ -554,7 +561,10 @@ export default function Classes() {
                     </thead>
                     <tbody>
                       {promotion.students.map((student) => (
-                        <tr key={student.id} className="border-t border-gray-100">
+                        <tr
+                          key={student.id}
+                          className="border-t border-gray-100"
+                        >
                           <td className="px-3 py-2">
                             <input
                               type="checkbox"
@@ -570,11 +580,17 @@ export default function Classes() {
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <div className="font-medium text-gray-900">{student.student?.fullName}</div>
-                            <div className="text-xs text-gray-500">{student.code}</div>
+                            <div className="font-medium text-gray-900">
+                              {student.student?.fullName}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {student.code}
+                            </div>
                           </td>
                           <td className="px-3 py-2 tabular-nums text-gray-600">
-                            {Number(student.fees?.totalPayable || 0).toLocaleString("ar-EG")}
+                            {Number(
+                              student.fees?.totalPayable || 0,
+                            ).toLocaleString("ar-EG")}
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -603,7 +619,11 @@ export default function Classes() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 p-5">
               <span className="text-sm text-gray-500">
-                المحدد: {promotion.students.filter((student) => student.selected).length}
+                المحدد:{" "}
+                {
+                  promotion.students.filter((student) => student.selected)
+                    .length
+                }
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -616,11 +636,16 @@ export default function Classes() {
                 <button
                   type="button"
                   onClick={submitPromotion}
-                  disabled={promotionSaving || promotion.students.every((student) => !student.selected)}
+                  disabled={
+                    promotionSaving ||
+                    promotion.students.every((student) => !student.selected)
+                  }
                   data-testid="submit-promotion"
                   className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {promotionSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {promotionSaving && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
                   ترفيع المحددين
                 </button>
               </div>
@@ -834,7 +859,10 @@ export default function Classes() {
                   {classDetails.classItem.name}
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {[classDetails.classItem.grade, classDetails.classItem.section]
+                  {[
+                    classDetails.classItem.grade,
+                    classDetails.classItem.section,
+                  ]
                     .filter(Boolean)
                     .join(" — ")}
                   {classDetails.classItem.academicYear
@@ -857,15 +885,11 @@ export default function Classes() {
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                   <div className="text-sm text-gray-500">عدد الطلاب</div>
                   <div className="mt-1 text-2xl font-bold text-gray-900">
-                    {classDetailsLoading
-                      ? "…"
-                      : classDetails.students.length}
+                    {classDetailsLoading ? "…" : classDetails.students.length}
                   </div>
                 </div>
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm text-gray-500">
-                    متوسط درجات الصف
-                  </div>
+                  <div className="text-sm text-gray-500">متوسط درجات الصف</div>
                   <div className="mt-1 text-2xl font-bold text-gray-900">
                     {classDetailsLoading
                       ? "…"
@@ -917,7 +941,10 @@ export default function Classes() {
                 </p>
               )}
               {classDetailsError ? (
-                <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+                <p
+                  className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+                  role="alert"
+                >
                   {classDetailsError}
                 </p>
               ) : (
@@ -1097,9 +1124,7 @@ export default function Classes() {
                     ) : (
                       <div className="grid max-h-80 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
                         {homeworkModal.students.map((student) => {
-                          const checked = undoneStudentIds.includes(
-                            student.id,
-                          );
+                          const checked = undoneStudentIds.includes(student.id);
                           return (
                             <label
                               key={student.id}
@@ -1161,9 +1186,7 @@ export default function Classes() {
                 }
                 className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white hover:bg-[#02566E] disabled:opacity-50"
               >
-                {homeworkSaving && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {homeworkSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                 حفظ الواجب
               </button>
             </div>

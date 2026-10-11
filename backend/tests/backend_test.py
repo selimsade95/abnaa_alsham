@@ -8,7 +8,7 @@ import time
 import uuid
 import pytest
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
@@ -300,6 +300,122 @@ def created_student(admin_headers, created_class):
     r = requests.post(f"{API}/students", headers=admin_headers, json=body)
     assert r.status_code == 200, r.text
     return r.json()
+
+
+class TestAttendance:
+    def test_daily_attendance_and_repeated_absence_report(
+        self, admin_headers, created_class, created_student
+    ):
+        first_absence = (datetime.utcnow().date() - timedelta(days=3)).isoformat()
+        final_absence = (datetime.utcnow().date() - timedelta(days=1)).isoformat()
+        target_student_id = created_student["id"]
+
+        for days_ago in (3, 2, 1):
+            attendance_date = (
+                datetime.utcnow().date() - timedelta(days=days_ago)
+            ).isoformat()
+            roster = requests.get(
+                f"{API}/attendance/classes/{created_class['id']}",
+                headers=admin_headers,
+                params={"date": attendance_date},
+            )
+            assert roster.status_code == 200, roster.text
+            attendance_records = [
+                {
+                    "studentId": student["studentId"],
+                    "status": (
+                        "absent"
+                        if student["studentId"] == target_student_id
+                        else "present"
+                    ),
+                    "absenceReason": (
+                        "excused"
+                        if student["studentId"] == target_student_id
+                        else None
+                    ),
+                }
+                for student in roster.json()["students"]
+            ]
+            if days_ago == 3:
+                missing_reason_records = [
+                    {
+                        "studentId": student["studentId"],
+                        "status": (
+                            "absent"
+                            if student["studentId"] == target_student_id
+                            else "present"
+                        ),
+                    }
+                    for student in roster.json()["students"]
+                ]
+                missing_reason = requests.put(
+                    f"{API}/attendance/classes/{created_class['id']}",
+                    headers=admin_headers,
+                    json={
+                        "attendanceDate": attendance_date,
+                        "records": missing_reason_records,
+                    },
+                )
+                assert missing_reason.status_code == 400, missing_reason.text
+            saved = requests.put(
+                f"{API}/attendance/classes/{created_class['id']}",
+                headers=admin_headers,
+                json={
+                    "attendanceDate": attendance_date,
+                    "records": attendance_records,
+                },
+            )
+            assert saved.status_code == 200, saved.text
+            assert saved.json()["absent"] == 1
+
+        repeated = requests.get(
+            f"{API}/attendance/reports",
+            headers=admin_headers,
+            params={"dateFrom": first_absence, "dateTo": final_absence},
+        )
+        assert repeated.status_code == 200, repeated.text
+        student_report = next(
+            report
+            for report in repeated.json()["reports"]
+            if report["studentId"] == target_student_id
+        )
+        assert student_report["absenceCount"] == 3
+        assert len(student_report["absences"]) == 3
+        assert all(absence["reason"] == "excused" for absence in student_report["absences"])
+
+        today = datetime.utcnow().date().isoformat()
+        roster = requests.get(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            params={"date": today},
+        )
+        assert roster.status_code == 200, roster.text
+        attendance_records = [
+            {
+                "studentId": student["studentId"],
+                "status": "present",
+                "lateMinutes": 12 if student["studentId"] == target_student_id else None,
+            }
+            for student in roster.json()["students"]
+        ]
+        late_saved = requests.put(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            json={"attendanceDate": today, "records": attendance_records},
+        )
+        assert late_saved.status_code == 200, late_saved.text
+        today_roster = requests.get(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            params={"date": today},
+        )
+        late_student = next(
+            record
+            for record in today_roster.json()["students"]
+            if record["studentId"] == target_student_id
+        )
+        assert late_student["status"] == "present"
+        assert late_student["lateMinutes"] == 12
 
 
 class TestStudents:

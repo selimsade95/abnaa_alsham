@@ -51,7 +51,9 @@ export function useSettings() {
       name: option.name.trim(),
       percentage: Number(option.percentage),
     }));
-    const discountNames = normalizedDiscountOptions.map((option) => option.name);
+    const discountNames = normalizedDiscountOptions.map(
+      (option) => option.name,
+    );
     if (
       normalizedDiscountOptions.some(
         (option) =>

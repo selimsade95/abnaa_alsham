@@ -11,6 +11,9 @@ import {
   BookOpen,
   Bus,
   Shirt,
+  CalendarCheck,
+  UserX,
+  Clock3,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -38,7 +41,7 @@ const StatCard = ({ title, value, icon: Icon, tint, testid }) => (
 );
 
 export default function Dashboard() {
-  const { has } = useAuth();
+  const { has, hasAny } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -77,43 +80,154 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <StatCard
-          title="إجمالي الطلاب"
-          value={loading ? "…" : (stats?.total ?? 0)}
-          icon={Users}
-          tint={{ bg: "#E0F9FF", fg: "#036A87" }}
-          testid="stat-total"
-        />
-        <StatCard
-          title="الطالبات"
-          value={loading ? "…" : (stats?.female ?? 0)}
-          icon={User}
-          tint={{ bg: "#FDE9F1", fg: "#B4356D" }}
-          testid="stat-female"
-        />
-        <StatCard
-          title="الطلاب الذكور"
-          value={loading ? "…" : (stats?.male ?? 0)}
-          icon={UserCheck}
-          tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
-          testid="stat-male"
-        />
-        <StatCard
-          title="الأيتام"
-          value={loading ? "…" : (stats?.orphans ?? 0)}
-          icon={HeartHandshake}
-          tint={{ bg: "#FEF3E7", fg: "#B45309" }}
-          testid="stat-orphans"
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Students Stats */}
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              إحصائيات الطلاب
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              نظرة عامة على الطلاب المسجلين
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <StatCard
+              title="إجمالي الطلاب"
+              value={loading ? "…" : (stats?.total ?? 0)}
+              icon={Users}
+              tint={{ bg: "#E0F9FF", fg: "#036A87" }}
+              testid="stat-total"
+            />
+
+            <StatCard
+              title="الطالبات"
+              value={loading ? "…" : (stats?.female ?? 0)}
+              icon={User}
+              tint={{ bg: "#FDE9F1", fg: "#B4356D" }}
+              testid="stat-female"
+            />
+
+            <StatCard
+              title="الطلاب الذكور"
+              value={loading ? "…" : (stats?.male ?? 0)}
+              icon={UserCheck}
+              tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
+              testid="stat-male"
+            />
+
+            <StatCard
+              title="الأيتام"
+              value={loading ? "…" : (stats?.orphans ?? 0)}
+              icon={HeartHandshake}
+              tint={{ bg: "#FEF3E7", fg: "#B45309" }}
+              testid="stat-orphans"
+            />
+          </div>
+        </section>
+
+        {/* Attendance Stats */}
+        {hasAny(["attendance.view", "attendance.manage"]) && (
+          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+            <div className="mb-5 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  إحصائيات الحضور اليوم
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {stats?.attendance?.date || ""}
+                </p>
+              </div>
+
+              <Link
+                to="/attendance"
+                className="text-sm font-medium text-[#036A87] hover:underline whitespace-nowrap"
+              >
+                فتح الحضور
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <StatCard
+                title="نسبة الحضور"
+                value={
+                  loading ? "…" : `${stats?.attendance?.attendanceRate ?? 0}%`
+                }
+                icon={CalendarCheck}
+                tint={{ bg: "#E7F7EE", fg: "#166534" }}
+                testid="stat-attendance-rate"
+              />
+
+              <StatCard
+                title="الطلاب الحاضرون"
+                value={loading ? "…" : (stats?.attendance?.present ?? 0)}
+                icon={Users}
+                tint={{ bg: "#E0F9FF", fg: "#036A87" }}
+                testid="stat-attendance-present"
+              />
+
+              <StatCard
+                title="الطلاب الغائبون"
+                value={loading ? "…" : (stats?.attendance?.absent ?? 0)}
+                icon={UserX}
+                tint={{ bg: "#FEF3E7", fg: "#B45309" }}
+                testid="stat-attendance-absent"
+              />
+
+              <StatCard
+                title="الطلاب المتأخرون"
+                value={loading ? "…" : (stats?.attendance?.late ?? 0)}
+                icon={Clock3}
+                tint={{ bg: "#FFF1E8", fg: "#A94E17" }}
+                testid="stat-attendance-late"
+              />
+
+              <StatCard
+                title="الصفوف المسجل حضورها"
+                value={
+                  loading
+                    ? "…"
+                    : `${stats?.attendance?.markedClasses ?? 0} / ${
+                        stats?.attendance?.totalClasses ?? 0
+                      }`
+                }
+                icon={BookOpen}
+                tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
+                testid="stat-attendance-classes"
+              />
+            </div>
+          </section>
+        )}
       </div>
 
+      {/* Repeated Absence Reports */}
+      {has("attendance.reports.view") && (
+        <Link
+          to="/attendance?tab=reports"
+          className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900 hover:bg-amber-100"
+          data-testid="stat-repeated-absence-reports"
+        >
+          <span className="font-medium">تقارير الغياب المتكرر</span>
+          <span className="rounded-full bg-white px-3 py-1 font-bold tabular-nums">
+            {loading ? "…" : (stats?.repeatedAbsenceReports ?? 0)}
+          </span>
+        </Link>
+      )}
+
+      {/* Financial Stats */}
       {has("payments.view") && (
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">
-            الملخص المالي
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+          <div className="mb-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              الملخص المالي
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              ملخص الرسوم والمبالغ المالية للطلاب
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard
               title="إجمالي المستحق"
               value={
@@ -125,6 +239,7 @@ export default function Dashboard() {
               tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
               testid="stat-payable"
             />
+
             <StatCard
               title="إجمالي المحصّل"
               value={
@@ -136,6 +251,7 @@ export default function Dashboard() {
               tint={{ bg: "#E7F7EE", fg: "#166534" }}
               testid="stat-collected"
             />
+
             <StatCard
               title="إجمالي المتبقي"
               value={
@@ -147,6 +263,7 @@ export default function Dashboard() {
               tint={{ bg: "#FEF3E7", fg: "#B45309" }}
               testid="stat-remaining"
             />
+
             <StatCard
               title="إجمالي رسوم الكتب"
               value={
@@ -158,6 +275,7 @@ export default function Dashboard() {
               tint={{ bg: "#F4F7E8", fg: "#58721C" }}
               testid="stat-books-fee"
             />
+
             <StatCard
               title="إجمالي رسوم الحافلة"
               value={
@@ -169,6 +287,7 @@ export default function Dashboard() {
               tint={{ bg: "#FFF1E8", fg: "#A94E17" }}
               testid="stat-bus-fee"
             />
+
             <StatCard
               title="إجمالي رسوم الزي"
               value={
@@ -181,7 +300,7 @@ export default function Dashboard() {
               testid="stat-outfit-fee"
             />
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

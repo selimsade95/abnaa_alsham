@@ -1,5 +1,6 @@
 """Pydantic request models used by the API routes."""
 
+from datetime import date
 from typing import List, Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -55,6 +56,18 @@ class HomeworkIn(BaseModel):
     classId: str
     subjectId: str
     studentIds: List[str] = Field(min_length=1)
+
+
+class AttendanceRecordIn(BaseModel):
+    studentId: str
+    status: Literal["present", "absent"]
+    absenceReason: Optional[Literal["excused", "unexcused"]] = None
+    lateMinutes: Optional[int] = Field(default=None, ge=1, le=1440)
+
+
+class AttendanceSaveIn(BaseModel):
+    attendanceDate: date
+    records: List[AttendanceRecordIn]
 
 
 class RegistrationPathsIn(BaseModel):

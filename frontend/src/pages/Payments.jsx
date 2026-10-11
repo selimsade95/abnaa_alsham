@@ -619,7 +619,10 @@ export default function Payments() {
                         ...editing.allocations,
                         { student: student.id, amount: "0.00" },
                       ];
-                      const amounts = splitAmount(editing.amount, allocations.length);
+                      const amounts = splitAmount(
+                        editing.amount,
+                        allocations.length,
+                      );
                       setEditing({
                         ...editing,
                         allocations: allocations.map((item, index) => ({
@@ -794,7 +797,7 @@ export default function Payments() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {editing.split ? "إجمالي المبلغ" : "المبلغ"}
+                    {editing.split ? "إجمالي المبلغ" : "المبلغ"}
                   </label>
                   <input
                     required

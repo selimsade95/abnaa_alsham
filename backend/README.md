@@ -20,6 +20,16 @@ viewing outstanding records. It requires the `homework.create` and
 `homework.view` permissions respectively. Recording an item also adds a
 teacher-authored class note to the student's details.
 
+Attendance is recorded once per class and date through
+`GET /api/attendance/classes/{classId}` and
+`PUT /api/attendance/classes/{classId}`. Attendance sessions have a unique
+class/date key; repeated absences on three or more distinct dates appear in
+`GET /api/attendance/reports`. These endpoints use the `attendance.view`,
+`attendance.manage`, and `attendance.reports.view` permissions. Printing
+reports is controlled by `attendance.reports.print`. Absence records require
+an excused/unexcused reason; present students may optionally have a late
+duration recorded in minutes.
+
 Run the API from this directory with:
 
 ```text

@@ -31,7 +31,9 @@ export default function ClassView() {
       })
       .catch((error) => {
         if (!cancelled)
-          toast.error(error?.response?.data?.detail || "تعذر تحميل بيانات الصف");
+          toast.error(
+            error?.response?.data?.detail || "تعذر تحميل بيانات الصف",
+          );
       });
     return () => {
       cancelled = true;
@@ -100,49 +102,54 @@ export default function ClassView() {
         )}
       </section>
       {canViewStudents && (
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <h2 className="border-b border-gray-100 px-5 py-4 text-lg font-semibold text-gray-900">
-          الطلاب ({students.length})
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-right text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500">
-              <tr>
-                <th className="px-4 py-3">الكود</th>
-                <th className="px-4 py-3">الاسم</th>
-                <th className="px-4 py-3">الحالة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((student) => (
-                <tr key={student.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">
-                    {student.code || "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      to={`/students/${student.id}`}
-                      className="font-medium text-[#036A87] hover:underline"
-                    >
-                      {student.student?.fullName || "—"}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {student.student?.status === "inactive" ? "غير نشط" : "نشط"}
-                  </td>
-                </tr>
-              ))}
-              {students.length === 0 && (
+        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <h2 className="border-b border-gray-100 px-5 py-4 text-lg font-semibold text-gray-900">
+            الطلاب ({students.length})
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-right text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500">
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-gray-500">
-                    لا يوجد طلاب في هذا الصف.
-                  </td>
+                  <th className="px-4 py-3">الكود</th>
+                  <th className="px-4 py-3">الاسم</th>
+                  <th className="px-4 py-3">الحالة</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {students.map((student) => (
+                  <tr key={student.id} className="border-t border-gray-100">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                      {student.code || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/students/${student.id}`}
+                        className="font-medium text-[#036A87] hover:underline"
+                      >
+                        {student.student?.fullName || "—"}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {student.student?.status === "inactive"
+                        ? "غير نشط"
+                        : "نشط"}
+                    </td>
+                  </tr>
+                ))}
+                {students.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-4 py-8 text-center text-gray-500"
+                    >
+                      لا يوجد طلاب في هذا الصف.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );
