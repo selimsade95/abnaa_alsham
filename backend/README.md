@@ -39,3 +39,10 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 The verification-message reply feature sends email through the Resend API.
 Set `RESEND_API_KEY` in the backend `.env` file and set `MAIL_FROM` to an email
 address on a domain verified with Resend.
+
+The standalone public contact form at `/contact` saves submissions in the
+separate `contact_messages` collection and emails them through the same Resend
+API key. Set `MAIL_FROM_CONTACT` to a sender address on a domain verified with
+Resend and `CONTACT_EMAILS` to a comma-separated list of one to five recipient
+addresses. The first address is the primary recipient and the remaining
+addresses are copied (CC).

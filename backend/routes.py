@@ -6,7 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os, uuid, bcrypt, jwt, logging, mimetypes, re, csv, io, math, asyncio, json
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, TypeAdapter, ValidationError
 from typing import List, Optional
 from datetime import date, datetime, timezone, timedelta
 import requests
@@ -1240,6 +1240,116 @@ async def _send_message_email(recipient, subject, content):
             raise RuntimeError(f"Could not reach Resend: {error}") from error
 
     await asyncio.to_thread(send_request)
+
+
+async def _send_contact_form_email(contact_message):
+    api_key = os.environ.get("RESEND_API_KEY")
+    sender = os.environ.get("MAIL_FROM_CONTACT")
+    if not api_key or not sender:
+        raise RuntimeError("إعدادات بريد نموذج التواصل غير مكتملة")
+
+    configured_recipients = [
+        address.strip()
+        for address in os.environ.get("CONTACT_EMAILS", "").split(",")
+        if address.strip()
+    ]
+    if not configured_recipients or len(configured_recipients) > 5:
+        raise RuntimeError("يجب إعداد عنوان بريد واحد إلى خمسة عناوين لاستقبال الرسائل")
+    try:
+        recipients = [
+            str(address)
+            for address in TypeAdapter(List[EmailStr]).validate_python(
+                configured_recipients
+            )
+        ]
+    except ValidationError as error:
+        raise RuntimeError("قائمة عناوين بريد نموذج التواصل غير صالحة") from error
+
+    text = (
+        f"رسالة جديدة من نموذج التواصل في مدرسة أبناء الشام\n\n"
+        f"الاسم: {contact_message['name']}\n"
+        f"البريد الإلكتروني: {contact_message.get('email') or 'غير مذكور'}\n"
+        f"المكتب: {contact_message.get('office') or 'غير محدد'}\n"
+        f"رقم الهاتف: {contact_message['phone']}\n"
+        f"نوع الرسالة: {MESSAGE_TYPE_LABELS[contact_message['messageType']]}\n"
+        f"الموضوع: {contact_message['subject']}\n\n"
+        f"الرسالة:\n{contact_message['message']}"
+    )
+    payload = {
+        "from": sender,
+        "to": recipients[0],
+        "subject": (
+            f"{MESSAGE_TYPE_LABELS[contact_message['messageType']]}: "
+            f"{contact_message['subject']}"
+        ),
+        "text": text,
+    }
+    if len(recipients) > 1:
+        payload["cc"] = recipients[1:]
+    if contact_message.get("email"):
+        payload["reply_to"] = str(contact_message["email"])
+
+    def send_request():
+        try:
+            response = requests.post(
+                "https://api.resend.com/emails",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "User-Agent": "abnaa-alsham-backend/1.0",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+        except requests.HTTPError as error:
+            response = error.response
+            detail = response.text[:1000] if response is not None else str(error)
+            status_code = response.status_code if response is not None else "unknown"
+            raise RuntimeError(
+                f"Resend returned HTTP {status_code}: {detail}"
+            ) from error
+        except requests.RequestException as error:
+            raise RuntimeError(f"Could not reach Resend: {error}") from error
+
+    await asyncio.to_thread(send_request)
+
+
+@api.post("/public/contact-messages")
+async def create_contact_message(body: ContactFormIn):
+    doc = {
+        "id": str(uuid.uuid4()),
+        **body.model_dump(),
+        "email": str(body.email) if body.email else None,
+        "createdAt": now_iso(),
+        "emailDeliveryStatus": "pending",
+        "emailDeliveryError": None,
+    }
+    await db.contact_messages.insert_one(doc)
+    try:
+        await _send_contact_form_email(doc)
+    except Exception as exc:
+        logging.exception("Could not send contact-form email")
+        await db.contact_messages.update_one(
+            {"id": doc["id"]},
+            {"$set": {
+                "emailDeliveryStatus": "failed",
+                "emailDeliveryError": str(exc)[:500],
+            }},
+        )
+        raise HTTPException(
+            502,
+            "تم حفظ رسالتك لكن تعذر إرسال البريد الإلكتروني، يرجى المحاولة لاحقاً",
+        ) from exc
+
+    await db.contact_messages.update_one(
+        {"id": doc["id"]},
+        {"$set": {
+            "emailDeliveryStatus": "sent",
+            "emailDeliveryError": None,
+            "emailSentAt": now_iso(),
+        }},
+    )
+    return {"ok": True, "id": doc["id"]}
 
 
 @api.post("/public/students/{sid}/messages")
@@ -2636,6 +2746,7 @@ async def on_startup():
         await db.attendance_sessions.create_index([("classId", 1), ("attendanceDate", 1)], unique=True)
         await db.attendance_sessions.create_index([("attendanceDate", -1)])
         await db.verification_messages.create_index([("createdAt", -1)])
+        await db.contact_messages.create_index([("createdAt", -1)])
     except Exception as e:
         logging.warning(f"index setup: {e}")
 
