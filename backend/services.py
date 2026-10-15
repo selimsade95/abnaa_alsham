@@ -184,4 +184,19 @@ async def next_sequence(entity):
 async def generate_code(entity):
     settings = await get_code_settings()
     config = settings.get(entity) or DEFAULT_CODE_SETTINGS[entity]
-    return render_code(config["format"], config["prefix"], datetime.now(timezone.utc).year, await next_sequence(entity))
+    year = datetime.now(timezone.utc).year
+    seen_codes = set()
+    while True:
+        code = render_code(
+            config["format"],
+            config["prefix"],
+            year,
+            await next_sequence(entity),
+        )
+        if code in seen_codes:
+            raise RuntimeError(
+                f"Code-generation settings for {entity} cannot produce a unique code"
+            )
+        seen_codes.add(code)
+        if not await _db[entity].find_one({"code": code}, {"_id": 1}):
+            return code

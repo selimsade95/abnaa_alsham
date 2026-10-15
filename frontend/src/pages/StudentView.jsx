@@ -790,9 +790,25 @@ export default function StudentView() {
                   </dl>
                   {feeType === "academic" && fees.discountEnabled && (
                     <div className="mt-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
-                      الخصم: {fees.discountPercentage}% (
-                      {Number(fees.discountAmount || 0).toLocaleString("ar-EG")}
-                      )
+                      {fees.generalDiscountPercentage > 0 && (
+                        <div>
+                          الخصم العام ({fees.generalDiscountName}):{" "}
+                          {fees.generalDiscountPercentage}%
+                        </div>
+                      )}
+                      {fees.siblingsStaffDiscountPercentage > 0 && (
+                        <div>
+                          خصم الإخوة/أبناء الكادر (
+                          {fees.siblingsStaffDiscountName}):{" "}
+                          {fees.siblingsStaffDiscountPercentage}%
+                        </div>
+                      )}
+                      <div>
+                        إجمالي الخصم:{" "}
+                        {Number(fees.discountAmount || 0).toLocaleString(
+                          "ar-EG",
+                        )}
+                      </div>
                     </div>
                   )}
                   {feeType === "transportation" && !fees.busRegistered && (

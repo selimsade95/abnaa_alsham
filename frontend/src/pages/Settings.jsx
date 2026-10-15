@@ -187,7 +187,7 @@ export default function Settings() {
             {discountOptions.map((option, index) => (
               <div
                 key={`${index}-${option.name}`}
-                className="grid gap-3 rounded-xl border border-gray-200 p-3 sm:grid-cols-[1fr_180px_auto] sm:items-end"
+                className="grid gap-3 rounded-xl border border-gray-200 p-3 sm:grid-cols-[1fr_180px_200px_auto] sm:items-end"
               >
                 <label className="block text-xs text-gray-500">
                   اسم الفئة
@@ -207,6 +207,27 @@ export default function Settings() {
                     className={`${inputClass} mt-1`}
                     placeholder="مثال: خصم الإخوة"
                   />
+                </label>
+                <label className="block text-xs text-gray-500">
+                  نوع الخصم
+                  <select
+                    disabled={!canEdit}
+                    value={option.category || "general"}
+                    onChange={(event) =>
+                      setDiscountOptions((previous) =>
+                        previous.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, category: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    data-testid={`discount-category-${index}`}
+                    className={`${inputClass} mt-1`}
+                  >
+                    <option value="general">خصم عام</option>
+                    <option value="siblings_staff">خصم الإخوة/أبناء الكادر</option>
+                  </select>
                 </label>
                 <label className="block text-xs text-gray-500">
                   نسبة الخصم
@@ -263,7 +284,7 @@ export default function Settings() {
             onClick={() =>
               setDiscountOptions((previous) => [
                 ...previous,
-                { name: "", percentage: "" },
+                { name: "", percentage: "", category: "general" },
               ])
             }
             data-testid="add-discount-option"

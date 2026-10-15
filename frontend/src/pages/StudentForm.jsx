@@ -89,21 +89,24 @@ export default function StudentForm({ mode }) {
     ),
   );
   const fees = data.fees;
-  const discountPercentage = Number(fees.discountPercentage) || 0;
-  const selectedDiscount =
-    discountOptions.find(
-      (option) =>
-        option.name === fees.discountName &&
-        Number(option.percentage) === discountPercentage,
-    ) ||
-    discountOptions.find(
-      (option) => Number(option.percentage) === discountPercentage,
-    );
-  const legacyDiscount =
-    fees.discountEnabled && discountPercentage > 0 && !selectedDiscount;
-  const discountAmount = fees.discountEnabled
-    ? ((Number(fees.totalPayable) || 0) * discountPercentage) / 100
-    : 0;
+  const generalDiscountOptions = discountOptions.filter(
+    (option) => (option.category || "general") === "general",
+  );
+  const siblingsStaffDiscountOptions = discountOptions.filter(
+    (option) => option.category === "siblings_staff",
+  );
+  const generalDiscountPercentage =
+    Number(fees.generalDiscountPercentage) || 0;
+  const siblingsStaffDiscountPercentage =
+    Number(fees.siblingsStaffDiscountPercentage) || 0;
+  const academicPayable = Number(fees.totalPayable) || 0;
+  const generalDiscountAmount =
+    (academicPayable * generalDiscountPercentage) / 100;
+  const subtotal = academicPayable - generalDiscountAmount;
+  const siblingsStaffDiscountAmount =
+    (subtotal * siblingsStaffDiscountPercentage) / 100;
+  const discountAmount = generalDiscountAmount + siblingsStaffDiscountAmount;
+  const netAcademicPayable = subtotal - siblingsStaffDiscountAmount;
 
   return (
     <form onSubmit={submit} className="space-y-6" data-testid="student-form">
@@ -577,77 +580,78 @@ export default function StudentForm({ mode }) {
               data-testid="input-outfitFee"
             />
           </Field>
-          <div className="flex items-center pt-7">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!fees.discountEnabled}
-                disabled={!discountOptions.length && !fees.discountEnabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  update("fees.discountEnabled", enabled);
-                  if (enabled && !discountPercentage && discountOptions[0]) {
-                    update(
-                      "fees.discountPercentage",
-                      discountOptions[0].percentage,
-                    );
-                    update("fees.discountName", discountOptions[0].name);
-                  }
-                }}
-                className="h-4 w-4 accent-[#04CDF9]"
-                data-testid="input-discount-enabled"
-              />
-              يستفيد الطالب من خصم
-            </label>
-            {!discountOptions.length && !fees.discountEnabled && (
-              <p className="mt-1 text-xs text-gray-500">
-                أضف فئات الخصم من إعدادات النظام لتفعيل هذا الخيار.
-              </p>
-            )}
-          </div>
-          {fees.discountEnabled && (
-            <Field label="فئة الخصم">
-              <select
-                className={inputCls}
-                value={selectedDiscount?.name || (legacyDiscount ? "__legacy" : "")}
-                onChange={(e) => {
-                  const option = discountOptions.find(
-                    (item) => item.name === e.target.value,
-                  );
-                  if (!option) return;
-                  update("fees.discountName", option.name);
-                  update("fees.discountPercentage", option.percentage);
-                }}
-                data-testid="input-discount-option"
-                required
-              >
-                {!selectedDiscount && !legacyDiscount && (
-                  <option value="">اختر فئة الخصم</option>
-                )}
-                {legacyDiscount && (
-                  <option value="__legacy" disabled>
-                    خصم سابق ({discountPercentage}%)
+          <Field label="الخصم العام">
+            <select
+              className={inputCls}
+              value={fees.generalDiscountName || ""}
+              onChange={(e) => {
+                const option = generalDiscountOptions.find(
+                  (item) => item.name === e.target.value,
+                );
+                update("fees.generalDiscountName", option?.name || "");
+                update(
+                  "fees.generalDiscountPercentage",
+                  option?.percentage || 0,
+                );
+              }}
+              data-testid="input-general-discount-option"
+            >
+              <option value="">بدون خصم عام</option>
+              {fees.generalDiscountName &&
+                !generalDiscountOptions.some(
+                  (option) => option.name === fees.generalDiscountName,
+                ) && (
+                  <option value={fees.generalDiscountName}>
+                    {fees.generalDiscountName} (خصم سابق)
                   </option>
                 )}
-                {discountOptions.map((option) => (
-                  <option
-                    key={`${option.name}-${option.percentage}`}
-                    value={option.name}
-                  >
-                    {option.name} ({option.percentage}%)
+              {generalDiscountOptions.map((option) => (
+                <option key={option.name} value={option.name}>
+                  {option.name} ({option.percentage}%)
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="خصم الإخوة/أبناء الكادر">
+            <select
+              className={inputCls}
+              value={fees.siblingsStaffDiscountName || ""}
+              onChange={(e) => {
+                const option = siblingsStaffDiscountOptions.find(
+                  (item) => item.name === e.target.value,
+                );
+                update("fees.siblingsStaffDiscountName", option?.name || "");
+                update(
+                  "fees.siblingsStaffDiscountPercentage",
+                  option?.percentage || 0,
+                );
+              }}
+              data-testid="input-siblings-staff-discount-option"
+            >
+              <option value="">بدون خصم إخوة/كادر</option>
+              {fees.siblingsStaffDiscountName &&
+                !siblingsStaffDiscountOptions.some(
+                  (option) =>
+                    option.name === fees.siblingsStaffDiscountName,
+                ) && (
+                  <option value={fees.siblingsStaffDiscountName}>
+                    {fees.siblingsStaffDiscountName} (خصم سابق)
                   </option>
-                ))}
-              </select>
-            </Field>
-          )}
+                )}
+              {siblingsStaffDiscountOptions.map((option) => (
+                <option key={option.name} value={option.name}>
+                  {option.name} ({option.percentage}%)
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
-        {fees.discountEnabled && (
-          <p className="text-sm text-gray-600">
-            قيمة الخصم: {discountAmount.toLocaleString("ar-EG")} | المستحق بعد
-            الخصم:{" "}
-            {(Number(fees.totalPayable || 0) - discountAmount).toLocaleString(
-              "ar-EG",
-            )}
+        {discountAmount > 0 && (
+          <p className="text-sm text-gray-600" data-testid="discount-preview">
+            المستحق الأكاديمي: {academicPayable.toLocaleString("ar-EG")} | بعد
+            الخصم العام: {subtotal.toLocaleString("ar-EG")} | بعد خصم الإخوة/
+            الكادر: {netAcademicPayable.toLocaleString("ar-EG")} | إجمالي
+            الخصم: {discountAmount.toLocaleString("ar-EG")}
           </p>
         )}
         {mode === "create" && (

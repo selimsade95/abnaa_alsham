@@ -147,6 +147,19 @@ export function useStudentForm(mode) {
           discountEnabled: student.fees?.discountEnabled || false,
           discountPercentage: student.fees?.discountPercentage || 0,
           discountName: student.fees?.discountName || "",
+          generalDiscountPercentage:
+            student.fees?.generalDiscountPercentage ??
+            (student.fees?.discountEnabled
+              ? student.fees?.discountPercentage || 0
+              : 0),
+          generalDiscountName:
+            student.fees?.generalDiscountName ||
+            (student.fees?.discountEnabled ? student.fees?.discountName : "") ||
+            "",
+          siblingsStaffDiscountPercentage:
+            student.fees?.siblingsStaffDiscountPercentage || 0,
+          siblingsStaffDiscountName:
+            student.fees?.siblingsStaffDiscountName || "",
           booksFee: student.fees?.booksFee || 0,
           busFee: student.fees?.busFee || 0,
           busRegistered:

@@ -75,6 +75,32 @@ describe("student list pagination persistence", () => {
         params: expect.objectContaining({ page: 4 }),
       }),
     );
+    expect(window.studentListState.studentTemplate).toEqual([
+      "fullName",
+      "gender",
+      "birthdate",
+      "registrationPath",
+      "finalRegistrationPath",
+      "newClass",
+      "currentAddress",
+      "orphan",
+      "orphanOf",
+      "orphanDocType",
+      "fatherName",
+      "fatherDeceased",
+      "motherName",
+      "motherPhone",
+      "academicYear",
+      "academicFee",
+      "academicPaid",
+      "discountPercentage",
+      "booksFee",
+      "booksPaid",
+      "busFee",
+      "busPaid",
+      "busNo",
+      "dropped",
+    ]);
 
     await act(async () => {
       await window.studentListState.load(3);

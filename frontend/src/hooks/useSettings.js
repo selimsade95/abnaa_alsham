@@ -50,6 +50,7 @@ export function useSettings() {
     const normalizedDiscountOptions = discountOptions.map((option) => ({
       name: option.name.trim(),
       percentage: Number(option.percentage),
+      category: option.category || "general",
     }));
     const discountNames = normalizedDiscountOptions.map(
       (option) => option.name,
@@ -60,7 +61,8 @@ export function useSettings() {
           !option.name ||
           !Number.isFinite(option.percentage) ||
           option.percentage <= 0 ||
-          option.percentage > 100,
+          option.percentage > 100 ||
+          !["general", "siblings_staff"].includes(option.category),
       ) ||
       new Set(discountNames).size !== discountNames.length
     ) {

@@ -138,6 +138,19 @@ export default function StudentFullInfoEdit() {
         discountEnabled: data.fees?.discountEnabled || false,
         discountPercentage: data.fees?.discountPercentage || 0,
         discountName: data.fees?.discountName || "",
+        generalDiscountPercentage:
+          data.fees?.generalDiscountPercentage ??
+          (data.fees?.discountEnabled
+            ? data.fees?.discountPercentage || 0
+            : 0),
+        generalDiscountName:
+          data.fees?.generalDiscountName ||
+          (data.fees?.discountEnabled ? data.fees?.discountName : "") ||
+          "",
+        siblingsStaffDiscountPercentage:
+          data.fees?.siblingsStaffDiscountPercentage || 0,
+        siblingsStaffDiscountName:
+          data.fees?.siblingsStaffDiscountName || "",
         booksFee: data.fees?.booksFee || 0,
         busFee: data.fees?.busFee || 0,
         busRegistered: data.fees?.busRegistered || false,

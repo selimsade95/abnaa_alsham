@@ -77,6 +77,7 @@ class RegistrationPathsIn(BaseModel):
 class DiscountOptionIn(BaseModel):
     name: str
     percentage: float
+    category: Literal["general", "siblings_staff"] = "general"
 
 
 class DiscountOptionsIn(BaseModel):

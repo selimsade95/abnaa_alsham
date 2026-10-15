@@ -119,8 +119,8 @@ class TestAuthAndCatalog:
 class TestCodeGenerationSettings:
     def test_discount_options_can_be_configured(self, admin_headers):
         options = [
-            {"name": "خصم الإخوة", "percentage": 10},
-            {"name": "خصم خاص", "percentage": 25},
+            {"name": "خصم الإخوة", "percentage": 10, "category": "siblings_staff"},
+            {"name": "خصم خاص", "percentage": 25, "category": "general"},
         ]
         saved = requests.put(
             f"{API}/settings/discount-options",
@@ -506,6 +506,77 @@ class TestStudents:
             )
             assert restored.status_code == 200, restored.text
 
+    def test_import_schema_creates_class_discount_and_payment_records(self, admin_headers):
+        original_paths = requests.get(f"{API}/registration-paths", headers=admin_headers).json()["paths"]
+        original_discounts = requests.get(f"{API}/discount-options", headers=admin_headers).json()["options"]
+        suffix = uuid.uuid4().hex[:8]
+        registration_path = f"TEST_IMPORT_PATH_{suffix}"
+        final_path = f"TEST_IMPORT_FINAL_{suffix}"
+        class_name = f"TEST_IMPORT_CLASS_{suffix}"
+        full_name = f"TEST Import Schema {suffix}"
+        headers = (
+            "fullName,gender,birthdate,registrationPath,finalRegistrationPath,newClass,"
+            "currentAddress,orphan,orphanOf,orphanDocType,fatherName,fatherDeceased,"
+            "motherName,motherPhone,academicYear,academicFee,academicPaid,"
+            "discountPercentage,booksFee,booksPaid,busFee,busPaid,busNo,dropped\n"
+        )
+        row = (
+            f"{full_name},female,2015-01-02,{registration_path},{final_path},{class_name},"
+            "TEST Address,false,,,"
+            "TEST Father,true,TEST Mother,0090012345,2026-2027,100,20,13,30,5,40,7,BUS-1,true\n"
+        )
+        try:
+            imported = requests.post(
+                f"{API}/students/import",
+                headers=admin_headers,
+                files={"file": ("students.csv", (headers + row).encode("utf-8"), "text/csv")},
+            )
+            assert imported.status_code == 200, imported.text
+            assert imported.json()["created"] == 1
+
+            paths = requests.get(f"{API}/registration-paths", headers=admin_headers).json()["paths"]
+            assert registration_path in paths
+            assert final_path in paths
+            discounts = requests.get(f"{API}/discount-options", headers=admin_headers).json()["options"]
+            assert any(option["percentage"] == 13 for option in discounts)
+
+            students = requests.get(
+                f"{API}/students",
+                headers=admin_headers,
+                params={"search": full_name, "status": "all", "limit": 10},
+            )
+            assert students.status_code == 200, students.text
+            student = students.json()["data"][0]
+            assert student["student"]["status"] == "inactive"
+            assert student["student"]["registrationPath"] == registration_path
+            assert student["student"]["finalRegistrationPath"] == final_path
+            assert student["student"]["busNumber"] == "BUS-1"
+            assert student["student"]["orphan"] is False
+            assert student["father"]["alive"] is False
+            assert student["currentClass"]["name"] == class_name
+            assert student["fees"]["discountPercentage"] == 13
+            assert student["fees"]["totalPaid"] == 32
+
+            payments = requests.get(
+                f"{API}/students/{student['id']}/payments", headers=admin_headers,
+            )
+            assert payments.status_code == 200, payments.text
+            records = payments.json()
+            assert {(payment["feeType"], payment["amount"]) for payment in records} == {
+                ("academic", 20), ("books", 5), ("transportation", 7),
+            }
+        finally:
+            restored_paths = requests.put(
+                f"{API}/settings/registration-paths", headers=admin_headers,
+                json={"paths": original_paths},
+            )
+            assert restored_paths.status_code == 200, restored_paths.text
+            restored_discounts = requests.put(
+                f"{API}/settings/discount-options", headers=admin_headers,
+                json={"options": original_discounts},
+            )
+            assert restored_discounts.status_code == 200, restored_discounts.text
+
     def test_list_students_search_and_filters(self, admin_headers, created_student, created_class):
         r = requests.get(f"{API}/students?search=TEST&orphan=true&registrationPath=الايتام"
                          f"&classId={created_class['id']}&page=1&limit=10",
@@ -869,33 +940,50 @@ class TestPayments:
                         "registrationPath": "خاص", "finalRegistrationPath": "خاص"},
             "fees": {
                 "academicYear": "2026-2027",
-                "totalPayable": 1000,
+                "totalPayable": 500,
                 "discountEnabled": True,
                 "discountPercentage": 20,
+                "generalDiscountName": "خصم عام",
+                "generalDiscountPercentage": 20,
+                "siblingsStaffDiscountName": "خصم أبناء الكادر",
+                "siblingsStaffDiscountPercentage": 10,
                 "booksFee": 100,
                 "busFee": 200,
                 "outfitFee": 50,
             },
         }
+        dashboard_before = requests.get(
+            f"{API}/dashboard/stats", headers=admin_headers
+        )
+        assert dashboard_before.status_code == 200, dashboard_before.text
         student_response = requests.post(f"{API}/students", headers=admin_headers, json=student_body)
         assert student_response.status_code == 200, student_response.text
         student = student_response.json()
-        assert student["fees"]["totalPayable"] == 1000
-        assert student["fees"]["discountAmount"] == 200
-        assert student["fees"]["netPayable"] == 800
-        assert student["fees"]["overallPayable"] == 1150
-        assert student["fees"]["remaining"] == 1150
-        assert student["fees"]["byType"]["academic"]["payable"] == 800
+        assert student["fees"]["totalPayable"] == 500
+        assert student["fees"]["discountAmount"] == 140
+        assert student["fees"]["netPayable"] == 360
+        assert student["fees"]["generalDiscountPercentage"] == 20
+        assert student["fees"]["siblingsStaffDiscountPercentage"] == 10
+        assert student["fees"]["overallPayable"] == 710
+        assert student["fees"]["remaining"] == 710
+        assert student["fees"]["byType"]["academic"]["payable"] == 360
         assert student["fees"]["byType"]["transportation"]["payable"] == 200
         assert student["fees"]["byType"]["books"]["payable"] == 100
         assert student["fees"]["byType"]["outfit"]["payable"] == 50
+        dashboard_after = requests.get(
+            f"{API}/dashboard/stats", headers=admin_headers
+        )
+        assert dashboard_after.status_code == 200, dashboard_after.text
+        assert dashboard_after.json()["totalPayable"] - dashboard_before.json()[
+            "totalPayable"
+        ] == pytest.approx(710)
         student_list = requests.get(
             f"{API}/students", headers=admin_headers,
             params={"search": student["student"]["fullName"], "limit": 10},
         )
         assert student_list.status_code == 200
         summary = student_list.json()["summary"]
-        assert summary["totalPayable"] == 1150
+        assert summary["totalPayable"] == 710
         assert summary["totalBooksFee"] == 100
         assert summary["totalBusFee"] == 200
         assert summary["totalOutfitFee"] == 50
@@ -906,7 +994,7 @@ class TestPayments:
             "semester": "first",
             "paymentDate": datetime.utcnow().isoformat(),
         }
-        for fee_type, amount in (("academic", 800), ("books", 100),
+        for fee_type, amount in (("academic", 360), ("books", 100),
                                  ("transportation", 200), ("outfit", 50)):
             payment_body.update({"feeType": fee_type, "amount": amount + 1})
             rejected = requests.post(f"{API}/payments", headers=admin_headers, json=payment_body)
@@ -932,7 +1020,7 @@ class TestPayments:
             params={"search": student["student"]["fullName"]},
         )
         assert category_summary.status_code == 200
-        for fee_type, amount in (("academic", 800), ("books", 100),
+        for fee_type, amount in (("academic", 360), ("books", 100),
                                  ("transportation", 200), ("outfit", 50)):
             assert category_summary.json()["feeTypes"][fee_type]["payable"] == amount
             assert category_summary.json()["feeTypes"][fee_type]["paid"] == amount

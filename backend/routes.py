@@ -929,9 +929,26 @@ async def _payment_snapshot(payment, payable):
 def _discounted_payable(fees):
     total_payable = float(fees.get("totalPayable") or 0)
     discount_enabled = bool(fees.get("discountEnabled"))
-    discount_percentage = float(fees.get("discountPercentage") or 0)
-    discount_amount = total_payable * discount_percentage / 100 if discount_enabled else 0
-    return total_payable, discount_percentage, discount_amount, max(0, total_payable - discount_amount)
+    has_split_discounts = (
+        "generalDiscountPercentage" in fees
+        or "siblingsStaffDiscountPercentage" in fees
+    )
+    if has_split_discounts:
+        general_percentage = float(fees.get("generalDiscountPercentage") or 0)
+        siblings_staff_percentage = float(
+            fees.get("siblingsStaffDiscountPercentage") or 0
+        )
+    else:
+        general_percentage = float(fees.get("discountPercentage") or 0)
+        siblings_staff_percentage = 0
+
+    subtotal = total_payable * (1 - general_percentage / 100)
+    net_payable = subtotal * (1 - siblings_staff_percentage / 100)
+    discount_amount = total_payable - net_payable if discount_enabled else 0
+    discount_percentage = (
+        discount_amount / total_payable * 100 if total_payable > 0 else 0
+    )
+    return total_payable, discount_percentage, discount_amount, max(0, net_payable)
 
 FEE_TYPE_FIELDS = {
     "academic": "totalPayable",
@@ -956,15 +973,52 @@ def _clean_fee_type(fee_type):
     return fee_type
 
 def _normalize_student_fees(fees):
-    discount_percentage = float(fees.get("discountPercentage") or 0)
-    if not 0 <= discount_percentage <= 100:
-        raise HTTPException(400, "نسبة الخصم يجب أن تكون بين 0 و100")
+    legacy_discount_enabled = bool(fees.get("discountEnabled"))
+    general_discount_percentage = float(
+        fees.get(
+            "generalDiscountPercentage",
+            fees.get("discountPercentage") if legacy_discount_enabled else 0,
+        )
+        or 0
+    )
+    siblings_staff_discount_percentage = float(
+        fees.get("siblingsStaffDiscountPercentage") or 0
+    )
+    if not 0 <= general_discount_percentage <= 100:
+        raise HTTPException(400, "نسبة الخصم العام يجب أن تكون بين 0 و100")
+    if not 0 <= siblings_staff_discount_percentage <= 100:
+        raise HTTPException(400, "نسبة خصم الإخوة/الكادر يجب أن تكون بين 0 و100")
+    general_discount_name = (
+        fees.get("generalDiscountName")
+        or (fees.get("discountName") if legacy_discount_enabled else "")
+        or ""
+    ).strip()
+    siblings_staff_discount_name = (
+        fees.get("siblingsStaffDiscountName") or ""
+    ).strip()
+    discount_enabled = (
+        general_discount_percentage > 0 or siblings_staff_discount_percentage > 0
+    )
+    effective_discount_percentage = 100 * (
+        1
+        - (1 - general_discount_percentage / 100)
+        * (1 - siblings_staff_discount_percentage / 100)
+    )
+    discount_name = " / ".join(
+        name
+        for name in (general_discount_name, siblings_staff_discount_name)
+        if name
+    )
     normalized = {
         "academicYear": fees.get("academicYear") or "",
         "totalPayable": float(fees.get("totalPayable") or 0),
-        "discountEnabled": bool(fees.get("discountEnabled")),
-        "discountPercentage": discount_percentage,
-        "discountName": (fees.get("discountName") or "").strip(),
+        "discountEnabled": discount_enabled,
+        "discountPercentage": effective_discount_percentage,
+        "discountName": discount_name,
+        "generalDiscountName": general_discount_name,
+        "generalDiscountPercentage": general_discount_percentage,
+        "siblingsStaffDiscountName": siblings_staff_discount_name,
+        "siblingsStaffDiscountPercentage": siblings_staff_discount_percentage,
     }
     if normalized["totalPayable"] < 0:
         raise HTTPException(400, "الرسوم لا يمكن أن تكون سالبة")
@@ -988,6 +1042,18 @@ async def _augment_student(doc: dict, current=None) -> dict:
     ay = fees.get("academicYear")
     total_payable, discount_percentage, discount_amount, net_payable = _discounted_payable(fees)
     discount_enabled = bool(fees.get("discountEnabled"))
+    has_split_discounts = (
+        "generalDiscountPercentage" in fees
+        or "siblingsStaffDiscountPercentage" in fees
+    )
+    general_discount_percentage = (
+        float(fees.get("generalDiscountPercentage") or 0)
+        if has_split_discounts
+        else (float(fees.get("discountPercentage") or 0) if discount_enabled else 0)
+    )
+    general_discount_name = fees.get("generalDiscountName") or (
+        fees.get("discountName") or "" if not has_split_discounts else ""
+    )
     books_fee = float(fees.get("booksFee") or 0)
     bus_registered = bool(fees.get("busRegistered", float(fees.get("busFee") or 0) > 0))
     bus_fee = float(fees.get("busFee") or 0) if bus_registered else 0
@@ -1005,6 +1071,11 @@ async def _augment_student(doc: dict, current=None) -> dict:
     doc["fees"] = {"academicYear": ay, "totalPayable": total_payable,
                    "discountEnabled": discount_enabled,
                    "discountPercentage": discount_percentage,
+                   "discountName": (fees.get("discountName") or ""),
+                   "generalDiscountName": general_discount_name,
+                   "generalDiscountPercentage": general_discount_percentage,
+                   "siblingsStaffDiscountName": fees.get("siblingsStaffDiscountName") or "",
+                   "siblingsStaffDiscountPercentage": float(fees.get("siblingsStaffDiscountPercentage") or 0),
                    "discountAmount": discount_amount, "netPayable": net_payable,
                    "booksFee": books_fee, "busFee": bus_fee, "busRegistered": bus_registered,
                    "outfitFee": outfit_fee, "byType": breakdown,
@@ -1098,63 +1169,196 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
 @api.post("/students/import")
 async def import_students(file: UploadFile = File(...), current=Depends(require_permission("students.create"))):
     rows = await _read_csv_rows(file)
-    required = {"fullName", "gender", "birthdate", "registrationPath", "status", "academicYear", "totalPayable"}
+    required = {"fullName", "gender", "birthdate", "registrationPath"}
     if not rows or not required.issubset(rows[0].keys()):
         raise HTTPException(400, "قالب الطلاب غير صحيح")
     created = []
     for index, row in enumerate(rows, 2):
-        full_name = (row.get("fullName") or "").strip()
+        def text(field):
+            return (row.get(field) or "").strip()
+
+        def csv_bool(field, default=False):
+            value = text(field).lower()
+            if not value:
+                return default
+            if value in ("true", "1", "yes", "نعم"):
+                return True
+            if value in ("false", "0", "no", "لا"):
+                return False
+            raise HTTPException(400, f"قيمة {field} غير صحيحة في الصف {index}")
+
+        full_name = text("fullName")
         if not full_name: raise HTTPException(400, f"اسم الطالب مطلوب في الصف {index}")
+        gender = text("gender").lower()
+        if gender not in ("male", "female"):
+            raise HTTPException(400, f"الجنس غير صحيح في الصف {index}")
+        orphan_of = text("orphanOf").lower()
+        if orphan_of and orphan_of not in ("mother", "father", "both"):
+            raise HTTPException(400, f"قيمة orphanOf غير صحيحة في الصف {index}")
+
+        registration_path = text("registrationPath")
+        if not registration_path:
+            raise HTTPException(400, f"مسار التسجيل الأولي مطلوب في الصف {index}")
+        final_registration_path = text("finalRegistrationPath") or registration_path
+        configured_paths = await get_registration_paths()
+        paths_to_add = [
+            path for path in dict.fromkeys((registration_path, final_registration_path))
+            if path and path not in configured_paths
+        ]
+
+        dropped = csv_bool("dropped")
+        status = "inactive" if dropped else (text("status") or "resident")
+        try:
+            academic_fee = float(text("academicFee") or text("totalPayable") or 0)
+            academic_paid = float(text("academicPaid") or 0)
+            discount_percentage = float(text("discountPercentage") or 0)
+            books_fee = float(text("booksFee") or 0)
+            books_paid = float(text("booksPaid") or 0)
+            bus_fee = float(text("busFee") or 0)
+            bus_paid = float(text("busPaid") or 0)
+            outfit_fee = float(text("outfitFee") or 0)
+        except ValueError:
+            raise HTTPException(400, f"الرسوم غير صحيحة في الصف {index}")
+        amounts = (
+            academic_fee, academic_paid, discount_percentage, books_fee,
+            books_paid, bus_fee, bus_paid, outfit_fee,
+        )
+        if not all(math.isfinite(value) for value in amounts):
+            raise HTTPException(400, f"الرسوم غير صحيحة في الصف {index}")
+        if min(academic_fee, academic_paid, books_fee, books_paid, bus_fee, bus_paid, outfit_fee) < 0:
+            raise HTTPException(400, f"الرسوم لا يمكن أن تكون سالبة في الصف {index}")
+        if not 0 <= discount_percentage <= 100:
+            raise HTTPException(400, f"نسبة الخصم يجب أن تكون بين 0 و100 في الصف {index}")
+        academic_payable = academic_fee * (1 - discount_percentage / 100)
+        orphan = csv_bool("orphan")
+        father_deceased = csv_bool("fatherDeceased")
+        mother_deceased = csv_bool("motherDeceased")
+        chronic_disease = csv_bool("chronicDisease")
+        permanent_habits = csv_bool("permanentHabits")
+        bus_registered = csv_bool("busRegistered", bus_fee > 0)
+        bus_payable = bus_fee if bus_registered else 0
+        if (academic_paid > academic_payable + 0.0001 or
+                books_paid > books_fee + 0.0001 or
+                bus_paid > bus_payable + 0.0001):
+            raise HTTPException(400, f"الدفعة تتجاوز الرسوم المستحقة في الصف {index}")
+
         class_id = (row.get("currentClassId") or "").strip() or None
         if class_id and not await db.classes.find_one({"id": class_id}):
             raise HTTPException(400, f"الصف غير موجود في الصف {index}")
         allowed = await allowed_class_ids(current)
+        class_name = text("newClass")
+        if not class_id and class_name:
+            class_record = await db.classes.find_one(
+                {"name": class_name, "academicYear": text("academicYear")},
+                {"_id": 0},
+            )
+            if class_record:
+                class_id = class_record["id"]
+            elif allowed is None:
+                code = await generate_code("classes")
+                class_id = str(uuid.uuid4())
+                class_record = {
+                    "id": class_id, "code": code, "name": class_name,
+                    "grade": "", "section": "", "academicYear": text("academicYear"),
+                    "teacherIds": [], "teacherId": None, "capacity": 0,
+                    "status": "active", "notes": "", "createdAt": now_iso(),
+                    "updatedAt": now_iso(),
+                }
+                await db.classes.insert_one(class_record)
+            else:
+                raise HTTPException(403, f"لا يمكنك إضافة طالب إلى هذا الصف في الصف {index}")
         if allowed is not None and class_id not in allowed:
             raise HTTPException(403, f"لا يمكنك إضافة طالب إلى هذا الصف في الصف {index}")
-        try:
-            total_payable = float(row.get("totalPayable") or 0)
-            books_fee = float(row.get("booksFee") or 0)
-            bus_fee = float(row.get("busFee") or 0)
-            outfit_fee = float(row.get("outfitFee") or 0)
-        except ValueError: raise HTTPException(400, f"إجمالي المستحق غير صحيح في الصف {index}")
-        if min(total_payable, books_fee, bus_fee, outfit_fee) < 0:
-            raise HTTPException(400, f"الرسوم لا يمكن أن تكون سالبة في الصف {index}")
-        def csv_bool(value, default=False):
-            return str(value or "").strip().lower() in ("true", "1", "yes", "نعم") if value else default
 
-        def csv_list(value):
-            return [item.strip() for item in str(value or "").replace("،", ",").split(",") if item.strip()]
+        if paths_to_add:
+            configured_paths.extend(paths_to_add)
+            await db.settings.update_one(
+                {"id": "registration_paths"},
+                {"$set": {"paths": configured_paths, "updatedAt": now_iso()},
+                 "$setOnInsert": {"createdAt": now_iso()}},
+                upsert=True,
+            )
+        discount_name = ""
+        if discount_percentage > 0:
+            options = await get_discount_options()
+            option = next(
+                (
+                    item
+                    for item in options
+                    if (item.get("category") or "general") == "general"
+                    and math.isclose(
+                        float(item.get("percentage", 0)), discount_percentage
+                    )
+                ),
+                None,
+            )
+            if option:
+                discount_name = option["name"]
+            else:
+                discount_name = f"خصم {discount_percentage:g}%"
+                existing_names = {item.get("name") for item in options}
+                base_name = discount_name
+                suffix = 2
+                while discount_name in existing_names:
+                    discount_name = f"{base_name} ({suffix})"
+                    suffix += 1
+                options.append({
+                    "name": discount_name,
+                    "percentage": discount_percentage,
+                    "category": "general",
+                })
+                await db.settings.update_one(
+                    {"id": "discount_options"},
+                    {"$set": {"options": options, "updatedAt": now_iso()},
+                     "$setOnInsert": {"createdAt": now_iso()}},
+                    upsert=True,
+                )
 
         class_record = await db.classes.find_one({"id": class_id}, {"_id": 0, "name": 1}) if class_id else None
         code = await generate_code("students")
         doc = {"id": str(uuid.uuid4()), "code": code,
-               "student": {"fullName": full_name, "gender": row.get("gender", "male").strip() or "male",
-                           "birthdate": row.get("birthdate", "").strip(), "birthPlace": row.get("birthPlace", "").strip(),
-                           "registrationPath": row.get("registrationPath", "خاص").strip() or "خاص",
-                           "finalRegistrationPath": row.get("finalRegistrationPath", "").strip() or row.get("registrationPath", "خاص").strip() or "خاص",
-                           "previousClass": row.get("previousClass", "").strip(),
-                           "newClass": row.get("newClass", "").strip() or (class_record or {}).get("name", ""),
-                           "status": row.get("status", "resident").strip() or "resident", "currentAddress": row.get("currentAddress", "").strip(),
-                           "orphan": csv_bool(row.get("orphan")), "orphanOf": row.get("orphanOf", "").strip(),
-                           "orphanDocType": row.get("orphanDocType", "").strip(), "languages": csv_list(row.get("languages")),
-                           "hobbies": csv_list(row.get("hobbies")),
-                           "addressCodes": {key: row.get(key, "").strip() for key in ("sector", "block", "minutes", "floor", "apartment")},
-                           "chronicDisease": csv_bool(row.get("chronicDisease")), "chronicDiseaseDetails": row.get("chronicDiseaseDetails", "").strip(),
-                           "permanentHabits": csv_bool(row.get("permanentHabits")), "permanentHabitsDetails": row.get("permanentHabitsDetails", "").strip()},
-               "father": {"name": row.get("fatherName", "").strip(), "alive": not csv_bool(row.get("fatherDeceased")), "phone": row.get("fatherPhone", "").strip(),
-                          "address": row.get("fatherAddress", "").strip(), "profession": row.get("fatherProfession", "").strip(), "whatsapp": row.get("fatherWhatsapp", "").strip(), "telegram": row.get("fatherTelegram", "").strip()},
-               "mother": {"name": row.get("motherName", "").strip(), "alive": not csv_bool(row.get("motherDeceased")), "phone": row.get("motherPhone", "").strip(),
-                          "address": row.get("motherAddress", "").strip(), "profession": row.get("motherProfession", "").strip(), "whatsapp": row.get("motherWhatsapp", "").strip(), "telegram": row.get("motherTelegram", "").strip()},
-               "general": {"whatsappGroupPhone": row.get("whatsappGroupPhone", "").strip(), "emergencyContact": {"name": row.get("emergencyName", "").strip(), "relation": row.get("emergencyRelation", "").strip(), "phone": row.get("emergencyPhone", "").strip()}},
-               "fees": {"academicYear": row.get("academicYear", "").strip(), "totalPayable": total_payable,
+               "student": {"fullName": full_name, "gender": gender,
+                           "birthdate": text("birthdate"), "birthPlace": text("birthPlace"),
+                           "registrationPath": registration_path,
+                           "finalRegistrationPath": final_registration_path,
+                           "previousClass": text("previousClass"),
+                           "newClass": class_name or (class_record or {}).get("name", ""),
+                           "busNumber": text("busNo"),
+                           "status": status, "currentAddress": text("currentAddress"),
+                           "orphan": orphan, "orphanOf": orphan_of,
+                           "orphanDocType": text("orphanDocType"),
+                           "addressCodes": {key: text(key) for key in ("sector", "block", "minutes", "floor", "apartment")},
+                           "chronicDisease": chronic_disease, "chronicDiseaseDetails": text("chronicDiseaseDetails"),
+                           "permanentHabits": permanent_habits, "permanentHabitsDetails": text("permanentHabitsDetails")},
+               "father": {"name": text("fatherName"), "alive": not father_deceased, "phone": text("fatherPhone"),
+                          "address": text("fatherAddress"), "profession": text("fatherProfession"), "whatsapp": text("fatherWhatsapp"), "telegram": text("fatherTelegram")},
+               "mother": {"name": text("motherName"), "alive": not mother_deceased, "phone": text("motherPhone"),
+                          "address": text("motherAddress"), "profession": text("motherProfession"), "whatsapp": text("motherWhatsapp"), "telegram": text("motherTelegram")},
+               "general": {"whatsappGroupPhone": text("whatsappGroupPhone"), "emergencyContact": {"name": text("emergencyName"), "relation": text("emergencyRelation"), "phone": text("emergencyPhone")}},
+               "fees": {"academicYear": text("academicYear"), "totalPayable": academic_fee,
+                        "discountEnabled": discount_percentage > 0,
+                        "discountPercentage": discount_percentage,
+                        "discountName": discount_name,
                         "booksFee": books_fee, "busFee": bus_fee,
-                        "busRegistered": csv_bool(row.get("busRegistered"), bus_fee > 0),
+                        "busRegistered": bus_registered,
                         "outfitFee": outfit_fee},
                "currentClassId": class_id, "siblings": [], "previousEducation": [], "islamicLegalEducation": "", "bestAchievement": "",
                "otherInfo": {"familySmokers": False, "transportation": "", "notes": ""}, "signing": {"parentName": "", "relationToStudent": ""}, "fullInfo": {}, "createdAt": now_iso(), "updatedAt": now_iso()}
-        await _clean_reg_path(doc["student"]["registrationPath"])
-        await _clean_reg_path(doc["student"]["finalRegistrationPath"])
         await db.students.insert_one(doc); created.append(doc["id"])
+        for fee_type, amount in (
+            ("academic", academic_paid),
+            ("books", books_paid),
+            ("transportation", bus_paid),
+        ):
+            if amount > 0:
+                await db.payments.insert_one({
+                    "id": str(uuid.uuid4()), "student": doc["id"],
+                    "academicYear": doc["fees"]["academicYear"], "feeType": fee_type,
+                    "semester": "full_year", "amount": amount,
+                    "paymentDate": now_iso(), "notes": "دفعة عند استيراد الطالب",
+                    "createdBy": current["id"], "createdAt": now_iso(),
+                    "updatedAt": now_iso(),
+                })
     return {"ok": True, "created": len(created)}
 
 @api.get("/students/{sid}")
@@ -2244,7 +2448,11 @@ DEFAULT_DISCOUNT_OPTIONS = []
 
 async def get_discount_options():
     doc = await db.settings.find_one({"id": "discount_options"}, {"_id": 0})
-    return doc.get("options", DEFAULT_DISCOUNT_OPTIONS) if doc else DEFAULT_DISCOUNT_OPTIONS
+    options = doc.get("options", DEFAULT_DISCOUNT_OPTIONS) if doc else DEFAULT_DISCOUNT_OPTIONS
+    return [
+        {**option, "category": option.get("category") or "general"}
+        for option in options
+    ]
 
 @api.get("/discount-options")
 async def list_discount_options(current=Depends(get_current_user)):
@@ -2266,7 +2474,11 @@ async def update_discount_options(
         if not math.isfinite(option.percentage) or not 0 < option.percentage <= 100:
             raise HTTPException(400, "نسبة الخصم يجب أن تكون أكبر من صفر ولا تتجاوز 100")
         names.add(name)
-        options.append({"name": name, "percentage": option.percentage})
+        options.append({
+            "name": name,
+            "percentage": option.percentage,
+            "category": option.category,
+        })
     await db.settings.update_one(
         {"id": "discount_options"},
         {
@@ -2580,22 +2792,74 @@ async def dashboard_stats(current=Depends(get_current_user)):
         {
             "$group": {
                 "_id": None,
-                "sum": {"$sum": {"$add": [
-                    {"$subtract": [
-                        {"$ifNull": ["$fees.totalPayable", 0]},
-                        {"$cond": [
-                            {"$eq": ["$fees.discountEnabled", True]},
-                            {"$multiply": [
-                                {"$ifNull": ["$fees.totalPayable", 0]},
-                                {"$divide": [{"$ifNull": ["$fees.discountPercentage", 0]}, 100]},
-                            ]},
-                            0,
-                        ]},
-                    ]},
-                    {"$ifNull": ["$fees.booksFee", 0]},
-                    {"$ifNull": ["$fees.busFee", 0]},
-                    {"$ifNull": ["$fees.outfitFee", 0]},
-                ]}},
+                "sum": {
+                    "$sum": {
+                        "$add": [
+                            {
+                                "$multiply": [
+                                    {"$ifNull": ["$fees.totalPayable", 0]},
+                                    {
+                                        "$subtract": [
+                                            1,
+                                            {
+                                                "$divide": [
+                                                    {
+                                                        "$cond": [
+                                                            {
+                                                                "$eq": [
+                                                                    "$fees.discountEnabled",
+                                                                    True,
+                                                                ]
+                                                            },
+                                                            {
+                                                                "$ifNull": [
+                                                                    "$fees.generalDiscountPercentage",
+                                                                    "$fees.discountPercentage",
+                                                                ]
+                                                            },
+                                                            0,
+                                                        ]
+                                                    },
+                                                    100,
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    {
+                                        "$subtract": [
+                                            1,
+                                            {
+                                                "$divide": [
+                                                    {
+                                                        "$cond": [
+                                                            {
+                                                                "$eq": [
+                                                                    "$fees.discountEnabled",
+                                                                    True,
+                                                                ]
+                                                            },
+                                                            {
+                                                                "$ifNull": [
+                                                                    "$fees.siblingsStaffDiscountPercentage",
+                                                                    0,
+                                                                ]
+                                                            },
+                                                            0,
+                                                        ]
+                                                    },
+                                                    100,
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                ]
+                            },
+                            {"$ifNull": ["$fees.booksFee", 0]},
+                            {"$ifNull": ["$fees.busFee", 0]},
+                            {"$ifNull": ["$fees.outfitFee", 0]},
+                        ]
+                    }
+                },
                 "books": {"$sum": {"$ifNull": ["$fees.booksFee", 0]}},
                 "bus": {"$sum": {"$ifNull": ["$fees.busFee", 0]}},
                 "outfit": {"$sum": {"$ifNull": ["$fees.outfitFee", 0]}},

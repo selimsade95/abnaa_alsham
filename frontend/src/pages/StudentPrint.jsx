@@ -149,8 +149,10 @@ export default function StudentPrint() {
                   <div>المتبقي: {totals.remaining || 0}</div>
                   {feeType === "academic" && fees.discountEnabled && (
                     <div className="text-gray-500">
-                      الخصم: {fees.discountAmount || 0} (
-                      {fees.discountPercentage}%)
+                      الخصم العام: {fees.generalDiscountPercentage || 0}% |
+                      خصم الإخوة/أبناء الكادر:{" "}
+                      {fees.siblingsStaffDiscountPercentage || 0}% | الإجمالي:{" "}
+                      {fees.discountAmount || 0}
                     </div>
                   )}
                   {feeType === "transportation" && !fees.busRegistered && (
