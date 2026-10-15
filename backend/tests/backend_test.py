@@ -518,12 +518,13 @@ class TestStudents:
             "fullName,gender,birthdate,registrationPath,finalRegistrationPath,newClass,"
             "currentAddress,orphan,orphanOf,orphanDocType,fatherName,fatherDeceased,"
             "motherName,motherPhone,academicYear,academicFee,academicPaid,"
-            "discountPercentage,booksFee,booksPaid,busFee,busPaid,busNo,dropped\n"
+            "discountPercentage,siblingsStaffDiscountPercentage,"
+            "booksFee,booksPaid,busFee,busPaid,busNo,dropped\n"
         )
         row = (
             f"{full_name},female,2015-01-02,{registration_path},{final_path},{class_name},"
             "TEST Address,false,,,"
-            "TEST Father,true,TEST Mother,0090012345,2026-2027,100,20,13,30,5,40,7,BUS-1,true\n"
+            "TEST Father,true,TEST Mother,0090012345,2026-2027,100,20,13,10,30,5,40,7,BUS-1,true\n"
         )
         try:
             imported = requests.post(
@@ -538,7 +539,15 @@ class TestStudents:
             assert registration_path in paths
             assert final_path in paths
             discounts = requests.get(f"{API}/discount-options", headers=admin_headers).json()["options"]
-            assert any(option["percentage"] == 13 for option in discounts)
+            assert any(
+                option["percentage"] == 13 and option["category"] == "general"
+                for option in discounts
+            )
+            assert any(
+                option["percentage"] == 10
+                and option["category"] == "siblings_staff"
+                for option in discounts
+            )
 
             students = requests.get(
                 f"{API}/students",
@@ -554,7 +563,10 @@ class TestStudents:
             assert student["student"]["orphan"] is False
             assert student["father"]["alive"] is False
             assert student["currentClass"]["name"] == class_name
-            assert student["fees"]["discountPercentage"] == 13
+            assert student["fees"]["generalDiscountPercentage"] == 13
+            assert student["fees"]["siblingsStaffDiscountPercentage"] == 10
+            assert student["fees"]["discountPercentage"] == pytest.approx(21.7)
+            assert student["fees"]["netPayable"] == pytest.approx(78.3)
             assert student["fees"]["totalPaid"] == 32
 
             payments = requests.get(

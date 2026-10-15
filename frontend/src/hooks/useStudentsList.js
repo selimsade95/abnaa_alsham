@@ -47,8 +47,12 @@ const studentColumns = [
   { label: "academicFee", value: (s) => s.fees?.totalPayable },
   { label: "academicPaid", value: (s) => s.fees?.byType?.academic?.paid },
   {
-    label: "discountPercentage",
-    value: (s) => s.fees?.discountPercentage,
+    label: "generalDiscountPercentage",
+    value: (s) => s.fees?.generalDiscountPercentage,
+  },
+  {
+    label: "siblingsStaffDiscountPercentage",
+    value: (s) => s.fees?.siblingsStaffDiscountPercentage,
   },
   { label: "booksFee", value: (s) => s.fees?.booksFee },
   { label: "booksPaid", value: (s) => s.fees?.byType?.books?.paid },
@@ -76,7 +80,8 @@ const studentTemplate = [
   "academicYear",
   "academicFee",
   "academicPaid",
-  "discountPercentage",
+  "generalDiscountPercentage",
+  "siblingsStaffDiscountPercentage",
   "booksFee",
   "booksPaid",
   "busFee",
@@ -125,6 +130,7 @@ export function useStudentsList() {
   const [deactivationReason, setDeactivationReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [reactivating, setReactivating] = useState(null);
+  const [importProgress, setImportProgress] = useState(null);
   const importRef = useRef(null);
   const currentPage = useRef(Math.max(1, Number(savedPage) || 1));
 
@@ -201,13 +207,32 @@ export function useStudentsList() {
   const importStudents = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file) return;
+    if (!file || importProgress) return;
+    setImportProgress({ stage: "uploading", percent: 0 });
     try {
-      const response = await uploadCsv(api, "/students/import", file);
+      const response = await uploadCsv(
+        api,
+        "/students/import",
+        file,
+        ({ loaded, total }) => {
+          if (!total) {
+            setImportProgress({ stage: "uploading", percent: null });
+            return;
+          }
+          const percent = Math.min(100, Math.round((loaded / total) * 100));
+          setImportProgress(
+            percent >= 100
+              ? { stage: "processing", percent: null }
+              : { stage: "uploading", percent },
+          );
+        },
+      );
       toast.success(`تم استيراد ${response.data.created} طالب`);
       load(1);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "تعذر استيراد الطلاب");
+    } finally {
+      setImportProgress(null);
     }
   };
 
@@ -264,6 +289,7 @@ export function useStudentsList() {
     setDeactivationReason,
     deleting,
     reactivating,
+    importProgress,
     importRef,
     load,
     doDelete,

@@ -6,8 +6,6 @@ import {
   Phone,
   Send,
 } from "lucide-react";
-import api from "@/lib/api";
-
 const EMPTY_FORM = {
   name: "",
   email: "",
@@ -37,13 +35,27 @@ export default function ContactForm() {
     setSending(true);
     setError("");
     try {
-      await api.post("/public/contact-messages", form);
+      const backendUrl = process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, "");
+      if (!backendUrl) {
+        throw new Error("عنوان خادم النماذج غير مضبوط");
+      }
+      const response = await fetch(
+        `${backendUrl}/api/public/contact-messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.detail || "تعذر إرسال الرسالة");
+      }
       setForm(EMPTY_FORM);
       setSent(true);
     } catch (submitError) {
       setError(
-        submitError?.response?.data?.detail ||
-          "تعذر إرسال الرسالة. يرجى المحاولة مرة أخرى.",
+        submitError.message || "تعذر إرسال الرسالة. يرجى المحاولة مرة أخرى.",
       );
     } finally {
       setSending(false);
@@ -69,7 +81,7 @@ export default function ContactForm() {
             تواصل معنا
           </h1>
           <p className="mt-3 text-slate-600">
-            أرسل استفسارك أو اقتراحك أو شكواك، وسيتابع فريق المدرسة رسالتك.
+            أرسل استفسارك أو اقتراحك أو شكواك، وسيتابع فريقنا رسالتك.
           </p>
         </header>
 

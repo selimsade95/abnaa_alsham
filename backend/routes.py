@@ -1211,7 +1211,14 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
         try:
             academic_fee = float(text("academicFee") or text("totalPayable") or 0)
             academic_paid = float(text("academicPaid") or 0)
-            discount_percentage = float(text("discountPercentage") or 0)
+            general_discount_percentage = float(
+                text("generalDiscountPercentage")
+                or text("discountPercentage")
+                or 0
+            )
+            siblings_staff_discount_percentage = float(
+                text("siblingsStaffDiscountPercentage") or 0
+            )
             books_fee = float(text("booksFee") or 0)
             books_paid = float(text("booksPaid") or 0)
             bus_fee = float(text("busFee") or 0)
@@ -1220,16 +1227,36 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
         except ValueError:
             raise HTTPException(400, f"الرسوم غير صحيحة في الصف {index}")
         amounts = (
-            academic_fee, academic_paid, discount_percentage, books_fee,
-            books_paid, bus_fee, bus_paid, outfit_fee,
+            academic_fee, academic_paid, general_discount_percentage,
+            siblings_staff_discount_percentage, books_fee, books_paid,
+            bus_fee, bus_paid, outfit_fee,
         )
         if not all(math.isfinite(value) for value in amounts):
             raise HTTPException(400, f"الرسوم غير صحيحة في الصف {index}")
-        if min(academic_fee, academic_paid, books_fee, books_paid, bus_fee, bus_paid, outfit_fee) < 0:
+        if min(
+            academic_fee,
+            academic_paid,
+            books_fee,
+            books_paid,
+            bus_fee,
+            bus_paid,
+            outfit_fee,
+        ) < 0:
             raise HTTPException(400, f"الرسوم لا يمكن أن تكون سالبة في الصف {index}")
-        if not 0 <= discount_percentage <= 100:
-            raise HTTPException(400, f"نسبة الخصم يجب أن تكون بين 0 و100 في الصف {index}")
-        academic_payable = academic_fee * (1 - discount_percentage / 100)
+        if not 0 <= general_discount_percentage <= 100:
+            raise HTTPException(
+                400, f"نسبة الخصم العام يجب أن تكون بين 0 و100 في الصف {index}"
+            )
+        if not 0 <= siblings_staff_discount_percentage <= 100:
+            raise HTTPException(
+                400,
+                f"نسبة خصم الإخوة/الكادر يجب أن تكون بين 0 و100 في الصف {index}",
+            )
+        academic_payable = (
+            academic_fee
+            * (1 - general_discount_percentage / 100)
+            * (1 - siblings_staff_discount_percentage / 100)
+        )
         orphan = csv_bool("orphan")
         father_deceased = csv_bool("fatherDeceased")
         mother_deceased = csv_bool("motherDeceased")
@@ -1278,41 +1305,81 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
                  "$setOnInsert": {"createdAt": now_iso()}},
                 upsert=True,
             )
-        discount_name = ""
-        if discount_percentage > 0:
-            options = await get_discount_options()
+        options = await get_discount_options()
+        discounts = (
+            (
+                "general",
+                general_discount_percentage,
+                text("generalDiscountName"),
+                "خصم عام",
+            ),
+            (
+                "siblings_staff",
+                siblings_staff_discount_percentage,
+                text("siblingsStaffDiscountName"),
+                "خصم الإخوة/الكادر",
+            ),
+        )
+        discount_names = {}
+        options_updated = False
+        for category, percentage, requested_name, default_label in discounts:
+            if percentage <= 0:
+                discount_names[category] = ""
+                continue
             option = next(
                 (
                     item
                     for item in options
-                    if (item.get("category") or "general") == "general"
+                    if (item.get("category") or "general") == category
                     and math.isclose(
-                        float(item.get("percentage", 0)), discount_percentage
+                        float(item.get("percentage", 0)), percentage
                     )
+                    and (not requested_name or item.get("name") == requested_name)
                 ),
                 None,
             )
             if option:
-                discount_name = option["name"]
-            else:
-                discount_name = f"خصم {discount_percentage:g}%"
-                existing_names = {item.get("name") for item in options}
-                base_name = discount_name
-                suffix = 2
-                while discount_name in existing_names:
-                    discount_name = f"{base_name} ({suffix})"
-                    suffix += 1
-                options.append({
-                    "name": discount_name,
-                    "percentage": discount_percentage,
-                    "category": "general",
-                })
-                await db.settings.update_one(
-                    {"id": "discount_options"},
-                    {"$set": {"options": options, "updatedAt": now_iso()},
-                     "$setOnInsert": {"createdAt": now_iso()}},
-                    upsert=True,
-                )
+                discount_names[category] = option["name"]
+                continue
+
+            name = requested_name or f"{default_label} {percentage:g}%"
+            existing_names = {item.get("name") for item in options}
+            base_name = name
+            suffix = 2
+            while name in existing_names:
+                name = f"{base_name} ({suffix})"
+                suffix += 1
+            options.append({
+                "name": name,
+                "percentage": percentage,
+                "category": category,
+            })
+            discount_names[category] = name
+            options_updated = True
+
+        if options_updated:
+            await db.settings.update_one(
+                {"id": "discount_options"},
+                {"$set": {"options": options, "updatedAt": now_iso()},
+                 "$setOnInsert": {"createdAt": now_iso()}},
+                upsert=True,
+            )
+        general_discount_name = discount_names["general"]
+        siblings_staff_discount_name = discount_names["siblings_staff"]
+        discount_enabled = (
+            general_discount_percentage > 0
+            or siblings_staff_discount_percentage > 0
+        )
+        combined_discount_percentage = 100 * (
+            1
+            - (1 - general_discount_percentage / 100)
+            * (1 - siblings_staff_discount_percentage / 100)
+        )
+        discount_name = " / ".join(
+            name
+            for name in (general_discount_name, siblings_staff_discount_name)
+            if name
+        )
 
         class_record = await db.classes.find_one({"id": class_id}, {"_id": 0, "name": 1}) if class_id else None
         code = await generate_code("students")
@@ -1336,9 +1403,13 @@ async def import_students(file: UploadFile = File(...), current=Depends(require_
                           "address": text("motherAddress"), "profession": text("motherProfession"), "whatsapp": text("motherWhatsapp"), "telegram": text("motherTelegram")},
                "general": {"whatsappGroupPhone": text("whatsappGroupPhone"), "emergencyContact": {"name": text("emergencyName"), "relation": text("emergencyRelation"), "phone": text("emergencyPhone")}},
                "fees": {"academicYear": text("academicYear"), "totalPayable": academic_fee,
-                        "discountEnabled": discount_percentage > 0,
-                        "discountPercentage": discount_percentage,
+                        "discountEnabled": discount_enabled,
+                        "discountPercentage": combined_discount_percentage,
                         "discountName": discount_name,
+                        "generalDiscountName": general_discount_name,
+                        "generalDiscountPercentage": general_discount_percentage,
+                        "siblingsStaffDiscountName": siblings_staff_discount_name,
+                        "siblingsStaffDiscountPercentage": siblings_staff_discount_percentage,
                         "booksFee": books_fee, "busFee": bus_fee,
                         "busRegistered": bus_registered,
                         "outfitFee": outfit_fee},

@@ -83,6 +83,7 @@ android-sdk/
 .env
 .env.*
 *.env
+!contact-form/.env.example
 credentials.json
 *.key
 .credentials

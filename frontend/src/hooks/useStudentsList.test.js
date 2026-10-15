@@ -8,7 +8,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 jest.mock("@/lib/api", () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  default: { get: jest.fn(), post: jest.fn() },
 }));
 jest.mock("@/lib/auth", () => ({
   useAuth: () => ({ has: () => true }),
@@ -32,6 +32,7 @@ describe("student list pagination persistence", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     window.sessionStorage.setItem("students-list-page", JSON.stringify(4));
+    api.post.mockReset();
     api.get.mockImplementation((path, config) => {
       if (path === "/registration-paths")
         return Promise.resolve({ data: { paths: [] } });
@@ -93,7 +94,8 @@ describe("student list pagination persistence", () => {
       "academicYear",
       "academicFee",
       "academicPaid",
-      "discountPercentage",
+      "generalDiscountPercentage",
+      "siblingsStaffDiscountPercentage",
       "booksFee",
       "booksPaid",
       "busFee",
@@ -125,5 +127,58 @@ describe("student list pagination persistence", () => {
         params: expect.objectContaining({ page: 3 }),
       }),
     );
+  });
+
+  it("tracks upload progress and switches to processing while the import runs", async () => {
+    let resolveImport;
+    let uploadConfig;
+    api.post.mockImplementation((endpoint, _form, config) => {
+      uploadConfig = config;
+      return new Promise((resolve) => {
+        resolveImport = resolve;
+      });
+    });
+
+    await act(async () => {
+      root.render(<ListHarness />);
+    });
+
+    let importPromise;
+    await act(async () => {
+      importPromise = window.studentListState.importStudents({
+        target: {
+          files: [new File(["student"], "students.csv")],
+          value: "students.csv",
+        },
+      });
+    });
+
+    expect(api.post).toHaveBeenCalledWith(
+      "/students/import",
+      expect.any(FormData),
+      expect.objectContaining({ onUploadProgress: expect.any(Function) }),
+    );
+
+    await act(async () => {
+      uploadConfig.onUploadProgress({ loaded: 50, total: 100 });
+    });
+    expect(window.studentListState.importProgress).toEqual({
+      stage: "uploading",
+      percent: 50,
+    });
+
+    await act(async () => {
+      uploadConfig.onUploadProgress({ loaded: 100, total: 100 });
+    });
+    expect(window.studentListState.importProgress).toEqual({
+      stage: "processing",
+      percent: null,
+    });
+
+    await act(async () => {
+      resolveImport({ data: { created: 1 } });
+      await importPromise;
+    });
+    expect(window.studentListState.importProgress).toBeNull();
   });
 });

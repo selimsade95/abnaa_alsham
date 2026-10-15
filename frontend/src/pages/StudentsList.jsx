@@ -40,6 +40,7 @@ export default function StudentsList() {
     setDeactivationReason,
     deleting,
     reactivating,
+    importProgress,
     importRef,
     load,
     doDelete,
@@ -87,22 +88,82 @@ export default function StudentsList() {
                 <Download className="h-4 w-4" /> قالب الاستيراد
               </button>
               <button
+                disabled={!!importProgress}
                 onClick={() => importRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-3 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Upload className="h-4 w-4" /> استيراد
+                {importProgress ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                {importProgress ? "جارٍ الاستيراد..." : "استيراد"}
               </button>
               <input
                 ref={importRef}
                 type="file"
                 accept=".csv,text/csv"
                 onChange={importStudents}
+                disabled={!!importProgress}
                 className="hidden"
               />
             </>
           )}
         </div>
       </div>
+
+      {importProgress && (
+        <div
+          className="rounded-lg border border-cyan-200 bg-cyan-50 p-4"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          data-testid="student-import-progress"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3 text-sm text-cyan-900">
+            <span>
+              {importProgress.stage === "uploading"
+                ? "جارٍ رفع ملف الطلاب..."
+                : "تم رفع الملف، جارٍ استيراد الطلاب..."}
+            </span>
+            {importProgress.stage === "uploading" &&
+              importProgress.percent !== null && (
+                <span>{importProgress.percent}%</span>
+              )}
+          </div>
+          <div
+            className="h-2 overflow-hidden rounded-full bg-cyan-100"
+            role="progressbar"
+            aria-label="تقدم استيراد الطلاب"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            {...(importProgress.stage === "uploading" &&
+            importProgress.percent !== null
+              ? { "aria-valuenow": importProgress.percent }
+              : {
+                  "aria-valuetext":
+                    importProgress.stage === "processing"
+                      ? "جارٍ معالجة الملف"
+                      : "جارٍ رفع الملف",
+                })}
+          >
+            <div
+              className={`h-full rounded-full bg-[#04A9CE] transition-all duration-200 ${
+                importProgress.stage === "processing" ||
+                importProgress.percent === null
+                  ? "w-full animate-pulse"
+                  : ""
+              }`}
+              style={
+                importProgress.stage === "uploading" &&
+                importProgress.percent !== null
+                  ? { width: `${importProgress.percent}%` }
+                  : undefined
+              }
+            />
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="p-4 border-b border-gray-200 flex flex-wrap gap-3 items-center">

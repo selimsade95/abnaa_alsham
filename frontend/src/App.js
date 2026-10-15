@@ -16,7 +16,6 @@ import StudentView from "@/pages/StudentView";
 import StudentPrint from "@/pages/StudentPrint";
 import StudentCard from "@/pages/StudentCard";
 import StudentValidation from "@/pages/StudentValidation";
-import ContactForm from "@/pages/ContactForm";
 import StudentFullInfo from "@/pages/StudentFullInfo";
 import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
@@ -71,7 +70,6 @@ function App() {
         <Toaster position="top-center" richColors closeButton />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/contact" element={<ContactForm />} />
           <Route path="/validate/student/:id" element={<StudentValidation />} />
           <Route
             path="/students/:id/print"

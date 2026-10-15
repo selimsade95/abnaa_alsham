@@ -33,10 +33,11 @@ export const downloadTemplate = (filename, headers) => {
   );
 };
 
-export const uploadCsv = async (api, endpoint, file) => {
+export const uploadCsv = async (api, endpoint, file, onUploadProgress) => {
   const form = new FormData();
   form.append("file", file);
   return api.post(endpoint, form, {
     headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress,
   });
 };
