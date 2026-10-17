@@ -44,6 +44,8 @@ export default function Roles() {
     grades: "الدرجات",
     homework: "الواجبات",
     messages: "الرسائل",
+    reports: "التقارير",
+    "reports.finance": "تقارير المدفوعات",
   };
 
   const openNew = () =>

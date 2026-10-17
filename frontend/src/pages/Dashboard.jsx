@@ -14,6 +14,8 @@ import {
   CalendarCheck,
   UserX,
   Clock3,
+  HeartCrack,
+  Heart,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -124,6 +126,20 @@ export default function Dashboard() {
               tint={{ bg: "#FEF3E7", fg: "#B45309" }}
               testid="stat-orphans"
             />
+            <StatCard
+              title="المنسحبون"
+              value={loading ? "…" : (stats?.dropped ?? 0)}
+              icon={HeartCrack}
+              tint={{ bg: "#feeae7", fg: "#b40f09" }}
+              testid="stat-orphans"
+            />
+            <StatCard
+              title="النشطون"
+              value={loading ? "…" : (stats?.active ?? 0)}
+              icon={Heart}
+              tint={{ bg: "#edfee7", fg: "#09b445" }}
+              testid="stat-orphans"
+            />
           </div>
         </section>
 
@@ -226,6 +242,17 @@ export default function Dashboard() {
               ملخص الرسوم والمبالغ المالية للطلاب
             </p>
           </div>
+
+          {has("reports.view") && (
+            <div className="mb-4">
+              <Link
+                to="/reports"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-3 py-2 text-sm font-medium text-white hover:bg-[#02556d]"
+              >
+                فتح تقارير المدفوعات
+              </Link>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatCard

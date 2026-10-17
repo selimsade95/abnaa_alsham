@@ -17,6 +17,7 @@ import {
   ClipboardList,
   CalendarCheck,
   MessageSquareText,
+  BarChart3,
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -116,6 +117,13 @@ export default function AppLayout() {
       icon: Wallet,
       testid: "nav-payments",
       show: has("payments.view"),
+    },
+    {
+      to: "/reports",
+      label: "التقارير",
+      icon: BarChart3,
+      testid: "nav-reports",
+      show: has("reports.view"),
     },
     {
       to: "/users",

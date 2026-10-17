@@ -21,6 +21,7 @@ import Users from "@/pages/Users";
 import Roles from "@/pages/Roles";
 import Payments from "@/pages/Payments";
 import PaymentPrint from "@/pages/PaymentPrint";
+import Reports from "@/pages/Reports";
 import Teachers from "@/pages/Teachers";
 import TeacherForm from "@/pages/TeacherForm";
 import TeacherView from "@/pages/TeacherView";
@@ -271,6 +272,14 @@ function App() {
               element={
                 <Protected perm="payments.view">
                   <Payments />
+                </Protected>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <Protected perm="reports.view">
+                  <Reports />
                 </Protected>
               }
             />
