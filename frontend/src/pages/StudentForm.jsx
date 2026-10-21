@@ -56,7 +56,6 @@ export default function StudentForm({ mode }) {
     setHobbiesInput,
     errors,
     classes,
-    students,
     registrationPaths,
     discountOptions,
     showFullInfo,
@@ -766,7 +765,6 @@ export default function StudentForm({ mode }) {
         </div>
         <div className="max-w-xl">
           <StudentSearchSelect
-            students={students}
             excludeIds={[
               id,
               ...data.siblings.map((sibling) => sibling.studentId),

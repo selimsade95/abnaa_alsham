@@ -371,7 +371,7 @@ async def _teacher_out(t): t.pop("_id", None); return t
 @api.get("/teachers")
 async def list_teachers(search: Optional[str] = None, gender: Optional[str] = None,
                         employmentStatus: Optional[str] = None, specialization: Optional[str] = None,
-                        page: int = 1, limit: int = 20,
+                        page: int = 1, limit: int = 10,
                         current=Depends(require_permission("teachers.view"))):
     # Inactive records are retained for history but stay out of normal lists.
     q = {} if employmentStatus == "all" else {"employmentStatus": employmentStatus or {"$ne": "inactive"}}
@@ -606,6 +606,53 @@ async def _class_enrich(c: dict) -> dict:
     c["studentCount"] = await db.students.count_documents({"currentClassId": c["id"]})
     return c
 
+async def _enrich_classes(classes: list[dict]) -> list[dict]:
+    if not classes:
+        return classes
+    teacher_ids = {
+        teacher_id
+        for class_doc in classes
+        for teacher_id in (
+            class_doc.get("teacherIds")
+            or ([class_doc["teacherId"]] if class_doc.get("teacherId") else [])
+        )
+    }
+    teachers = await db.teachers.find(
+        {"id": {"$in": list(teacher_ids)}},
+        {"_id": 0, "id": 1, "fullName": 1, "code": 1},
+    ).to_list(len(teacher_ids))
+    teachers_by_id = {teacher["id"]: teacher for teacher in teachers}
+    class_ids = [class_doc["id"] for class_doc in classes]
+    student_counts = await db.students.aggregate(
+        [
+            {"$match": {"currentClassId": {"$in": class_ids}}},
+            {"$group": {"_id": "$currentClassId", "count": {"$sum": 1}}},
+        ]
+    ).to_list(len(class_ids))
+    counts_by_class = {row["_id"]: row["count"] for row in student_counts}
+
+    for class_doc in classes:
+        class_teacher_ids = class_doc.get("teacherIds") or (
+            [class_doc["teacherId"]] if class_doc.get("teacherId") else []
+        )
+        resolved_ids = [
+            teacher_id for teacher_id in class_teacher_ids if teacher_id in teachers_by_id
+        ]
+        class_teachers = [teachers_by_id[teacher_id] for teacher_id in resolved_ids]
+        class_doc["teacherIds"] = resolved_ids
+        class_doc["teacherNames"] = [
+            teacher.get("fullName") for teacher in class_teachers
+        ]
+        class_doc["teacherName"] = ", ".join(class_doc["teacherNames"]) or None
+        class_doc["teacherCode"] = (
+            ", ".join(
+                teacher["code"] for teacher in class_teachers if teacher.get("code")
+            )
+            or None
+        )
+        class_doc["studentCount"] = counts_by_class.get(class_doc["id"], 0)
+    return classes
+
 @api.get("/classes")
 async def list_classes(search: Optional[str] = None, grade: Optional[str] = None,
                        section: Optional[str] = None, academicYear: Optional[str] = None,
@@ -627,7 +674,7 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
         q["$or"] = [{"name": rx}, {"code": rx}, {"grade": rx}, {"section": rx}, {"academicYear": rx}]
     total = await db.classes.count_documents(q)
     docs = await db.classes.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)
-    for d in docs: await _class_enrich(d)
+    await _enrich_classes(docs)
     return {"data": docs, "pagination": {"page": page, "limit": limit, "total": total, "totalPages": (total + limit - 1) // limit}}
 
 @api.post("/classes/import")
@@ -1037,7 +1084,121 @@ def _normalize_student_fees(fees):
 def _overall_student_payable(fees):
     return sum(_fee_payables(fees).values())
 
-async def _augment_student(doc: dict, current=None) -> dict:
+async def _student_totals_for_docs(docs: list[dict]) -> dict:
+    student_ids = [doc["id"] for doc in docs]
+    if not student_ids:
+        return {}
+    grouped = await db.payments.aggregate(
+        [
+            {"$match": {"student": {"$in": student_ids}}},
+            {
+                "$group": {
+                    "_id": {
+                        "student": "$student",
+                        "academicYear": {"$ifNull": ["$academicYear", ""]},
+                        "feeType": {
+                            "$cond": [
+                                {"$in": [{"$ifNull": ["$feeType", ""]}, ["", None]]},
+                                "academic",
+                                "$feeType",
+                            ]
+                        },
+                    },
+                    "paid": {"$sum": "$amount"},
+                }
+            },
+        ]
+    ).to_list(None)
+    totals_by_student_year = {}
+    for row in grouped:
+        key = (row["_id"]["student"], row["_id"]["academicYear"])
+        by_type = totals_by_student_year.setdefault(
+            key,
+            {fee_type: 0 for fee_type in FEE_TYPE_FIELDS},
+        )
+        fee_type = row["_id"]["feeType"]
+        by_type[fee_type] = by_type.get(fee_type, 0) + float(row["paid"] or 0)
+
+    years_by_student = {
+        doc["id"]: (doc.get("fees") or {}).get("academicYear") or "" for doc in docs
+    }
+    totals = {
+        student_id: {
+            "totalPaid": 0,
+            "byFeeType": {fee_type: 0 for fee_type in FEE_TYPE_FIELDS},
+            "count": 0,
+        }
+        for student_id in student_ids
+    }
+    for (student_id, academic_year), row_totals in totals_by_student_year.items():
+        current_year = years_by_student[student_id]
+        if current_year and academic_year != current_year:
+            continue
+        for fee_type, amount in row_totals.items():
+            by_type = totals[student_id]["byFeeType"]
+            by_type[fee_type] = by_type.get(fee_type, 0) + amount
+            totals[student_id]["totalPaid"] += amount
+    return totals
+
+async def _augment_students(
+    docs: list[dict],
+    current=None,
+    totals_by_student: Optional[dict] = None,
+) -> list[dict]:
+    if not docs:
+        return docs
+    if totals_by_student is None:
+        totals_by_student = await _student_totals_for_docs(docs)
+    class_ids = list(
+        {doc["currentClassId"] for doc in docs if doc.get("currentClassId")}
+    )
+    classes = await db.classes.find(
+        {"id": {"$in": class_ids}},
+        {
+            "_id": 0,
+            "id": 1,
+            "name": 1,
+            "grade": 1,
+            "section": 1,
+            "academicYear": 1,
+            "teacherId": 1,
+        },
+    ).to_list(len(class_ids))
+    classes_by_id = {class_doc["id"]: class_doc for class_doc in classes}
+    teacher_ids = list(
+        {
+            class_doc["teacherId"]
+            for class_doc in classes
+            if class_doc.get("teacherId")
+        }
+    )
+    teachers = await db.teachers.find(
+        {"id": {"$in": teacher_ids}},
+        {"_id": 0, "id": 1, "fullName": 1},
+    ).to_list(len(teacher_ids))
+    teachers_by_id = {teacher["id"]: teacher for teacher in teachers}
+
+    for doc in docs:
+        await _augment_student(
+            doc,
+            current,
+            totals=totals_by_student[doc["id"]],
+            class_doc=classes_by_id.get(doc.get("currentClassId")),
+            teacher=teachers_by_id.get(
+                classes_by_id.get(doc.get("currentClassId"), {}).get("teacherId")
+            ),
+            class_lookup_complete=True,
+        )
+    return docs
+
+async def _augment_student(
+    doc: dict,
+    current=None,
+    totals: Optional[dict] = None,
+    class_doc: Optional[dict] = None,
+    teacher: Optional[dict] = None,
+    class_lookup_complete: bool = False,
+) -> dict:
     student = doc.setdefault("student", {})
     student.setdefault("finalRegistrationPath", student.get("registrationPath") or "")
     fees = doc.get("fees") or {}
@@ -1060,7 +1221,8 @@ async def _augment_student(doc: dict, current=None) -> dict:
     bus_registered = bool(fees.get("busRegistered", float(fees.get("busFee") or 0) > 0))
     bus_fee = float(fees.get("busFee") or 0) if bus_registered else 0
     outfit_fee = float(fees.get("outfitFee") or 0)
-    totals = await _student_payment_totals(doc["id"], ay)
+    if totals is None:
+        totals = await _student_payment_totals(doc["id"], ay)
     payable_by_type = _fee_payables(fees)
     breakdown = {
         fee_type: {
@@ -1090,14 +1252,35 @@ async def _augment_student(doc: dict, current=None) -> dict:
             doc[field] = []
         elif current.get("teacherId"):
             doc[field] = [note for note in notes if note.get("authorId") == current.get("id")]
-    if doc.get("currentClassId"):
-        c = await db.classes.find_one({"id": doc["currentClassId"]}, {"_id": 0, "name": 1, "grade": 1, "section": 1, "academicYear": 1, "teacherId": 1})
-        if c:
-            doc["currentClass"] = {"name": c.get("name"), "grade": c.get("grade"),
-                "section": c.get("section"), "academicYear": c.get("academicYear")}
-            if c.get("teacherId"):
-                t = await db.teachers.find_one({"id": c["teacherId"]}, {"_id": 0, "fullName": 1})
-                doc["currentTeacher"] = t.get("fullName") if t else None
+    if (
+        not class_lookup_complete
+        and class_doc is None
+        and doc.get("currentClassId")
+    ):
+        class_doc = await db.classes.find_one(
+            {"id": doc["currentClassId"]},
+            {
+                "_id": 0,
+                "name": 1,
+                "grade": 1,
+                "section": 1,
+                "academicYear": 1,
+                "teacherId": 1,
+            },
+        )
+        if class_doc and class_doc.get("teacherId"):
+            teacher = await db.teachers.find_one(
+                {"id": class_doc["teacherId"]}, {"_id": 0, "fullName": 1}
+            )
+    if class_doc:
+        doc["currentClass"] = {
+            "name": class_doc.get("name"),
+            "grade": class_doc.get("grade"),
+            "section": class_doc.get("section"),
+            "academicYear": class_doc.get("academicYear"),
+        }
+        if class_doc.get("teacherId"):
+            doc["currentTeacher"] = teacher.get("fullName") if teacher else None
     return doc
 
 def _payment_status_query(status: str):
@@ -1110,6 +1293,11 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                         classId: Optional[str] = None, status: Optional[str] = None,
                         academicYear: Optional[str] = None, paymentStatus: Optional[str] = None,
                         teacherId: Optional[str] = None,
+                        sortBy: Optional[str] = Query(
+                            default=None,
+                            regex="^(code|name|gender|birthdate|class|registrationPath|status|orphan)$",
+                        ),
+                        sortOrder: str = Query(default="asc", regex="^(asc|desc)$"),
                         page: int = 1, limit: int = 20,
                         current=Depends(require_permission("students.view"))):
     # Inactive records are retained for history but stay out of normal lists.
@@ -1137,36 +1325,141 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                     {"general.whatsappGroupPhone": rx}]
     # Payment status and fee totals are derived from payment records, so the
     # complete filtered set must be evaluated before pagination.
-    matched_docs = await db.students.find(q, {"_id": 0}).sort("createdAt", -1).to_list(None)
-    for d in matched_docs: await _augment_student(d, current)
+    matched_docs = await db.students.find(
+        q,
+        {
+            "_id": 0,
+            "id": 1,
+            "code": 1,
+            "createdAt": 1,
+            "student.fullName": 1,
+            "student.finalRegistrationPath": 1,
+            "student.registrationPath": 1,
+            "student.gender": 1,
+            "student.birthdate": 1,
+            "student.newClass": 1,
+            "student.status": 1,
+            "student.orphan": 1,
+            "currentClassId": 1,
+            "fees": 1,
+        },
+    ).sort("createdAt", -1).to_list(None)
     if finalRegistrationPath:
         matched_docs = [
             d for d in matched_docs
             if ((d.get("student") or {}).get("finalRegistrationPath")
                 or (d.get("student") or {}).get("registrationPath")) == finalRegistrationPath
         ]
+    totals_by_student = await _student_totals_for_docs(matched_docs)
     if paymentStatus:
         def matches(d):
-            f = d.get("fees", {}); tp = f.get("overallPayable", f.get("netPayable", f.get("totalPayable", 0))); pp = f.get("totalPaid", 0)
-            if paymentStatus == "paid": return tp > 0 and pp >= tp
-            if paymentStatus == "partial": return 0 < pp < tp
-            if paymentStatus == "unpaid": return pp == 0
+            fees = d.get("fees") or {}
+            payable = _overall_student_payable(fees)
+            paid = totals_by_student[d["id"]]["totalPaid"]
+            if paymentStatus == "paid": return payable > 0 and paid >= payable
+            if paymentStatus == "partial": return 0 < paid < payable
+            if paymentStatus == "unpaid": return paid == 0
             return True
         matched_docs = [d for d in matched_docs if matches(d)]
+    if sortBy:
+        class_names = {}
+        if sortBy == "class":
+            class_ids = list(
+                {doc["currentClassId"] for doc in matched_docs if doc.get("currentClassId")}
+            )
+            classes = await db.classes.find(
+                {"id": {"$in": class_ids}},
+                {"_id": 0, "id": 1, "name": 1},
+            ).to_list(len(class_ids))
+            class_names = {class_doc["id"]: class_doc.get("name") or "" for class_doc in classes}
+
+        def student_sort_value(d):
+            student = d.get("student") or {}
+            values = {
+                "code": d.get("code") or "",
+                "name": student.get("fullName") or "",
+                "gender": student.get("gender") or "",
+                "birthdate": student.get("birthdate") or "",
+                "class": class_names.get(d.get("currentClassId"), "") or student.get("newClass") or "",
+                "registrationPath": student.get("registrationPath") or "",
+                "status": student.get("status") or "",
+                "orphan": bool(student.get("orphan")),
+            }
+            value = values[sortBy]
+            return value.casefold() if isinstance(value, str) else value
+        matched_docs.sort(key=student_sort_value, reverse=sortOrder == "desc")
     total = len(matched_docs)
     start = (page - 1) * limit
-    docs = matched_docs[start:start + limit]
+    page_ids = [doc["id"] for doc in matched_docs[start:start + limit]]
+    if page_ids:
+        page_docs = await db.students.find(
+            {"id": {"$in": page_ids}},
+            {"_id": 0},
+        ).to_list(len(page_ids))
+        page_docs_by_id = {doc["id"]: doc for doc in page_docs}
+        docs = [page_docs_by_id[student_id] for student_id in page_ids]
+    else:
+        docs = []
+    await _augment_students(
+        docs,
+        current,
+        {doc["id"]: totals_by_student[doc["id"]] for doc in docs},
+    )
     summary = {
-        "totalPayable": sum(float((d.get("fees") or {}).get("overallPayable", (d.get("fees") or {}).get("totalPayable")) or 0) for d in matched_docs),
-        "totalPaid": sum(float((d.get("fees") or {}).get("totalPaid") or 0) for d in matched_docs),
+        "totalPayable": sum(_overall_student_payable(d.get("fees") or {}) for d in matched_docs),
+        "totalPaid": sum(totals_by_student[d["id"]]["totalPaid"] for d in matched_docs),
         "totalBooksFee": sum(float((d.get("fees") or {}).get("booksFee") or 0) for d in matched_docs),
-        "totalBusFee": sum(float((d.get("fees") or {}).get("busFee") or 0) for d in matched_docs),
+        "totalBusFee": sum(_fee_payables(d.get("fees") or {})["transportation"] for d in matched_docs),
         "totalOutfitFee": sum(float((d.get("fees") or {}).get("outfitFee") or 0) for d in matched_docs),
     }
     summary["totalRemaining"] = max(0, summary["totalPayable"] - summary["totalPaid"])
     return {"data": docs, "summary": summary,
             "pagination": {"page": page, "limit": limit, "total": total,
                             "totalPages": (total + limit - 1) // limit}}
+
+@api.get("/students/options")
+async def student_options(
+    search: Optional[str] = None,
+    exclude_ids: Optional[str] = Query(default=None, alias="excludeIds"),
+    current=Depends(require_permission("students.view")),
+):
+    query = {"student.status": {"$ne": "inactive"}}
+    if exclude_ids:
+        query["id"] = {"$nin": [student_id for student_id in exclude_ids.split(",") if student_id]}
+    if search and search.strip():
+        value = re.escape(search.strip())
+        query["$or"] = [
+            {"student.fullName": {"$regex": value, "$options": "i"}},
+            {"code": {"$regex": value, "$options": "i"}},
+        ]
+    allowed = await allowed_class_ids(current)
+    if allowed is not None:
+        query["currentClassId"] = {"$in": allowed}
+
+    students = await db.students.find(
+        query,
+        {"_id": 0, "id": 1, "code": 1, "student.fullName": 1, "fees": 1},
+    ).sort("createdAt", -1).limit(10).to_list(10)
+    options = []
+    for student in students:
+        fees = student.get("fees") or {}
+        payable = _fee_payables(fees)
+        totals = await _student_payment_totals(student["id"], fees.get("academicYear"))
+        options.append({
+            "id": student["id"],
+            "code": student.get("code"),
+            "student": student.get("student") or {},
+            "fees": {
+                "byType": {
+                    fee_type: {
+                        "payable": amount,
+                        "paid": totals.get("byFeeType", {}).get(fee_type, 0),
+                    }
+                    for fee_type, amount in payable.items()
+                }
+            },
+        })
+    return {"data": options}
 
 @api.post("/students/import")
 async def import_students(file: UploadFile = File(...), current=Depends(require_permission("students.create"))):
@@ -2258,25 +2551,229 @@ async def _enrich_payment(p):
     p["createdByName"] = creator.get("name") if creator else "—"
     return p
 
+async def _enrich_payments(payments: list[dict]) -> list[dict]:
+    if not payments:
+        return payments
+    student_ids = list({payment.get("student") for payment in payments if payment.get("student")})
+    creator_ids = list({payment.get("createdBy") for payment in payments if payment.get("createdBy")})
+    students = await db.students.find(
+        {"id": {"$in": student_ids}},
+        {"_id": 0, "id": 1, "student.fullName": 1, "code": 1, "fees": 1},
+    ).to_list(len(student_ids))
+    students_by_id = {student["id"]: student for student in students}
+    creators = await db.users.find(
+        {"id": {"$in": creator_ids}},
+        {"_id": 0, "id": 1, "name": 1},
+    ).to_list(len(creator_ids))
+    creators_by_id = {creator["id"]: creator for creator in creators}
+
+    totals_by_student_year = {}
+    if student_ids:
+        grouped_totals = await db.payments.aggregate(
+            [
+                {"$match": {"student": {"$in": student_ids}}},
+                {
+                    "$group": {
+                        "_id": {
+                            "student": "$student",
+                            "academicYear": {"$ifNull": ["$academicYear", ""]},
+                            "feeType": {
+                                "$cond": [
+                                    {"$in": [{"$ifNull": ["$feeType", ""]}, ["", None]]},
+                                    "academic",
+                                    "$feeType",
+                                ]
+                            },
+                        },
+                        "paid": {"$sum": "$amount"},
+                    }
+                },
+            ]
+        ).to_list(None)
+        for row in grouped_totals:
+            key = (row["_id"]["student"], row["_id"]["academicYear"])
+            by_type = totals_by_student_year.setdefault(
+                key,
+                {fee_type: 0 for fee_type in FEE_TYPE_FIELDS},
+            )
+            fee_type = row["_id"]["feeType"]
+            by_type[fee_type] = by_type.get(fee_type, 0) + float(row["paid"] or 0)
+
+    legacy_payments = [
+        payment
+        for payment in payments
+        if not payment.get("feeType")
+        or "totalPaidAtPayment" not in payment
+        or "totalRemainingAtPayment" not in payment
+    ]
+    ledgers_by_student_year = {}
+    ledger_pairs = {
+        (payment.get("student"), payment.get("academicYear") or "")
+        for payment in legacy_payments
+        if payment.get("student")
+    }
+    if ledger_pairs:
+        ledger_query = {
+            "$or": [
+                {"student": student_id, "academicYear": academic_year}
+                for student_id, academic_year in ledger_pairs
+            ]
+        }
+        ledgers = await db.payments.find(
+            ledger_query,
+            {
+                "_id": 0,
+                "id": 1,
+                "student": 1,
+                "academicYear": 1,
+                "amount": 1,
+                "feeType": 1,
+                "paymentDate": 1,
+                "createdAt": 1,
+            },
+        ).to_list(None)
+        for ledger in ledgers:
+            key = (ledger.get("student"), ledger.get("academicYear") or "")
+            ledgers_by_student_year.setdefault(key, []).append(ledger)
+        for ledger_group in ledgers_by_student_year.values():
+            ledger_group.sort(key=_payment_order_key)
+
+    totals_by_student = {}
+    for (student_id, _), yearly_totals in totals_by_student_year.items():
+        by_type = totals_by_student.setdefault(
+            student_id,
+            {fee_type: 0 for fee_type in FEE_TYPE_FIELDS},
+        )
+        for fee_type, amount in yearly_totals.items():
+            by_type[fee_type] += amount
+
+    for payment in payments:
+        payment.pop("_id", None)
+        student = students_by_id.get(payment.get("student"))
+        student_fees = (student or {}).get("fees") or {}
+        has_fee_type = bool(payment.get("feeType"))
+        payment["studentName"] = (
+            (student.get("student") or {}).get("fullName") if student else "—"
+        )
+        payment["studentCode"] = student.get("code") if student else None
+        fee_year = (
+            payment.get("academicYear") or student_fees.get("academicYear") or ""
+        )
+        fee_type = payment.get("feeType") or "academic"
+        _clean_fee_type(fee_type)
+        payment["feeType"] = fee_type
+        payment["totalPayable"] = (
+            _fee_payables(student_fees).get(fee_type, 0) if student else 0
+        )
+        student_year_totals = totals_by_student_year.get(
+            (payment.get("student"), fee_year), {}
+        )
+        if not fee_year:
+            student_year_totals = totals_by_student.get(payment.get("student"), {})
+        payment["currentTotalPaid"] = student_year_totals.get(fee_type, 0)
+        payment["currentTotalRemaining"] = max(
+            0, payment["totalPayable"] - payment["currentTotalPaid"]
+        )
+
+        if (
+            has_fee_type
+            and "totalPaidAtPayment" in payment
+            and "totalRemainingAtPayment" in payment
+        ):
+            paid_at_payment = float(payment["totalPaidAtPayment"])
+            remaining_at_payment = float(payment["totalRemainingAtPayment"])
+        else:
+            ledger_key = (
+                payment.get("student"),
+                payment.get("academicYear") or "",
+            )
+            cumulative = 0
+            for ledger in ledgers_by_student_year.get(ledger_key, []):
+                if (ledger.get("feeType") or "academic") != fee_type:
+                    continue
+                cumulative += float(ledger.get("amount") or 0)
+                if ledger.get("id") == payment.get("id"):
+                    break
+            paid_at_payment = cumulative
+            remaining_at_payment = max(
+                0, payment["totalPayable"] - cumulative
+            )
+        payment["totalPaid"] = paid_at_payment
+        payment["totalRemaining"] = remaining_at_payment
+        payment["totalPaidAtPayment"] = paid_at_payment
+        payment["totalRemainingAtPayment"] = remaining_at_payment
+        creator = creators_by_id.get(payment.get("createdBy"))
+        payment["createdByName"] = creator.get("name") if creator else "—"
+    return payments
+
 @api.get("/payments")
 async def list_payments(search: Optional[str] = None, academicYear: Optional[str] = None,
                         semester: Optional[str] = None,
+                        feeType: Optional[str] = Query(
+                            default=None, regex="^(academic|transportation)$"
+                        ),
+                        minAmount: Optional[float] = None,
+                        maxAmount: Optional[float] = None,
+                        page: Optional[int] = Query(default=None, ge=1),
+                        limit: int = Query(default=10, ge=1, le=100),
                         current=Depends(require_permission("payments.view"))):
     q = {}
     if academicYear: q["academicYear"] = academicYear
     if semester: q["semester"] = semester
+    if feeType == "academic":
+        q["$and"] = [
+            {
+                "$or": [
+                    {"feeType": "academic"},
+                    {"feeType": {"$exists": False}},
+                    {"feeType": None},
+                ]
+            }
+        ]
+    elif feeType:
+        q["feeType"] = feeType
+    amount_query = {}
+    if minAmount is not None:
+        amount_query["$gte"] = minAmount
+    if maxAmount is not None:
+        amount_query["$lte"] = maxAmount
+    if amount_query:
+        q["amount"] = amount_query
     if search:
         matching = await db.students.find({"$or": [{"student.fullName": {"$regex": search, "$options": "i"}},
                                                     {"code": {"$regex": search, "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
-        q["student"] = {"$in": [m["id"] for m in matching]}
+        search_student_ids = [m["id"] for m in matching]
+        q["student"] = {"$in": search_student_ids}
     allowed = await allowed_class_ids(current)
     if allowed is not None:
         scoped_students = await db.students.find({"currentClassId": {"$in": allowed}}, {"id": 1, "_id": 0}).to_list(5000)
         scoped_ids = [student["id"] for student in scoped_students]
         existing_ids = q.get("student", {}).get("$in") if isinstance(q.get("student"), dict) else None
-        q["student"] = {"$in": [sid for sid in (existing_ids or scoped_ids) if sid in scoped_ids]}
-    docs = await db.payments.find(q, {"_id": 0}).sort("paymentDate", -1).to_list(1000)
-    for d in docs: await _enrich_payment(d)
+        q["student"] = {
+            "$in": [
+                sid
+                for sid in (existing_ids if existing_ids is not None else scoped_ids)
+                if sid in scoped_ids
+            ]
+        }
+    total = await db.payments.count_documents(q) if page is not None else None
+    total_pages = max(1, (total + limit - 1) // limit) if total is not None else 1
+    resolved_page = min(page, total_pages) if page is not None else None
+    cursor = db.payments.find(q, {"_id": 0}).sort("paymentDate", -1)
+    if resolved_page is not None:
+        cursor = cursor.skip((resolved_page - 1) * limit).limit(limit)
+    docs = await cursor.to_list(limit if resolved_page is not None else 1000)
+    await _enrich_payments(docs)
+    if resolved_page is not None:
+        return {
+            "data": docs,
+            "pagination": {
+                "page": resolved_page,
+                "limit": limit,
+                "total": total,
+                "totalPages": total_pages,
+            },
+        }
     return docs
 
 @api.get("/payments/summary")
@@ -2478,17 +2975,19 @@ async def create_refund(body: RefundIn, current=Depends(require_permission("paym
 async def update_payment(pid: str, body: PaymentIn, current=Depends(require_permission("payments.update"))):
     existing = await db.payments.find_one({"id": pid})
     if not existing: raise HTTPException(404, "غير موجود")
-    await ensure_student_access(existing.get("student"), current)
-    await ensure_student_access(body.student, current)
+    student_id = existing.get("student")
+    if body.student != student_id:
+        raise HTTPException(400, "لا يمكن تغيير الطالب المرتبط بالدفعة")
+    await ensure_student_access(student_id, current)
     fee_type = _clean_fee_type(body.feeType)
     if body.semester not in ("first", "second", "full_year"): raise HTTPException(400, "الفصل غير صالح")
     if body.amount <= 0: raise HTTPException(400, "المبلغ يجب أن يكون أكبر من صفر")
-    await _validate_no_overpayment(body.student, body.academicYear, body.amount, fee_type, exclude=pid)
-    await db.payments.update_one({"id": pid}, {"$set": {"student": body.student, "academicYear": body.academicYear,
+    await _validate_no_overpayment(student_id, body.academicYear, body.amount, fee_type, exclude=pid)
+    await db.payments.update_one({"id": pid}, {"$set": {"student": student_id, "academicYear": body.academicYear,
         "feeType": fee_type, "semester": body.semester, "amount": float(body.amount), "paymentDate": body.paymentDate,
         "notes": body.notes or "", "updatedAt": now_iso()}})
     updated = await db.payments.find_one({"id": pid}, {"_id": 0})
-    student = await db.students.find_one({"id": body.student}, {"_id": 0, "fees": 1})
+    student = await db.students.find_one({"id": student_id}, {"_id": 0, "fees": 1})
     updated.pop("totalPaidAtPayment", None)
     updated.pop("totalRemainingAtPayment", None)
     paid_at_payment, remaining_at_payment = await _payment_snapshot(updated, _fee_payables((student or {}).get("fees") or {}).get(fee_type, 0))
@@ -2815,19 +3314,130 @@ async def repeated_absence_reports(
     }
 
 @api.get("/dashboard/stats")
-async def dashboard_stats(current=Depends(get_current_user)):
+async def dashboard_stats(
+    student_status: str = Query(default="active", alias="studentStatus"),
+    current=Depends(get_current_user),
+):
+    if student_status not in ("active", "dropped", "all"):
+        raise HTTPException(400, "حالة الطلاب غير صالحة")
     allowed = await allowed_class_ids(current)
     student_scope = {} if allowed is None else {"currentClassId": {"$in": allowed}}
+    if student_status == "active":
+        student_scope["student.status"] = {"$ne": "inactive"}
+    elif student_status == "dropped":
+        student_scope["student.status"] = "inactive"
     total = await db.students.count_documents(student_scope)
     female = await db.students.count_documents({**student_scope, "student.gender": "female"})
     male = await db.students.count_documents({**student_scope, "student.gender": "male"})
     orphans = await db.students.count_documents({**student_scope, "student.orphan": True})
-    active = await db.students.count_documents({**student_scope, "student.status": { "$ne": "inactive" }})
-    dropped = await db.students.count_documents({**student_scope, "student.status": "inactive"})
+    active = await db.students.count_documents({
+        **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
+        "student.status": {"$ne": "inactive"},
+    })
+    dropped = await db.students.count_documents({
+        **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
+        "student.status": "inactive",
+    })
     teachers_count = await db.teachers.count_documents({} if allowed is None else {"id": current.get("teacherId")})
     classes_count = await db.classes.count_documents({} if allowed is None else {"id": {"$in": allowed}})
 
-    # Only payments belonging to active students
+    scoped_student_query = {} if allowed is None else {"currentClassId": {"$in": allowed}}
+    path_students = await db.students.find(
+        scoped_student_query,
+        {"_id": 0, "id": 1, "student": 1, "fees": 1},
+    ).to_list(None)
+    registration_paths = await get_registration_paths()
+    path_stats = {
+        path: {"path": path, "total": 0, "dropped": 0}
+        for path in registration_paths
+    }
+    for student in path_students:
+        student_data = student.get("student") or {}
+        path = (
+            student_data.get("finalRegistrationPath")
+            or student_data.get("registrationPath")
+            or "غير محدد"
+        )
+        if path not in path_stats:
+            path_stats[path] = {"path": path, "total": 0, "dropped": 0}
+        if student_data.get("status") == "inactive":
+            path_stats[path]["dropped"] += 1
+        else:
+            path_stats[path]["total"] += 1
+
+    if allowed is None:
+        teacher_scope = {}
+    else:
+        teacher_scope = {"id": current.get("teacherId")}
+    teacher_stats = {
+        "total": teachers_count,
+        "female": await db.teachers.count_documents({**teacher_scope, "gender": "female"}),
+        "male": await db.teachers.count_documents({**teacher_scope, "gender": "male"}),
+    }
+
+    all_finance = {
+        fee_type: {"payable": 0.0, "paid": 0.0, "remaining": 0.0}
+        for fee_type in ("academic", "transportation")
+    }
+    path_finance = {}
+    for path in path_stats:
+        path_finance[path] = {
+            fee_type: {"payable": 0.0, "paid": 0.0, "remaining": 0.0}
+            for fee_type in ("academic", "transportation")
+        }
+
+    finance_students = {}
+    for student in path_students:
+        student_data = student.get("student") or {}
+        is_dropped = student_data.get("status") == "inactive"
+        if student_status == "active" and is_dropped:
+            continue
+        if student_status == "dropped" and not is_dropped:
+            continue
+        path = (
+            student_data.get("finalRegistrationPath")
+            or student_data.get("registrationPath")
+            or "غير محدد"
+        )
+        fees = student.get("fees") or {}
+        fee_payables = _fee_payables(fees)
+        finance_students[student["id"]] = {
+            "path": path,
+            "academicYear": fees.get("academicYear") or "",
+        }
+        for fee_type in ("academic", "transportation"):
+            payable = fee_payables[fee_type]
+            all_finance[fee_type]["payable"] += payable
+            path_finance[path][fee_type]["payable"] += payable
+
+    if finance_students:
+        finance_payments = await db.payments.find(
+            {"student": {"$in": list(finance_students)}},
+            {"_id": 0, "student": 1, "academicYear": 1, "feeType": 1, "amount": 1},
+        ).to_list(None)
+        for payment in finance_payments:
+            fee_type = payment.get("feeType") or "academic"
+            student_id = payment.get("student")
+            student_finance = finance_students.get(student_id)
+            if (
+                fee_type not in ("academic", "transportation")
+                or student_finance is None
+            ):
+                continue
+            if student_finance["academicYear"] and (
+                payment.get("academicYear") or ""
+            ) != student_finance["academicYear"]:
+                continue
+            amount = float(payment.get("amount") or 0)
+            path = student_finance["path"]
+            all_finance[fee_type]["paid"] += amount
+            path_finance[path][fee_type]["paid"] += amount
+
+    for group in (all_finance, *path_finance.values()):
+        for totals in group.values():
+            totals["remaining"] = max(0, totals["payable"] - totals["paid"])
+
+    # Payment and payable totals follow the selected student status.
     pay_agg = await db.payments.aggregate([
         {
             "$lookup": {
@@ -2842,7 +3452,17 @@ async def dashboard_stats(current=Depends(get_current_user)):
         },
         {
             "$match": {
-                "student.student.status": {"$ne": "inactive"},
+                **(
+                    {}
+                    if student_status == "all"
+                    else {
+                        "student.student.status": (
+                            "inactive"
+                            if student_status == "dropped"
+                            else {"$ne": "inactive"}
+                        )
+                    }
+                ),
                 **({} if allowed is None else {"student.currentClassId": {"$in": allowed}}),
             }
         },
@@ -2860,7 +3480,17 @@ async def dashboard_stats(current=Depends(get_current_user)):
     stu_agg = await db.students.aggregate([
         {
             "$match": {
-                "student.status": {"$ne": "inactive"},
+                **(
+                    {}
+                    if student_status == "all"
+                    else {
+                        "student.status": (
+                            "inactive"
+                            if student_status == "dropped"
+                            else {"$ne": "inactive"}
+                        )
+                    }
+                ),
                 **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
             }
         },
@@ -2955,6 +3585,15 @@ async def dashboard_stats(current=Depends(get_current_user)):
         "dropped":dropped,
         "active":active,
         "teachers": teachers_count,
+        "teacherStats": teacher_stats,
+        "studentPaths": list(path_stats.values()),
+        "finance": {
+            "all": all_finance,
+            "byPath": [
+                {"path": path, **path_finance[path]}
+                for path in path_stats
+            ],
+        },
         "classes": classes_count,
         "totalPayable": total_payable,
         "totalBooksFee": total_books_fee,
@@ -3251,12 +3890,18 @@ async def on_startup():
         await db.students.create_index("student.fullName")
         await db.students.create_index("code", unique=True, sparse=True)
         await db.students.create_index("currentClassId")
+        await db.students.create_index("createdAt")
         await db.payments.create_index("student")
         await db.payments.create_index("academicYear")
+        await db.payments.create_index([("student", 1), ("academicYear", 1)])
+        await db.payments.create_index("paymentDate")
+        await db.payments.create_index([("academicYear", 1), ("paymentDate", -1)])
         await db.users.create_index("username", unique=True)
         await db.roles.create_index("name", unique=True)
         await db.teachers.create_index("code", unique=True, sparse=True)
+        await db.teachers.create_index("createdAt")
         await db.classes.create_index("code", unique=True, sparse=True)
+        await db.classes.create_index("createdAt")
         await db.counters.create_index("key", unique=True)
         await db.subjects.create_index("code", unique=True, sparse=True)
         await db.teacher_subject_assignments.create_index([("teacherId", 1), ("subjectId", 1)], unique=True)

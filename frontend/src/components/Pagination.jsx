@@ -1,6 +1,12 @@
-const Pagination = ({ pagination, onPageChange, testId = "pagination" }) => {
+const Pagination = ({
+  pagination,
+  onPageChange,
+  onPageSizeChange,
+  testId = "pagination",
+}) => {
   const { page, totalPages, total } = pagination;
-  if (totalPages <= 1) return null;
+  const canChangePageSize = typeof onPageSizeChange === "function";
+  if (totalPages <= 1 && !canChangePageSize) return null;
 
   const firstVisible = Math.max(1, Math.min(page - 2, totalPages - 4));
   const lastVisible = Math.min(totalPages, firstVisible + 4);
@@ -23,75 +29,96 @@ const Pagination = ({ pagination, onPageChange, testId = "pagination" }) => {
         {total !== undefined && <> • الإجمالي {total}</>}
       </div>
       <div className="flex flex-wrap items-center gap-1">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          aria-label="الصفحة السابقة"
-          className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
-        >
-          السابق
-        </button>
-        {firstVisible > 1 && (
+        {canChangePageSize && (
+          <label className="me-2 flex items-center gap-2 text-xs text-gray-600">
+            عدد العناصر
+            <select
+              value={pagination.limit}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              aria-label="عدد العناصر في الصفحة"
+              className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm"
+            >
+              {[10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {totalPages > 1 && (
           <>
             <button
               type="button"
-              onClick={() => onPageChange(1)}
-              aria-label="الصفحة 1"
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+              aria-label="الصفحة السابقة"
               className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
             >
-              1
+              السابق
             </button>
-            {firstVisible > 2 && (
-              <span className="px-1 text-gray-400" aria-hidden="true">
-                …
-              </span>
+            {firstVisible > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onPageChange(1)}
+                  aria-label="الصفحة 1"
+                  className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+                >
+                  1
+                </button>
+                {firstVisible > 2 && (
+                  <span className="px-1 text-gray-400" aria-hidden="true">
+                    …
+                  </span>
+                )}
+              </>
             )}
-          </>
-        )}
-        {visiblePages.map((number) => (
-          <button
-            key={number}
-            type="button"
-            onClick={() => onPageChange(number)}
-            aria-label={`الصفحة ${number}`}
-            aria-current={number === page ? "page" : undefined}
-            disabled={number === page}
-            className={`${buttonClass} ${
-              number === page
-                ? "border-[#036A87] bg-[#036A87] text-white"
-                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            {number}
-          </button>
-        ))}
-        {lastVisible < totalPages && (
-          <>
-            {lastVisible < totalPages - 1 && (
-              <span className="px-1 text-gray-400" aria-hidden="true">
-                …
-              </span>
+            {visiblePages.map((number) => (
+              <button
+                key={number}
+                type="button"
+                onClick={() => onPageChange(number)}
+                aria-label={`الصفحة ${number}`}
+                aria-current={number === page ? "page" : undefined}
+                disabled={number === page}
+                className={`${buttonClass} ${
+                  number === page
+                    ? "border-[#036A87] bg-[#036A87] text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {number}
+              </button>
+            ))}
+            {lastVisible < totalPages && (
+              <>
+                {lastVisible < totalPages - 1 && (
+                  <span className="px-1 text-gray-400" aria-hidden="true">
+                    …
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onPageChange(totalPages)}
+                  aria-label={`الصفحة ${totalPages}`}
+                  className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+                >
+                  {totalPages}
+                </button>
+              </>
             )}
             <button
               type="button"
-              onClick={() => onPageChange(totalPages)}
-              aria-label={`الصفحة ${totalPages}`}
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+              aria-label="الصفحة التالية"
               className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
             >
-              {totalPages}
+              التالي
             </button>
           </>
         )}
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-          aria-label="الصفحة التالية"
-          className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
-        >
-          التالي
-        </button>
       </div>
     </nav>
   );

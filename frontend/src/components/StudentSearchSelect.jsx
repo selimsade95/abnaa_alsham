@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import api from "@/lib/api";
 import { Search } from "lucide-react";
 
 export default function StudentSearchSelect({
-  students,
   excludeIds = [],
   onSelect,
   placeholder = "ابحث عن طالب",
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const requestId = useRef(0);
+  const excludeKey = excludeIds.join(",");
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const excluded = new Set(excludeIds);
   const options = (students || [])
@@ -22,7 +27,39 @@ export default function StudentSearchSelect({
         code.toLocaleLowerCase().includes(normalizedQuery)
       );
     })
-    .slice(0, 50);
+    .slice(0, 10);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const currentRequest = ++requestId.current;
+    setLoading(true);
+    setStudents([]);
+    const timer = setTimeout(async () => {
+      setError("");
+      try {
+        const response = await api.get("/students/options", {
+          params: {
+            ...(query.trim() ? { search: query.trim() } : {}),
+            ...(excludeKey ? { excludeIds: excludeKey } : {}),
+          },
+        });
+        if (currentRequest === requestId.current)
+          setStudents(response.data.data || []);
+      } catch {
+        if (currentRequest === requestId.current) {
+          setStudents([]);
+          setError("تعذر تحميل الطلاب");
+        }
+      } finally {
+        if (currentRequest === requestId.current) setLoading(false);
+      }
+    }, query.trim() ? 250 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      requestId.current += 1;
+    };
+  }, [excludeKey, open, query]);
 
   return (
     <div className="relative">
@@ -51,7 +88,11 @@ export default function StudentSearchSelect({
           role="listbox"
           className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
-          {options.length ? (
+          {loading ? (
+            <p className="px-3 py-2 text-sm text-gray-500">جاري البحث...</p>
+          ) : error ? (
+            <p className="px-3 py-2 text-sm text-red-600">{error}</p>
+          ) : options.length ? (
             options.map((student) => (
               <button
                 key={student.id}

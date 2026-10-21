@@ -1006,6 +1006,12 @@ class TestPayments:
             "semester": "first",
             "paymentDate": datetime.utcnow().isoformat(),
         }
+        historical_payment = requests.post(
+            f"{API}/payments",
+            headers=admin_headers,
+            json={**payment_body, "academicYear": "2025-2026", "amount": 10},
+        )
+        assert historical_payment.status_code == 200, historical_payment.text
         for fee_type, amount in (("academic", 360), ("books", 100),
                                  ("transportation", 200), ("outfit", 50)):
             payment_body.update({"feeType": fee_type, "amount": amount + 1})
@@ -1037,6 +1043,18 @@ class TestPayments:
             assert category_summary.json()["feeTypes"][fee_type]["payable"] == amount
             assert category_summary.json()["feeTypes"][fee_type]["paid"] == amount
             assert category_summary.json()["feeTypes"][fee_type]["remaining"] == 0
+        dashboard_after_payments = requests.get(
+            f"{API}/dashboard/stats", headers=admin_headers
+        )
+        assert dashboard_after_payments.status_code == 200
+        dashboard_finance = dashboard_after_payments.json()["finance"]["all"]
+        dashboard_before_finance = dashboard_before.json()["finance"]["all"]
+        assert dashboard_finance["academic"]["paid"] - dashboard_before_finance[
+            "academic"
+        ]["paid"] == pytest.approx(360)
+        assert dashboard_finance["transportation"]["paid"] - dashboard_before_finance[
+            "transportation"
+        ]["paid"] == pytest.approx(200)
 
     def test_bus_fee_is_ignored_without_bus_registration(self, admin_headers):
         student_response = requests.post(
@@ -1196,6 +1214,15 @@ class TestDashboard:
                 "totalPayable", "totalBooksFee", "totalBusFee", "totalOutfitFee",
                 "totalCollected", "totalRemaining"):
             assert k in d
+        assert set(d["teacherStats"]) == {"total", "female", "male"}
+        assert isinstance(d["studentPaths"], list)
+        assert set(d["finance"]) == {"all", "byPath"}
+        for fee_type in ("academic", "transportation"):
+            assert set(d["finance"]["all"][fee_type]) == {
+                "payable", "paid", "remaining"
+            }
+        for path in d["finance"]["byPath"]:
+            assert set(path) == {"path", "academic", "transportation"}
 
 
 # ---------- Cleanup teardown ----------

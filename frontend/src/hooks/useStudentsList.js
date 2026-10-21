@@ -108,9 +108,21 @@ export function useStudentsList() {
     "students-list-page",
     1,
   );
+  const [pageSize, setPageSize] = useSessionStorageState(
+    "students-list-page-size",
+    10,
+  );
+  const [sortBy, setSortBy] = useSessionStorageState(
+    "students-list-sort-by",
+    "",
+  );
+  const [sortOrder, setSortOrder] = useSessionStorageState(
+    "students-list-sort-order",
+    "asc",
+  );
   const [pagination, setPagination] = useState({
     page: savedPage,
-    limit: 20,
+    limit: pageSize,
     total: 0,
     totalPages: 1,
   });
@@ -148,8 +160,12 @@ export function useStudentsList() {
       persistSessionStorageValue("students-list-page", page);
       setLoading(true);
       try {
-        const params = { page, limit: 20 };
+        const params = { page, limit: pageSize };
         if (debQ) params.search = debQ;
+        if (sortBy) {
+          params.sortBy = sortBy;
+          params.sortOrder = sortOrder;
+        }
         Object.entries(filters).forEach(([key, value]) => {
           if (value) params[key] = value;
         });
@@ -181,7 +197,30 @@ export function useStudentsList() {
         setLoading(false);
       }
     },
-    [debQ, filters, setSavedPage],
+    [debQ, filters, pageSize, setSavedPage, sortBy, sortOrder],
+  );
+
+  const sortStudents = useCallback(
+    (field) => {
+      currentPage.current = 1;
+      setSavedPage(1);
+      if (sortBy === field) {
+        setSortOrder((order) => (order === "asc" ? "desc" : "asc"));
+      } else {
+        setSortBy(field);
+        setSortOrder("asc");
+      }
+    },
+    [setSavedPage, setSortBy, setSortOrder, sortBy],
+  );
+
+  const changePageSize = useCallback(
+    (size) => {
+      currentPage.current = 1;
+      setSavedPage(1);
+      setPageSize(size);
+    },
+    [setPageSize, setSavedPage],
   );
 
   useEffect(() => {
@@ -275,6 +314,10 @@ export function useStudentsList() {
     registrationPaths,
     summary,
     pagination,
+    changePageSize,
+    sortBy,
+    sortOrder,
+    sortStudents,
     loading,
     q,
     setQ,

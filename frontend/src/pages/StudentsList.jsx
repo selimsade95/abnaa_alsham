@@ -12,6 +12,9 @@ import {
   FileText,
   Download,
   Upload,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from "lucide-react";
 import { STATUS_LABELS, GENDER_LABELS } from "@/lib/studentDefaults";
 import { downloadTemplate } from "@/lib/csv";
@@ -26,6 +29,10 @@ export default function StudentsList() {
     registrationPaths,
     summary,
     pagination,
+    changePageSize,
+    sortBy,
+    sortOrder,
+    sortStudents,
     loading,
     q,
     setQ,
@@ -51,6 +58,42 @@ export default function StudentsList() {
     studentTemplate,
     activeCount,
   } = useStudentsList();
+
+  const sortableHeader = (label, field) => (
+    <th
+      key={field}
+      className="px-4 py-3 font-medium"
+      aria-sort={
+        sortBy === field
+          ? sortOrder === "asc"
+            ? "ascending"
+            : "descending"
+          : "none"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => sortStudents(field)}
+        className="inline-flex items-center gap-1 hover:text-gray-900"
+        aria-label={`${label} - ${
+          sortBy === field
+            ? sortOrder === "asc"
+              ? "ترتيب تصاعدي"
+              : "ترتيب تنازلي"
+            : "ترتيب"
+        }`}
+      >
+        {label}
+        {sortBy !== field ? (
+          <ArrowUpDown className="h-3.5 w-3.5" />
+        ) : sortOrder === "asc" ? (
+          <ArrowUp className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowDown className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </th>
+  );
 
   return (
     <div className="space-y-6">
@@ -385,14 +428,14 @@ export default function StudentsList() {
           <table className="min-w-full text-sm text-right">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3 font-medium">الكود</th>
-                <th className="px-4 py-3 font-medium">الاسم الكامل</th>
-                <th className="px-4 py-3 font-medium">الجنس</th>
-                <th className="px-4 py-3 font-medium">تاريخ الميلاد</th>
-                <th className="px-4 py-3 font-medium">الصف</th>
-                <th className="px-4 py-3 font-medium">مسار</th>
-                <th className="px-4 py-3 font-medium">الوضع</th>
-                <th className="px-4 py-3 font-medium">يتيم</th>
+                {sortableHeader("الكود", "code")}
+                {sortableHeader("الاسم الكامل", "name")}
+                {sortableHeader("الجنس", "gender")}
+                {sortableHeader("تاريخ الميلاد", "birthdate")}
+                {sortableHeader("الصف", "class")}
+                {sortableHeader("مسار", "registrationPath")}
+                {sortableHeader("الوضع", "status")}
+                {sortableHeader("يتيم", "orphan")}
                 <th className="px-4 py-3 font-medium text-left">إجراءات</th>
               </tr>
             </thead>
@@ -573,6 +616,7 @@ export default function StudentsList() {
         <Pagination
           pagination={pagination}
           onPageChange={load}
+          onPageSizeChange={changePageSize}
           testId="students-pagination"
         />
       </div>

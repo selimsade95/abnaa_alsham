@@ -41,13 +41,12 @@ export default function Login() {
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1573765727997-e02883182ba7?crop=entropy&cs=srgb&fm=jpg&w=1400&q=80)",
+            backgroundImage: "url('/assets/school.jpg')",
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
         />
-        <div className="absolute inset-0 bg-[#04CDF9]/60 mix-blend-multiply" />
+        <div className="absolute inset-0 mix-blend-multiply" />
         <div className="relative h-full flex flex-col justify-between p-12 text-white">
           <img
             src="/assets/logo.png"

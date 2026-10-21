@@ -48,27 +48,10 @@ export function useStudentForm(mode) {
   const [hobbiesInput, setHobbiesInput] = useState("");
   const [errors, setErrors] = useState({});
   const [showFullInfo, setShowFullInfo] = useState(false);
-  const [students, setStudents] = useState([]);
   const [registrationPaths, setRegistrationPaths] =
     useState(REGISTRATION_PATHS);
   const [discountOptions, setDiscountOptions] = useState([]);
   const { classes } = useClasses({ limit: 500 });
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .get("/students", { params: { limit: 5000 } })
-      .then((response) => {
-        if (!cancelled) setStudents(response.data?.data || []);
-      })
-      .catch((error) => {
-        if (!cancelled)
-          toast.error(error?.response?.data?.detail || "تعذر تحميل قائمة الطلاب");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     api
@@ -327,7 +310,6 @@ export function useStudentForm(mode) {
     setHobbiesInput,
     errors,
     classes,
-    students,
     registrationPaths,
     discountOptions,
     showFullInfo,

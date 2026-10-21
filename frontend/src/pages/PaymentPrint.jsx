@@ -15,11 +15,13 @@ export default function PaymentPrint({ studentHistory = false }) {
   const [student, setStudent] = useState(null);
   const [payments, setPayments] = useState([]);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [paymentSummary, setPaymentSummary] = useState(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setReady(false);
     if (id && !studentHistory) {
+      setPaymentSummary(null);
       api
         .get(`/payments/${id}`)
         .then((paymentResponse) => {
@@ -32,6 +34,7 @@ export default function PaymentPrint({ studentHistory = false }) {
           setReady(true);
         });
     } else if (studentHistory) {
+      setPaymentSummary(null);
       api
         .get(`/students/${id}`)
         .then((studentResponse) => {
@@ -45,9 +48,19 @@ export default function PaymentPrint({ studentHistory = false }) {
     } else {
       const params = Object.fromEntries(searchParams.entries());
 
-      api.get("/payments", { params }).then((response) => {
-        const nextPayments = response.data;
+      const summaryParams = {
+        ...(params.search ? { search: params.search } : {}),
+        ...(params.academicYear ? { academicYear: params.academicYear } : {}),
+      };
+      Promise.all([
+        api.get("/payments", { params }),
+        api.get("/payments/summary", { params: summaryParams }),
+      ]).then(([paymentsResponse, summaryResponse]) => {
+        const nextPayments = Array.isArray(paymentsResponse.data)
+          ? paymentsResponse.data
+          : paymentsResponse.data.data;
         setPayments(nextPayments);
+        setPaymentSummary(summaryResponse.data);
         setSelectedPayment(null);
         const studentIds = [
           ...new Set(nextPayments.map((payment) => payment.student)),
@@ -88,6 +101,9 @@ export default function PaymentPrint({ studentHistory = false }) {
   const multipleStudents = !selectedPayment && distinctStudents > 1;
   const printedFeeTotals = Object.fromEntries(
     FEE_TYPE_ORDER.map((feeType) => {
+      if (paymentSummary?.feeTypes?.[feeType]) {
+        return [feeType, paymentSummary.feeTypes[feeType]];
+      }
       if (!multipleStudents) return [feeType, fees.byType?.[feeType] || {}];
       const studentsByType = new Map();
       records

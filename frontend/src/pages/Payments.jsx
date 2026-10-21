@@ -20,6 +20,7 @@ import {
 } from "@/lib/studentDefaults";
 import { downloadCsv } from "@/lib/csv";
 import { useSessionStorageState } from "@/hooks/useSessionStorageState";
+import Pagination from "@/components/Pagination";
 
 const PaymentBadge = ({ semester }) => {
   const styles = {
@@ -68,7 +69,31 @@ export default function Payments() {
   const [q, setQ] = useSessionStorageState("payments-list-search", "");
   const [year, setYear] = useSessionStorageState("payments-list-year", "");
   const [sem, setSem] = useSessionStorageState("payments-list-semester", "");
+  const [feeType, setFeeType] = useSessionStorageState(
+    "payments-list-fee-type",
+    "",
+  );
+  const [minAmount, setMinAmount] = useSessionStorageState(
+    "payments-list-min-amount",
+    "",
+  );
+  const [maxAmount, setMaxAmount] = useSessionStorageState(
+    "payments-list-max-amount",
+    "",
+  );
+  const [page, setPage] = useSessionStorageState("payments-list-page", 1);
+  const [pageSize, setPageSize] = useSessionStorageState(
+    "payments-list-page-size",
+    10,
+  );
+  const [pagination, setPagination] = useState({
+    page,
+    limit: pageSize,
+    total: 0,
+    totalPages: 1,
+  });
   const [debouncedQ, setDebouncedQ] = useState(q.trim());
+  const [summaryVersion, setSummaryVersion] = useState(0);
   const [editing, setEditing] = useState(null);
   const [students, setStudents] = useState([]);
   const [confirmId, setConfirmId] = useState(null);
@@ -79,7 +104,14 @@ export default function Payments() {
 
   const exportPayments = async () => {
     try {
-      const params = { search: debouncedQ, academicYear: year, semester: sem };
+      const params = {
+        search: debouncedQ,
+        academicYear: year,
+        semester: sem,
+        feeType,
+        minAmount,
+        maxAmount,
+      };
       Object.keys(params).forEach((key) => !params[key] && delete params[key]);
       const response = await api.get("/payments", { params });
       const columns = [
@@ -111,29 +143,41 @@ export default function Payments() {
     if (debouncedQ) params.set("search", debouncedQ);
     if (year) params.set("academicYear", year);
     if (sem) params.set("semester", sem);
+    if (feeType) params.set("feeType", feeType);
+    if (minAmount !== "") params.set("minAmount", minAmount);
+    if (maxAmount !== "") params.set("maxAmount", maxAmount);
+    params.set("page", page);
+    params.set("limit", pageSize);
     window.open(`/payments/print?${params.toString()}`, "_blank");
   };
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    const t = setTimeout(() => {
+      const nextQuery = q.trim();
+      if (nextQuery !== debouncedQ) {
+        setDebouncedQ(nextQuery);
+        setPage(1);
+      }
+    }, 300);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, debouncedQ, setPage]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, limit: pageSize };
       if (debouncedQ) params.search = debouncedQ;
       if (year) params.academicYear = year;
       if (sem) params.semester = sem;
-      const [paymentsResponse, statsResponse] = await Promise.all([
-        api.get("/payments", { params }),
-        api.get("/payments/summary", {
-          params: { search: debouncedQ, academicYear: year },
-        }),
-      ]);
-      setItems(paymentsResponse.data);
-      setSummary(statsResponse.data);
+      if (feeType) params.feeType = feeType;
+      if (minAmount !== "") params.minAmount = minAmount;
+      if (maxAmount !== "") params.maxAmount = maxAmount;
+      const paymentsResponse = await api.get("/payments", { params });
+      setItems(paymentsResponse.data.data);
+      setPagination(paymentsResponse.data.pagination);
+      if (paymentsResponse.data.pagination.page !== page) {
+        setPage(paymentsResponse.data.pagination.page);
+      }
     } catch {
       toast.error("تعذر تحميل المدفوعات");
     }
@@ -141,18 +185,31 @@ export default function Payments() {
   };
   useEffect(() => {
     load(); /* eslint-disable-next-line */
-  }, [debouncedQ, year, sem]);
+  }, [debouncedQ, year, sem, feeType, minAmount, maxAmount, page, pageSize]);
 
-  const openNew = async () => {
-    if (students.length === 0) {
-      try {
-        const r = await api.get("/students", { params: { limit: 5000 } });
-        setStudents(r.data?.data || []);
-      } catch (error) {
-        toast.error(error?.response?.data?.detail || "تعذر تحميل الطلاب");
-        return;
-      }
-    }
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/payments/summary", {
+        params: { search: debouncedQ, academicYear: year },
+      })
+      .then((response) => {
+        if (!cancelled) setSummary(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("تعذر تحميل ملخص المدفوعات");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQ, year, summaryVersion]);
+
+  const changePageSize = (size) => {
+    setPageSize(size);
+    setPage(1);
+  };
+
+  const openNew = () => {
     setEditing({
       id: null,
       split: true,
@@ -166,18 +223,7 @@ export default function Payments() {
     });
   };
 
-  const openRefund = async () => {
-    if (students.length === 0) {
-      try {
-        const response = await api.get("/students", {
-          params: { limit: 5000 },
-        });
-        setStudents(response.data?.data || []);
-      } catch {
-        toast.error("تعذر تحميل الطلاب");
-        return;
-      }
-    }
+  const openRefund = () => {
     setRefund({
       student: "",
       academicYear: year || "",
@@ -227,14 +273,15 @@ export default function Payments() {
     refund?.semester,
   ]);
   const openEdit = async (p) => {
-    if (students.length === 0) {
-      try {
-        const r = await api.get("/students", { params: { limit: 5000 } });
-        setStudents(r.data?.data || []);
-      } catch (error) {
-        toast.error(error?.response?.data?.detail || "تعذر تحميل الطلاب");
-        return;
-      }
+    try {
+      const response = await api.get(`/students/${p.student}`);
+      setStudents((previous) => [
+        ...previous.filter((student) => student.id !== response.data.id),
+        response.data,
+      ]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر تحميل بيانات الطالب");
+      return;
     }
     setEditing({ ...p, paymentDate: (p.paymentDate || "").slice(0, 10) });
   };
@@ -259,6 +306,7 @@ export default function Payments() {
       });
       toast.success("تم تسجيل الاسترداد");
       setRefund(null);
+      setSummaryVersion((version) => version + 1);
       load();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "تعذر تسجيل الاسترداد");
@@ -307,6 +355,7 @@ export default function Payments() {
         });
       toast.success("تم الحفظ");
       setEditing(null);
+      setSummaryVersion((version) => version + 1);
       load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "فشل الحفظ");
@@ -317,6 +366,7 @@ export default function Payments() {
       await api.delete(`/payments/${confirmId}`);
       toast.success("تم الحذف");
       setConfirmId(null);
+      setSummaryVersion((version) => version + 1);
       load();
     } catch (e) {
       toast.error(e?.response?.data?.detail || "فشل الحذف");
@@ -425,14 +475,20 @@ export default function Payments() {
           </div>
           <input
             value={year}
-            onChange={(e) => setYear(e.target.value)}
+            onChange={(e) => {
+              setYear(e.target.value);
+              setPage(1);
+            }}
             placeholder="سنة دراسية (مثال 2026-2027)"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             data-testid="payments-year-filter"
           />
           <select
             value={sem}
-            onChange={(e) => setSem(e.target.value)}
+            onChange={(e) => {
+              setSem(e.target.value);
+              setPage(1);
+            }}
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
             data-testid="payments-semester-filter"
           >
@@ -441,6 +497,48 @@ export default function Payments() {
             <option value="second">الفصل الثاني</option>
             <option value="full_year">السنة كاملة</option>
           </select>
+          <select
+            value={feeType}
+            onChange={(e) => {
+              setFeeType(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            data-testid="payments-fee-type-filter"
+            aria-label="نوع الرسوم"
+          >
+            <option value="">كل أنواع الرسوم</option>
+            <option value="academic">{FEE_TYPE_LABELS.academic}</option>
+            <option value="transportation">
+              {FEE_TYPE_LABELS.transportation}
+            </option>
+          </select>
+          <input
+            type="number"
+            step="any"
+            value={minAmount}
+            onChange={(e) => {
+              setMinAmount(e.target.value);
+              setPage(1);
+            }}
+            placeholder="أقل مبلغ"
+            aria-label="أقل مبلغ"
+            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            data-testid="payments-min-amount-filter"
+          />
+          <input
+            type="number"
+            step="any"
+            value={maxAmount}
+            onChange={(e) => {
+              setMaxAmount(e.target.value);
+              setPage(1);
+            }}
+            placeholder="أعلى مبلغ"
+            aria-label="أعلى مبلغ"
+            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            data-testid="payments-max-amount-filter"
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
@@ -567,6 +665,12 @@ export default function Payments() {
             </tbody>
           </table>
         </div>
+        <Pagination
+          pagination={pagination}
+          onPageChange={setPage}
+          onPageSizeChange={changePageSize}
+          testId="payments-pagination"
+        />
       </div>
 
       {editing && (
@@ -581,40 +685,20 @@ export default function Payments() {
                   {editing.id ? "الطالب" : "الطلاب"}
                 </label>
                 {editing.id ? (
-                  <select
-                    required
+                  <div
                     data-testid="payment-student-select"
-                    value={editing.student}
-                    onChange={(e) => {
-                      const selectedStudent = students.find(
-                        (item) => item.id === e.target.value,
-                      );
-                      const availableTypes = FEE_TYPE_ORDER.filter(
-                        (feeType) =>
-                          studentFeePayable(selectedStudent, feeType) > 0,
-                      );
-                      setEditing({
-                        ...editing,
-                        student: e.target.value,
-                        feeType: availableTypes.includes(editing.feeType)
-                          ? editing.feeType
-                          : availableTypes[0] || "academic",
-                      });
-                    }}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700"
                   >
-                    <option value="">اختر الطالب</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.student?.fullName}
-                      </option>
-                    ))}
-                  </select>
+                    {editing.studentName || "—"}
+                  </div>
                 ) : (
                   <StudentSearchSelect
-                    students={students}
                     excludeIds={editing.allocations.map((item) => item.student)}
                     onSelect={(student) => {
+                      setStudents((previous) => [
+                        ...previous.filter((item) => item.id !== student.id),
+                        student,
+                      ]);
                       const allocations = [
                         ...editing.allocations,
                         { student: student.id, amount: "0.00" },
@@ -891,33 +975,29 @@ export default function Payments() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   الطالب
                 </label>
-                <select
-                  required
-                  value={refund.student}
-                  onChange={(e) => {
-                    const selectedStudent = students.find(
-                      (item) => item.id === e.target.value,
-                    );
+                <StudentSearchSelect
+                  excludeIds={refund.student ? [refund.student] : []}
+                  onSelect={(selectedStudent) => {
                     const refundTypes = FEE_TYPE_ORDER.filter(
                       (feeType) => studentFeePaid(selectedStudent, feeType) > 0,
                     );
+                    setStudents((previous) => [
+                      ...previous.filter((item) => item.id !== selectedStudent.id),
+                      selectedStudent,
+                    ]);
                     setRefund({
                       ...refund,
-                      student: e.target.value,
+                      student: selectedStudent.id,
                       feeType: refundTypes.includes(refund.feeType)
                         ? refund.feeType
                         : refundTypes[0] || "academic",
                     });
                   }}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
-                >
-                  <option value="">اختر الطالب</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.student?.fullName}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={
+                    students.find((student) => student.id === refund.student)
+                      ?.student?.fullName || "ابحث عن طالب"
+                  }
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

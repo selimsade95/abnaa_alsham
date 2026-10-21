@@ -129,6 +129,42 @@ describe("student list pagination persistence", () => {
     );
   });
 
+  it("sorts the full student result set and starts sorting from the first page", async () => {
+    await act(async () => {
+      root.render(<ListHarness />);
+    });
+
+    await act(async () => {
+      window.studentListState.sortStudents("name");
+    });
+
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/students",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          page: 1,
+          sortBy: "name",
+          sortOrder: "asc",
+        }),
+      }),
+    );
+
+    await act(async () => {
+      window.studentListState.sortStudents("name");
+    });
+
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/students",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          page: 1,
+          sortBy: "name",
+          sortOrder: "desc",
+        }),
+      }),
+    );
+  });
+
   it("tracks upload progress and switches to processing while the import runs", async () => {
     let resolveImport;
     let uploadConfig;
