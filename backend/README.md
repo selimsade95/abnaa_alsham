@@ -9,6 +9,7 @@
 - `classModel.py` / `classService.py` / `classRoute.py`: class domain boundary.
 - `paymentModel.py` / `paymentService.py` / `paymentRoute.py`: payment domain boundary.
 - `authModel.py` / `authService.py` / `authRoute.py`: auth, roles, and users boundary.
+- `branchModel.py` / `branchRoute.py`: branch management and branch selection.
 
 The `*Route.py` modules currently export the tested handlers from `routes.py`.
 This keeps the API stable while allowing each domain to be migrated out of the
@@ -46,3 +47,31 @@ API key. Set `MAIL_FROM_CONTACT` to a sender address on a domain verified with
 Resend and `CONTACT_EMAILS` to a comma-separated list of one to five recipient
 addresses. The first address is the primary recipient and the remaining
 addresses are copied (CC).
+
+## Branch and student access
+
+On startup, existing records are assigned to a new default branch named
+`الفرع الرئيسي`. Branch data is automatically isolated in API reads and writes.
+Users are assigned one or more branches in the user editor; users with the
+`branches.accessAll` permission can choose among every active branch at login
+and switch branches from the application sidebar. The `branches.manage`
+permission controls branch administration.
+
+To restrict a sub-manager to one student gender, grant the role
+`students.gender.male.view` or `students.gender.female.view` alongside the
+required student permissions. These restrictions also apply to linked
+payments, grades, homework, and attendance records. Roles without either
+gender permission retain their existing unrestricted behavior.
+
+For schools with mixed lower grades and gender-separated upper grades, use
+grade-and-gender scopes instead of a single gender permission. Grant
+`students.scope.lowerGrades.view` to show boys and girls in grades 1–2,
+`students.scope.upperGrades.male.view` for boys in grades 3–9, and
+`students.scope.upperGrades.female.view` for girls in grades 3–9. Combine
+scopes on a role as needed: for example, a female manager receives the lower
+grades and upper-female scopes; a male manager receives the upper-male scope.
+The same scope applies to student-linked records and class lists, and prevents
+creating or moving students outside the assigned grade/gender scope. Ensure
+each class has a recognizable grade value in its `grade` field (numeric grades,
+Arabic digits, and common Arabic or English ordinal names are supported);
+unrecognized grade values are excluded from scoped access.

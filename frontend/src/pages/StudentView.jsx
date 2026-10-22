@@ -27,6 +27,7 @@ import {
 } from "@/lib/studentDefaults";
 import { useAuth } from "@/lib/auth";
 import { useStudent } from "@/hooks/useStudent";
+import { getIntlLocale } from "@/i18n";
 
 const Section = ({ title, children, actions }) => (
   <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -164,8 +165,7 @@ function StudentNotesSection({
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
-                  {note.authorName} ·{" "}
-                  {new Date(note.createdAt).toLocaleString("ar-EG")}
+                  {note.authorName} · {new Date(note.createdAt)}
                 </div>
               </article>
             );
@@ -772,19 +772,19 @@ export default function StudentView() {
                     <div className="flex justify-between gap-2">
                       <dt className="text-gray-500">المستحق</dt>
                       <dd className="font-medium tabular-nums">
-                        {Number(totals.payable || 0).toLocaleString("ar-EG")}
+                        {Number(totals.payable || 0)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-gray-500">المدفوع</dt>
                       <dd className="font-medium text-emerald-700 tabular-nums">
-                        {Number(totals.paid || 0).toLocaleString("ar-EG")}
+                        {Number(totals.paid || 0)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-gray-500">المتبقي</dt>
                       <dd className="font-medium text-amber-700 tabular-nums">
-                        {Number(totals.remaining || 0).toLocaleString("ar-EG")}
+                        {Number(totals.remaining || 0)}
                       </dd>
                     </div>
                   </dl>
@@ -806,7 +806,7 @@ export default function StudentView() {
                       <div>
                         إجمالي الخصم:{" "}
                         {Number(fees.discountAmount || 0).toLocaleString(
-                          "ar-EG",
+                          getIntlLocale(),
                         )}
                       </div>
                     </div>

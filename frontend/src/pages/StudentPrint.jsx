@@ -9,6 +9,7 @@ import {
   FEE_TYPE_ORDER,
   SEMESTER_LABELS,
 } from "@/lib/studentDefaults";
+import { getIntlLocale, getLanguage } from "@/i18n";
 
 const Section = ({ title, children }) => (
   <div className="print-card border border-gray-300 rounded-md p-3 mb-3">
@@ -45,7 +46,10 @@ export default function StudentPrint() {
   const fees = data.fees || {};
 
   return (
-    <div className="bg-white min-h-screen" dir="rtl">
+    <div
+      className="bg-white min-h-screen"
+      dir={getLanguage() === "ar" ? "rtl" : "ltr"}
+    >
       <div className="max-w-[210mm] mx-auto p-8 print-area">
         <div className="flex items-center gap-4 border-b-2 border-[#04CDF9] pb-3 mb-4">
           <img
@@ -60,7 +64,7 @@ export default function StudentPrint() {
             <div className="text-sm text-gray-600">استمارة تسجيل طالب</div>
           </div>
           <div className="text-xs text-gray-600">
-            تاريخ الطباعة: {new Date().toLocaleDateString("ar-EG")}
+            تاريخ الطباعة: {new Date().toLocaleDateString(getIntlLocale())}
           </div>
         </div>
 

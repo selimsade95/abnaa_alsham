@@ -16,6 +16,7 @@ class UserCreate(BaseModel):
     password: str
     roles: List[str] = []
     teacherId: Optional[str] = None
+    branchIds: Optional[List[str]] = None
 
 
 class UserUpdate(BaseModel):
@@ -23,6 +24,16 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     roles: Optional[List[str]] = None
     teacherId: Optional[str] = None
+    branchIds: Optional[List[str]] = None
+
+
+class BranchIn(BaseModel):
+    name: str
+    active: bool = True
+
+
+class SelectBranchIn(BaseModel):
+    branchId: str
 
 
 class RoleIn(BaseModel):

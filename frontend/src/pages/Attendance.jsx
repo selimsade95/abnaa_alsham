@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSearchParams } from "react-router-dom";
+import { getIntlLocale } from "@/i18n";
 
 function localDateValue(date = new Date()) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -20,7 +21,7 @@ function localDateValue(date = new Date()) {
 }
 
 const dateLabel = (date) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("ar-EG");
+  new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale());
 
 export default function Attendance() {
   const { has, hasAny } = useAuth();

@@ -588,9 +588,7 @@ export default function Classes() {
                             </div>
                           </td>
                           <td className="px-3 py-2 tabular-nums text-gray-600">
-                            {Number(
-                              student.fees?.totalPayable || 0,
-                            ).toLocaleString("ar-EG")}
+                            {Number(student.fees?.totalPayable || 0)}
                           </td>
                           <td className="px-3 py-2">
                             <input
@@ -849,10 +847,7 @@ export default function Classes() {
       )}
       {classDetails && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
-          <div
-            className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl"
-            dir="rtl"
-          >
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl">
             <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
@@ -1028,7 +1023,6 @@ export default function Classes() {
           <form
             onSubmit={saveHomework}
             className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl"
-            dir="rtl"
           >
             <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
               <div>

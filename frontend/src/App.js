@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   BrowserRouter,
   Routes,
@@ -18,6 +17,8 @@ import StudentCard from "@/pages/StudentCard";
 import StudentValidation from "@/pages/StudentValidation";
 import StudentFullInfo from "@/pages/StudentFullInfo";
 import Users from "@/pages/Users";
+import UserForm from "@/pages/UserForm";
+import UserView from "@/pages/UserView";
 import Roles from "@/pages/Roles";
 import Payments from "@/pages/Payments";
 import PaymentPrint from "@/pages/PaymentPrint";
@@ -28,6 +29,7 @@ import TeacherView from "@/pages/TeacherView";
 import Classes from "@/pages/Classes";
 import ClassView from "@/pages/ClassView";
 import Settings from "@/pages/Settings";
+import Branches from "@/pages/Branches";
 import Subjects from "@/pages/Subjects";
 import Grades from "@/pages/Grades";
 import Homework from "@/pages/Homework";
@@ -35,6 +37,10 @@ import Attendance from "@/pages/Attendance";
 import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { initializeLanguage } from "@/i18n";
+
+initializeLanguage();
 
 function Protected({ children, perm }) {
   const { user, loading, has } = useAuth();
@@ -61,17 +67,23 @@ function Protected({ children, perm }) {
 }
 
 function App() {
-  useEffect(() => {
-    document.documentElement.setAttribute("dir", "rtl");
-    document.documentElement.setAttribute("lang", "ar");
-  }, []);
   return (
     <AuthProvider>
       <BrowserRouter>
         <Toaster position="top-center" richColors closeButton />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/validate/student/:id" element={<StudentValidation />} />
+          <Route
+            path="/validate/student/:id"
+            element={
+              <>
+                <div className="fixed end-4 top-4 z-50">
+                  <LanguageSwitcher />
+                </div>
+                <StudentValidation />
+              </>
+            }
+          />
           <Route
             path="/students/:id/print"
             element={
@@ -284,6 +296,30 @@ function App() {
               }
             />
             <Route
+              path="/users/new"
+              element={
+                <Protected perm="users.create">
+                  <UserForm />
+                </Protected>
+              }
+            />
+            <Route
+              path="/users/:id/edit"
+              element={
+                <Protected perm="users.update">
+                  <UserForm />
+                </Protected>
+              }
+            />
+            <Route
+              path="/users/:id"
+              element={
+                <Protected perm="users.view">
+                  <UserView />
+                </Protected>
+              }
+            />
+            <Route
               path="/users"
               element={
                 <Protected perm="users.view">
@@ -304,6 +340,14 @@ function App() {
               element={
                 <Protected perm="settings.codeGeneration.view">
                   <Settings />
+                </Protected>
+              }
+            />
+            <Route
+              path="/branches"
+              element={
+                <Protected perm="branches.manage">
+                  <Branches />
                 </Protected>
               }
             />

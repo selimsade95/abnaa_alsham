@@ -94,8 +94,7 @@ export default function StudentForm({ mode }) {
   const siblingsStaffDiscountOptions = discountOptions.filter(
     (option) => option.category === "siblings_staff",
   );
-  const generalDiscountPercentage =
-    Number(fees.generalDiscountPercentage) || 0;
+  const generalDiscountPercentage = Number(fees.generalDiscountPercentage) || 0;
   const siblingsStaffDiscountPercentage =
     Number(fees.siblingsStaffDiscountPercentage) || 0;
   const academicPayable = Number(fees.totalPayable) || 0;
@@ -630,8 +629,7 @@ export default function StudentForm({ mode }) {
               <option value="">بدون خصم إخوة/كادر</option>
               {fees.siblingsStaffDiscountName &&
                 !siblingsStaffDiscountOptions.some(
-                  (option) =>
-                    option.name === fees.siblingsStaffDiscountName,
+                  (option) => option.name === fees.siblingsStaffDiscountName,
                 ) && (
                   <option value={fees.siblingsStaffDiscountName}>
                     {fees.siblingsStaffDiscountName} (خصم سابق)
@@ -647,10 +645,9 @@ export default function StudentForm({ mode }) {
         </div>
         {discountAmount > 0 && (
           <p className="text-sm text-gray-600" data-testid="discount-preview">
-            المستحق الأكاديمي: {academicPayable.toLocaleString("ar-EG")} | بعد
-            الخصم العام: {subtotal.toLocaleString("ar-EG")} | بعد خصم الإخوة/
-            الكادر: {netAcademicPayable.toLocaleString("ar-EG")} | إجمالي
-            الخصم: {discountAmount.toLocaleString("ar-EG")}
+            المستحق الأكاديمي: {academicPayable} | بعد الخصم العام: {subtotal} |
+            بعد خصم الإخوة/ الكادر: {netAcademicPayable} | إجمالي الخصم:{" "}
+            {discountAmount}
           </p>
         )}
         {mode === "create" && (
@@ -727,7 +724,10 @@ export default function StudentForm({ mode }) {
                 </tr>
               )}
               {data.siblings.map((sib, idx) => (
-                <tr key={sib.studentId || idx} className="border-t border-gray-100">
+                <tr
+                  key={sib.studentId || idx}
+                  className="border-t border-gray-100"
+                >
                   <td className="px-3 py-2 text-gray-600">{sib.order}</td>
                   <td className="px-3 py-2">
                     {sib.studentId && has("students.view") ? (
@@ -738,7 +738,9 @@ export default function StudentForm({ mode }) {
                         {sib.fullName || "—"}
                       </Link>
                     ) : (
-                      <span className="text-gray-700">{sib.fullName || "—"}</span>
+                      <span className="text-gray-700">
+                        {sib.fullName || "—"}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-gray-600">
@@ -748,7 +750,9 @@ export default function StudentForm({ mode }) {
                         ? "أنثى"
                         : "—"}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">{sib.class || "—"}</td>
+                  <td className="px-3 py-2 text-gray-600">
+                    {sib.class || "—"}
+                  </td>
                   <td className="px-3 py-2">
                     <button
                       type="button"

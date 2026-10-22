@@ -35,7 +35,10 @@ export default function Roles() {
     return acc;
   }, {});
   const RES_LABELS = {
+    branches: "فروع المدرسة",
     students: "الطلاب",
+    "students.gender": "تقييد عرض الطلاب حسب الجنس",
+    "students.scope": "تقييد عرض الطلاب حسب الصف والجنس",
     payments: "المدفوعات",
     users: "المستخدمون",
     roles: "الأدوار",

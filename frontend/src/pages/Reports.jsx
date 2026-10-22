@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
-import { BarChart3, CalendarRange, Download, Loader2 } from "lucide-react";
+import {
+  BarChart3,
+  CalendarRange,
+  FileSpreadsheet,
+  Loader2,
+  Printer,
+} from "lucide-react";
 import { toast } from "sonner";
+import { downloadXlsx, printReport } from "@/lib/reportExport";
 
 const PAYMENT_TYPE_LABELS = {
   all: "الكل",
@@ -64,42 +71,81 @@ export default function Reports() {
     return "كل الفترات";
   }, [dateFrom, dateTo, month]);
 
-  const exportCsv = () => {
+  const getExportSections = () => {
     if (!report) return;
-    const rows = [
-      [
-        "المسار",
-        "إجمالي المستحق",
-        "المبلغ المحصل",
-        "المتبقي",
-        "الطلاب المدفوعين",
-        "الطلاب الجزئيين",
-        "الطلاب غير المدفوعين",
-      ],
-      ...byCourse.map((item) => [
-        item.course,
-        item.payable,
-        item.collected,
-        item.remaining,
-        item.paidStudents,
-        item.partialStudents,
-        item.unpaidStudents,
-      ]),
+    return [
+      {
+        title: "ملخص التقرير المالي",
+        headers: ["المؤشر", "القيمة"],
+        rows: [
+          ["الفترة", activePeriodLabel],
+          ["نوع الدفع", PAYMENT_TYPE_LABELS[paymentType] || "الكل"],
+          ["الطلاب", summary.totalStudents ?? 0],
+          ["طلاب بدفع كامل", summary.paid ?? 0],
+          ["طلاب بدفع جزئي", summary.partial ?? 0],
+          ["طلاب بدون دفع", summary.unpaid ?? 0],
+          ["الطلاب المتوقفون", summary.dropped ?? 0],
+          ["إجمالي المستحق", summary.totalPayable ?? 0],
+          ["إجمالي المحصل", summary.totalCollected ?? 0],
+          ["إجمالي المتبقي", summary.totalRemaining ?? 0],
+        ],
+      },
+      {
+        title: "التقرير حسب المسار",
+        headers: [
+          "المسار",
+          "إجمالي المستحق",
+          "المبلغ المحصل",
+          "المتبقي",
+          "الطلاب المدفوعين",
+          "الطلاب الجزئيين",
+          "الطلاب غير المدفوعين",
+        ],
+        rows: byCourse.map((item) => [
+          item.course,
+          item.payable,
+          item.collected,
+          item.remaining,
+          item.paidStudents,
+          item.partialStudents,
+          item.unpaidStudents,
+        ]),
+      },
     ];
-    const csv = rows
-      .map((row) =>
-        row
-          .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
-          .join(","),
-      )
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `financial-report-${paymentType || "all"}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  };
+
+  const exportXlsx = async () => {
+    try {
+      const sections = getExportSections();
+      if (!sections) return;
+      await downloadXlsx(
+        `financial-report-${paymentType || "all"}.xlsx`,
+        sections.map((section) => ({
+          name: section.title,
+          rows: [section.headers, ...section.rows],
+        })),
+      );
+    } catch {
+      toast.error("تعذر تصدير التقرير إلى Excel");
+    }
+  };
+
+  const exportPdf = () => {
+    try {
+      const sections = getExportSections();
+      if (!sections) return;
+      if (
+        !printReport(
+          "التقرير المالي",
+          `${activePeriodLabel} - ${PAYMENT_TYPE_LABELS[paymentType] || "الكل"}${course ? ` - ${course}` : ""}`,
+          sections,
+        )
+      ) {
+        toast.error("يرجى السماح بالنوافذ المنبثقة لطباعة التقرير");
+      }
+    } catch {
+      toast.error("تعذر تجهيز التقرير للطباعة");
+    }
   };
 
   const StatCard = ({ label, value, tone = "sky" }) => {
@@ -127,13 +173,22 @@ export default function Reports() {
             ملخص مالي للطلاب حسب الفترة ونوع الدفع والمسار
           </p>
         </div>
-        <button
-          onClick={exportCsv}
-          disabled={!report}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
-        >
-          <Download className="h-4 w-4" /> تصدير CSV
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={exportPdf}
+            disabled={!report || loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            <Printer className="h-4 w-4" /> PDF
+          </button>
+          <button
+            onClick={exportXlsx}
+            disabled={!report || loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> Excel
+          </button>
+        </div>
       </div>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">

@@ -66,6 +66,9 @@ if (config.enableHealthCheck) {
 }
 
 let webpackConfig = {
+  babel: {
+    plugins: [require.resolve("./plugins/localize-ui")],
+  },
   eslint: {
     configure: {
       extends: ["plugin:react-hooks/recommended"],

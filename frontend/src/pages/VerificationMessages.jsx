@@ -273,7 +273,7 @@ export default function VerificationMessages() {
                   )}
                 </div>
                 <time className="text-xs text-gray-500">
-                  {new Date(message.createdAt).toLocaleString("ar-EG")}
+                  {new Date(message.createdAt)}
                 </time>
               </div>
 
@@ -297,9 +297,7 @@ export default function VerificationMessages() {
                 <div className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-4">
                   <div className="text-xs font-semibold text-emerald-800">
                     رد {message.responseBy || "المدرسة"} —{" "}
-                    {message.responseAt
-                      ? new Date(message.responseAt).toLocaleString("ar-EG")
-                      : ""}
+                    {message.responseAt ? new Date(message.responseAt) : ""}
                   </div>
                   <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
                     {message.response}

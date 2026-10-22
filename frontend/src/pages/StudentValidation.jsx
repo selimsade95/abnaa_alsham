@@ -49,14 +49,13 @@ export default function StudentValidation() {
     return (
       <div
         className="min-h-screen flex items-center justify-center text-gray-500"
-        dir="rtl"
       >
         <Loader2 className="h-5 w-5 animate-spin ms-2" /> جاري التحقق...
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 sm:p-8" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] p-4 sm:p-8">
       <main className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-[#BDEFFA] bg-white shadow-lg">
         <header className="bg-[#E0F9FF] px-6 py-5 flex items-center gap-3 border-b-2 border-[#04CDF9]">
           <img
@@ -191,7 +190,7 @@ export default function StudentValidation() {
         )}
       </main>
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
-        <DialogContent dir="rtl" className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>إرسال رسالة إلى المدرسة</DialogTitle>
             <DialogDescription>

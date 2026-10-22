@@ -8,6 +8,7 @@ import {
   SEMESTER_LABELS,
   STATUS_LABELS,
 } from "@/lib/studentDefaults";
+import { getIntlLocale, getLanguage } from "@/i18n";
 
 export default function PaymentPrint({ studentHistory = false }) {
   const { id } = useParams();
@@ -88,7 +89,10 @@ export default function PaymentPrint({ studentHistory = false }) {
 
   if (!ready || (!student && payments.length === 0))
     return (
-      <div className="p-8 text-gray-500" dir="rtl">
+      <div
+        className="p-8 text-gray-500"
+        dir={getLanguage() === "ar" ? "rtl" : "ltr"}
+      >
         جاري تجهيز سجل المدفوعات...
       </div>
     );
@@ -139,7 +143,10 @@ export default function PaymentPrint({ studentHistory = false }) {
   );
 
   return (
-    <div className="min-h-screen bg-white p-6" dir="rtl">
+    <div
+      className="min-h-screen bg-white p-6"
+      dir={getLanguage() === "ar" ? "rtl" : "ltr"}
+    >
       {/* Print button */}
       <div className="no-print mx-auto mb-5 flex max-w-3xl justify-end">
         <button
@@ -349,7 +356,7 @@ export default function PaymentPrint({ studentHistory = false }) {
 
         {/* Print Footer */}
         <footer className="mt-6 border-t border-gray-200 pt-3 text-center text-xs text-gray-500">
-          تاريخ الطباعة: {new Date().toLocaleDateString("ar-EG")}
+          تاريخ الطباعة: {new Date().toLocaleDateString(getIntlLocale())}
         </footer>
       </main>
     </div>

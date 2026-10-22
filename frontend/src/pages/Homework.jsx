@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { getIntlLocale } from "@/i18n";
 
 export default function Homework() {
   const [records, setRecords] = useState([]);
@@ -198,7 +199,7 @@ export default function Homework() {
                     {record.homeworkDate
                       ? new Date(
                           `${record.homeworkDate}T00:00:00`,
-                        ).toLocaleDateString("ar-EG")
+                        ).toLocaleDateString(getIntlLocale())
                       : "—"}
                   </td>
                   <td className="px-4 py-3 text-gray-700">

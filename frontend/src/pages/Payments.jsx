@@ -434,25 +434,19 @@ export default function Payments() {
                 <div className="flex justify-between gap-2">
                   <dt className="text-gray-500">المستحق</dt>
                   <dd className="font-semibold tabular-nums">
-                    {totals
-                      ? Number(totals.payable || 0).toLocaleString("ar-EG")
-                      : "—"}
+                    {totals ? Number(totals.payable || 0) : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-gray-500">المدفوع</dt>
                   <dd className="font-semibold text-emerald-700 tabular-nums">
-                    {totals
-                      ? Number(totals.paid || 0).toLocaleString("ar-EG")
-                      : "—"}
+                    {totals ? Number(totals.paid || 0) : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-gray-500">المتبقي</dt>
                   <dd className="font-semibold text-amber-700 tabular-nums">
-                    {totals
-                      ? Number(totals.remaining || 0).toLocaleString("ar-EG")
-                      : "—"}
+                    {totals ? Number(totals.remaining || 0) : "—"}
                   </dd>
                 </div>
               </dl>
@@ -614,10 +608,10 @@ export default function Payments() {
                       {p.amount}
                     </td>
                     <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
-                      {(p.totalPayable ?? 0).toLocaleString("ar-EG")}
+                      {p.totalPayable ?? 0}
                     </td>
                     <td className="px-4 py-3 font-semibold text-amber-700 tabular-nums">
-                      {(p.totalRemaining ?? 0).toLocaleString("ar-EG")}
+                      {p.totalRemaining ?? 0}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {(p.paymentDate || "").slice(0, 10)}
@@ -982,7 +976,9 @@ export default function Payments() {
                       (feeType) => studentFeePaid(selectedStudent, feeType) > 0,
                     );
                     setStudents((previous) => [
-                      ...previous.filter((item) => item.id !== selectedStudent.id),
+                      ...previous.filter(
+                        (item) => item.id !== selectedStudent.id,
+                      ),
                       selectedStudent,
                     ]);
                     setRefund({

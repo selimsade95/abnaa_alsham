@@ -18,12 +18,17 @@ import {
   CalendarCheck,
   MessageSquareText,
   BarChart3,
+  Building2,
 } from "lucide-react";
+import { toast } from "sonner";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { getLanguage } from "@/i18n";
 
 export default function AppLayout() {
-  const { user, logout, has, hasAny } = useAuth();
+  const { user, logout, selectBranch, has, hasAny } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const isRtl = getLanguage() === "ar";
 
   useEffect(() => {
     const handleShortcut = (event) => {
@@ -146,7 +151,23 @@ export default function AppLayout() {
       testid: "nav-settings",
       show: has("settings.codeGeneration.view"),
     },
+    {
+      to: "/branches",
+      label: "فروع المدرسة",
+      icon: Building2,
+      testid: "nav-branches",
+      show: has("branches.manage"),
+    },
   ];
+
+  const switchBranch = async (branchId) => {
+    try {
+      await selectBranch(branchId);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "تعذر تغيير الفرع");
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -165,7 +186,23 @@ export default function AppLayout() {
           <div className="text-lg font-bold text-gray-900 leading-tight">
             مدرسة أبناء الشام
           </div>
-          <div className="text-xs text-gray-500">نظام إدارة المدرسة</div>
+          {user?.branches?.length > 1 ? (
+            <select
+              value={user.activeBranch?.id || ""}
+              onChange={(event) => switchBranch(event.target.value)}
+              aria-label="الفرع الحالي"
+              data-testid="active-branch-select"
+              className="mt-1 max-w-40 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600"
+            >
+              {user.branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="text-xs text-gray-500">نظام إدارة المدرسة</div>
+          )}
         </div>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -202,6 +239,7 @@ export default function AppLayout() {
         </a>
       </p>
       <div className="border-t border-gray-200 p-4">
+        <LanguageSwitcher className="mb-3 w-full" />
         <div className="mb-3 flex items-center gap-3 px-2">
           <div className="h-9 w-9 rounded-full bg-brand-light text-[#036A87] flex items-center justify-center text-sm font-bold">
             {user?.name?.charAt(0) || "؟"}
@@ -228,7 +266,9 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      <aside className="hidden lg:flex fixed inset-y-0 right-0 w-64 border-l border-gray-200">
+      <aside
+        className={`hidden lg:flex fixed inset-y-0 ${isRtl ? "right-0 border-l" : "left-0 border-r"} w-64 border-gray-200`}
+      >
         <SidebarBody />
       </aside>
       {open && (
@@ -237,7 +277,9 @@ export default function AppLayout() {
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-0 right-0 w-72 bg-white shadow-xl">
+          <div
+            className={`absolute inset-y-0 ${isRtl ? "right-0" : "left-0"} w-72 bg-white shadow-xl`}
+          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
               <span className="text-sm font-medium text-gray-700">القائمة</span>
               <button
@@ -268,7 +310,7 @@ export default function AppLayout() {
           <Menu className="h-5 w-5" />
         </button>
       </header>
-      <main className="lg:pr-64 min-h-screen">
+      <main className={`${isRtl ? "lg:pr-64" : "lg:pl-64"} min-h-screen`}>
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </div>

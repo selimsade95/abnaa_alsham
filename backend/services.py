@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from branching import set_access_context
 
 _db = None
 _security = HTTPBearer(auto_error=False)
@@ -40,10 +41,12 @@ def verify_pw(password, hashed):
         return False
 
 
-def create_token(uid, username):
+def create_token(uid, username, branch_id=None, selection_pending=False):
     now = datetime.now(timezone.utc)
     return jwt.encode(
         {"sub": uid, "username": username,
+         "branchId": branch_id,
+         "branchSelectionPending": selection_pending,
          "exp": now + timedelta(hours=_jwt_expire_hours), "iat": now},
         _jwt_secret, algorithm=_jwt_algorithm,
     )
@@ -57,16 +60,54 @@ async def compute_user_permissions(user):
     return sorted({permission for role in roles for permission in role.get("permissions") or []})
 
 
+async def accessible_branches(user, permissions=None):
+    permissions = permissions if permissions is not None else await compute_user_permissions(user)
+    if "branches.accessAll" in permissions:
+        query = {"active": {"$ne": False}}
+    else:
+        branch_ids = user.get("branchIds")
+        if branch_ids is None:
+            default_branch = await _db.branches.find_one({"isDefault": True}, {"_id": 0})
+            branch_ids = [default_branch["id"]] if default_branch else []
+        query = {"id": {"$in": branch_ids}, "active": {"$ne": False}}
+    return await _db.branches.find(query, {"_id": 0}).sort("name", 1).to_list(500)
+
+
 async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depends(_security)):
     # Rebound by configure() to preserve FastAPI's dependency object.
     if not creds:
         raise HTTPException(401, "غير مصرح")
     try:
         payload = jwt.decode(creds.credentials, _jwt_secret, algorithms=[_jwt_algorithm])
-        user = await _db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password": 0})
+        user = await _db.raw.users.find_one(
+            {"id": payload["sub"]}, {"_id": 0, "password": 0}
+        )
         if not user:
             raise HTTPException(401, "مستخدم غير موجود")
         user["permissions"] = await compute_user_permissions(user)
+        branches = await accessible_branches(user, user["permissions"])
+        if not branches:
+            raise HTTPException(403, "لا تملك صلاحية الوصول إلى أي فرع")
+
+        branch_id = payload.get("branchId")
+        if payload.get("branchSelectionPending"):
+            branch_id = None
+        elif branch_id is None:
+            default_branch = next(
+                (branch for branch in branches if branch.get("isDefault")),
+                branches[0],
+            )
+            branch_id = default_branch["id"]
+        elif branch_id not in {branch["id"] for branch in branches}:
+            raise HTTPException(403, "لا تملك صلاحية الوصول إلى هذا الفرع")
+
+        set_access_context(branch_id, user["permissions"])
+        user["branchId"] = branch_id
+        user["branches"] = branches
+        user["activeBranch"] = next(
+            (branch for branch in branches if branch["id"] == branch_id),
+            None,
+        )
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(401, "انتهت الجلسة")
@@ -76,6 +117,8 @@ async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depen
 
 def require_permission(permission):
     async def checker(current=Depends(get_current_user)):
+        if not current.get("branchId"):
+            raise HTTPException(428, "يرجى اختيار الفرع أولاً")
         if permission not in (current.get("permissions") or []):
             raise HTTPException(403, f"لا تملك صلاحية: {permission}")
         return current

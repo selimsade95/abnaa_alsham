@@ -15,10 +15,12 @@ from services import (
     configure as configure_services,
     now_iso, hash_pw, verify_pw, create_token,
     compute_user_permissions, get_current_user, require_permission,
+    accessible_branches,
     allowed_class_ids, ensure_class_access, ensure_student_access,
     grade_scope, ensure_grade_scope, validate_format, render_code,
     get_code_settings, next_sequence, generate_code,
 )
+from branching import BranchScopedDatabase, set_default_branch_id
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -38,7 +40,8 @@ ALLOWED_MIMES = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
 ALLOWED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
 
 client = AsyncIOMotorClient(MONGO_URL)
-db = client[DB_NAME]
+raw_db = client[DB_NAME]
+db = BranchScopedDatabase(raw_db)
 configure_services(db, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_HOURS)
 app = FastAPI(title="IQRA School API")
 api = APIRouter(prefix="/api")
@@ -49,13 +52,21 @@ def hash_pw(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
 def verify_pw(p, h):
     try: return bcrypt.checkpw(p.encode(), h.encode())
     except Exception: return False
-def create_token(uid, uname):
+def create_token(uid, uname, branch_id=None, selection_pending=False):
     return jwt.encode({"sub": uid, "username": uname,
+        "branchId": branch_id, "branchSelectionPending": selection_pending,
         "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
         "iat": datetime.now(timezone.utc)}, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 PERMISSIONS_CATALOG = [
+    ("branches.manage", "إدارة فروع المدرسة", "branches", "manage"),
+    ("branches.accessAll", "الوصول إلى جميع فروع المدرسة", "branches", "accessAll"),
     ("students.view", "عرض الطلاب", "students", "view"),
+    ("students.gender.male.view", "عرض الطلاب الذكور فقط", "students.gender", "male.view"),
+    ("students.gender.female.view", "عرض الطالبات فقط", "students.gender", "female.view"),
+    ("students.scope.lowerGrades.view", "عرض طلاب الصفين الأول والثاني (ذكور وإناث)", "students.scope", "lowerGrades.view"),
+    ("students.scope.upperGrades.male.view", "عرض الذكور من الصف الثالث إلى التاسع", "students.scope", "upperGrades.male.view"),
+    ("students.scope.upperGrades.female.view", "عرض الإناث من الصف الثالث إلى التاسع", "students.scope", "upperGrades.female.view"),
     ("students.create", "إضافة طلاب", "students", "create"),
     ("students.update", "تعديل الطلاب", "students", "update"),
     ("students.delete", "حذف الطلاب", "students", "delete"),
@@ -258,37 +269,146 @@ from models import *
 from services import (
     now_iso, hash_pw, verify_pw, create_token,
     compute_user_permissions, get_current_user, require_permission,
+    accessible_branches,
     allowed_class_ids, ensure_class_access, ensure_student_access,
     grade_scope, ensure_grade_scope, validate_format, render_code,
     get_code_settings, next_sequence, generate_code,
 )
 
 #region Auth
+def _auth_user_payload(user, branches, active_branch_id=None):
+    return {
+        "id": user["id"],
+        "name": user["name"],
+        "username": user["username"],
+        "createdAt": user["createdAt"],
+        "roles": user.get("roles", []),
+        "teacherId": user.get("teacherId"),
+        "branchIds": user.get("branchIds") or [],
+        "branches": branches,
+        "activeBranch": next(
+            (branch for branch in branches if branch["id"] == active_branch_id),
+            None,
+        ),
+        "permissions": user.get("permissions", []),
+    }
+
+
 @api.post("/auth/login")
 async def login(body: LoginIn):
-    user = await db.users.find_one({"username": body.username})
+    user = await raw_db.users.find_one({"username": body.username})
     if not user or not verify_pw(body.password, user.get("password", "")):
         raise HTTPException(401, "اسم المستخدم أو كلمة المرور غير صحيحة")
     perms = await compute_user_permissions(user)
-    return {"token": create_token(user["id"], user["username"]),
-            "user": {"id": user["id"], "name": user["name"], "username": user["username"],
-                     "createdAt": user["createdAt"], "roles": user.get("roles", []),
-                     "teacherId": user.get("teacherId"),
-                     "permissions": perms}}
+    branches = await accessible_branches(user, perms)
+    if not branches:
+        raise HTTPException(403, "لا تملك صلاحية الوصول إلى أي فرع")
+    active_branch = branches[0] if len(branches) == 1 else None
+    return {
+        "token": create_token(
+            user["id"],
+            user["username"],
+            active_branch["id"] if active_branch else None,
+            selection_pending=active_branch is None,
+        ),
+        "requiresBranchSelection": active_branch is None,
+        "branches": branches,
+        "user": _auth_user_payload(
+            {**user, "permissions": perms},
+            branches,
+            active_branch["id"] if active_branch else None,
+        ),
+    }
+
+
+@api.post("/auth/select-branch")
+async def select_branch(body: SelectBranchIn, current=Depends(get_current_user)):
+    branch = next(
+        (item for item in current.get("branches", []) if item["id"] == body.branchId),
+        None,
+    )
+    if not branch:
+        raise HTTPException(403, "لا تملك صلاحية الوصول إلى هذا الفرع")
+    user = {**current, "activeBranch": branch}
+    return {
+        "token": create_token(current["id"], current["username"], branch["id"]),
+        "user": _auth_user_payload(
+            user,
+            current["branches"],
+            branch["id"],
+        ),
+    }
 
 @api.post("/auth/logout")
 async def logout(current=Depends(get_current_user)): return {"ok": True}
 
 @api.get("/auth/me")
 async def me(current=Depends(get_current_user)):
-    return {"id": current["id"], "name": current["name"], "username": current["username"],
-            "createdAt": current["createdAt"], "roles": current.get("roles", []),
-            "teacherId": current.get("teacherId"),
-            "permissions": current.get("permissions", [])}
+    return _auth_user_payload(
+        current,
+        current.get("branches", []),
+        current.get("branchId"),
+    )
 
 @api.get("/permissions")
 async def list_permissions(current=Depends(get_current_user)):
     return [{"name": n, "description": d, "resource": r, "action": a} for (n, d, r, a) in PERMISSIONS_CATALOG]
+#endregion
+
+#region Branches
+@api.get("/branches")
+async def list_branches(current=Depends(require_permission("branches.manage"))):
+    return await db.branches.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+
+
+@api.post("/branches")
+async def create_branch(
+    body: BranchIn,
+    current=Depends(require_permission("branches.manage")),
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "اسم الفرع مطلوب")
+    if await db.branches.find_one({"name": name}):
+        raise HTTPException(400, "اسم الفرع مستخدم")
+    branch = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "active": body.active,
+        "isDefault": False,
+        "createdAt": now_iso(),
+        "updatedAt": now_iso(),
+    }
+    await db.branches.insert_one(branch)
+    branch.pop("_id", None)
+    return branch
+
+
+@api.put("/branches/{branch_id}")
+async def update_branch(
+    branch_id: str,
+    body: BranchIn,
+    current=Depends(require_permission("branches.manage")),
+):
+    branch = await db.branches.find_one({"id": branch_id}, {"_id": 0})
+    if not branch:
+        raise HTTPException(404, "الفرع غير موجود")
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "اسم الفرع مطلوب")
+    if await db.branches.find_one({"name": name, "id": {"$ne": branch_id}}):
+        raise HTTPException(400, "اسم الفرع مستخدم")
+    if branch.get("isDefault") and not body.active:
+        raise HTTPException(400, "لا يمكن تعطيل الفرع الرئيسي")
+    if branch.get("active", True) and not body.active:
+        active_count = await db.branches.count_documents({"active": {"$ne": False}})
+        if active_count <= 1:
+            raise HTTPException(400, "يجب إبقاء فرع واحد على الأقل نشطاً")
+    await db.branches.update_one(
+        {"id": branch_id},
+        {"$set": {"name": name, "active": body.active, "updatedAt": now_iso()}},
+    )
+    return await db.branches.find_one({"id": branch_id}, {"_id": 0})
 #endregion
 
 #region Roles
@@ -298,6 +418,8 @@ async def list_roles(current=Depends(require_permission("roles.view"))):
 
 @api.post("/roles")
 async def create_role(body: RoleIn, current=Depends(require_permission("roles.create"))):
+    if "branches.accessAll" not in current.get("permissions", []):
+        raise HTTPException(403, "لا تملك صلاحية إدارة الأدوار العامة")
     if not body.name.strip(): raise HTTPException(400, "الاسم مطلوب")
     if await db.roles.find_one({"name": body.name}): raise HTTPException(400, "الاسم مستخدم")
     doc = {"id": str(uuid.uuid4()), "name": body.name.strip(), "description": body.description or "",
@@ -306,6 +428,8 @@ async def create_role(body: RoleIn, current=Depends(require_permission("roles.cr
 
 @api.put("/roles/{rid}")
 async def update_role(rid: str, body: RoleIn, current=Depends(require_permission("roles.update"))):
+    if "branches.accessAll" not in current.get("permissions", []):
+        raise HTTPException(403, "لا تملك صلاحية إدارة الأدوار العامة")
     if not await db.roles.find_one({"id": rid}): raise HTTPException(404, "غير موجود")
     dup = await db.roles.find_one({"name": body.name, "id": {"$ne": rid}})
     if dup: raise HTTPException(400, "الاسم مستخدم")
@@ -315,28 +439,119 @@ async def update_role(rid: str, body: RoleIn, current=Depends(require_permission
 
 @api.delete("/roles/{rid}")
 async def delete_role(rid: str, current=Depends(require_permission("roles.delete"))):
-    await db.users.update_many({}, {"$pull": {"roles": rid}})
+    if "branches.accessAll" not in current.get("permissions", []):
+        raise HTTPException(403, "لا تملك صلاحية إدارة الأدوار العامة")
+    await raw_db.users.update_many({}, {"$pull": {"roles": rid}})
     r = await db.roles.delete_one({"id": rid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}
 #endregion
 
 #region Users
+async def _validated_user_branch_ids(branch_ids, current):
+    requested = list(dict.fromkeys(branch_ids or []))
+    if not requested:
+        raise HTTPException(400, "يجب اختيار فرع واحد على الأقل")
+    accessible = current.get("branches", [])
+    if "branches.accessAll" not in (current.get("permissions") or []):
+        accessible_ids = {current.get("branchId")}
+    else:
+        accessible_ids = {branch["id"] for branch in accessible}
+    if not set(requested).issubset(accessible_ids):
+        raise HTTPException(403, "لا تملك صلاحية إسناد المستخدم إلى هذا الفرع")
+    return requested
+
+
+async def _validated_user_roles(role_ids, current):
+    requested = list(dict.fromkeys(role_ids or []))
+    roles = await db.roles.find(
+        {"id": {"$in": requested}}, {"_id": 0, "id": 1, "permissions": 1}
+    ).to_list(100)
+    if len(roles) != len(requested):
+        raise HTTPException(400, "أحد الأدوار المحددة غير موجود")
+    if "branches.accessAll" not in (current.get("permissions") or []):
+        granted_permissions = {
+            permission
+            for role in roles
+            for permission in role.get("permissions") or []
+        }
+        caller_permissions = set(current.get("permissions") or [])
+        if "branches.accessAll" in granted_permissions:
+            raise HTTPException(403, "لا تملك صلاحية منح الوصول إلى جميع الفروع")
+        gender_permissions = {
+            "students.gender.male.view",
+            "students.gender.female.view",
+        }
+        if not (granted_permissions & gender_permissions).issubset(
+            caller_permissions & gender_permissions
+        ):
+            raise HTTPException(
+                403, "لا تملك صلاحية منح صلاحيات عرض جنس آخر من الطلاب"
+            )
+        grade_scope_permissions = {
+            "students.scope.lowerGrades.view",
+            "students.scope.upperGrades.male.view",
+            "students.scope.upperGrades.female.view",
+        }
+        if not (granted_permissions & grade_scope_permissions).issubset(
+            caller_permissions & grade_scope_permissions
+        ):
+            raise HTTPException(
+                403, "لا تملك صلاحية منح نطاق صفوف غير مسموح به"
+            )
+    return requested
+
+
 @api.get("/users")
 async def list_users(current=Depends(require_permission("users.view"))):
-    return await db.users.find({}, {"_id": 0, "password": 0}).sort("createdAt", -1).to_list(500)
+    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("createdAt", -1).to_list(500)
+    for user in users:
+        user.setdefault("branchIds", [current["branchId"]])
+    return users
+
+
+@api.get("/users/{uid}")
+async def get_user(uid: str, current=Depends(require_permission("users.view"))):
+    user = await db.users.find_one(
+        {"id": uid}, {"_id": 0, "password": 0}
+    )
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    user.setdefault("branchIds", [current["branchId"]])
+    role_ids = user.get("roles") or []
+    roles = await db.roles.find(
+        {"id": {"$in": role_ids}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(100)
+    user["roleDetails"] = roles
+    if user.get("teacherId"):
+        teacher = await raw_db.teachers.find_one(
+            {"id": user["teacherId"]}, {"_id": 0, "fullName": 1}
+        )
+        user["teacherName"] = teacher.get("fullName") if teacher else None
+    user["branchDetails"] = [
+        branch
+        for branch in current.get("branches", [])
+        if branch["id"] in user["branchIds"]
+    ]
+    return user
+
 
 @api.post("/users")
 async def create_user(body: UserCreate, current=Depends(require_permission("users.create"))):
     if not body.name.strip() or not body.username.strip() or len(body.password) < 4:
         raise HTTPException(400, "بيانات غير صالحة")
-    if await db.users.find_one({"username": body.username}): raise HTTPException(400, "اسم المستخدم مستخدم")
+    if await raw_db.users.find_one({"username": body.username}): raise HTTPException(400, "اسم المستخدم مستخدم")
     if body.teacherId:
         if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
-        if await db.users.find_one({"teacherId": body.teacherId}): raise HTTPException(400, "المعلم مرتبط بحساب آخر")
+        if await raw_db.users.find_one({"teacherId": body.teacherId}): raise HTTPException(400, "المعلم مرتبط بحساب آخر")
+    branch_ids = await _validated_user_branch_ids(
+        body.branchIds if body.branchIds is not None else [current["branchId"]],
+        current,
+    )
+    role_ids = await _validated_user_roles(body.roles, current)
     doc = {"id": str(uuid.uuid4()), "name": body.name.strip(), "username": body.username.strip(),
-           "password": hash_pw(body.password), "roles": body.roles or [],
-           "teacherId": body.teacherId,
+           "password": hash_pw(body.password), "roles": role_ids,
+           "teacherId": body.teacherId, "branchIds": branch_ids,
            "createdAt": now_iso(), "updatedAt": now_iso()}
     await db.users.insert_one(doc); doc.pop("password", None); doc.pop("_id", None); return doc
 
@@ -346,12 +561,15 @@ async def update_user(uid: str, body: UserUpdate, current=Depends(require_permis
     upd = {"updatedAt": now_iso()}
     if body.name is not None: upd["name"] = body.name.strip()
     if body.password: upd["password"] = hash_pw(body.password)
-    if body.roles is not None: upd["roles"] = body.roles
+    if body.roles is not None:
+        upd["roles"] = await _validated_user_roles(body.roles, current)
+    if "branchIds" in body.model_fields_set:
+        upd["branchIds"] = await _validated_user_branch_ids(body.branchIds, current)
     if "teacherId" in body.model_fields_set and body.teacherId is None:
         upd["teacherId"] = None
     elif body.teacherId is not None:
         if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
-        if await db.users.find_one({"teacherId": body.teacherId, "id": {"$ne": uid}}):
+        if await raw_db.users.find_one({"teacherId": body.teacherId, "id": {"$ne": uid}}):
             raise HTTPException(400, "المعلم مرتبط بحساب آخر")
         upd["teacherId"] = body.teacherId
     await db.users.update_one({"id": uid}, {"$set": upd})
@@ -1735,21 +1953,21 @@ async def get_student(sid: str, current=Depends(require_permission("students.vie
 
 @api.get("/public/students/{sid}/validation")
 async def validate_student(sid: str):
-    d = await db.students.find_one({"id": sid}, {"_id": 0})
+    d = await raw_db.students.find_one({"id": sid}, {"_id": 0})
     if not d: raise HTTPException(404, "الطالب غير موجود")
     student = d.get("student") or {}
     current_class = None
     if d.get("currentClassId"):
-        current_class = await db.classes.find_one(
+        current_class = await raw_db.classes.find_one(
             {"id": d["currentClassId"]},
             {"_id": 0, "name": 1, "section": 1, "academicYear": 1},
         )
-    grades = await db.grades.find(
+    grades = await raw_db.grades.find(
         {"studentId": sid},
         {"_id": 0, "academicYear": 1, "period": 1, "score": 1, "subjectId": 1},
     ).sort([("academicYear", -1), ("period", 1)]).to_list(10000)
     for grade in grades:
-        subject = await db.subjects.find_one(
+        subject = await raw_db.subjects.find_one(
             {"id": grade.pop("subjectId", None)}, {"_id": 0, "name": 1}
         )
         grade["subjectName"] = subject.get("name") if subject else "—"
@@ -1924,7 +2142,7 @@ async def create_contact_message(body: ContactFormIn):
 
 @api.post("/public/students/{sid}/messages")
 async def create_public_message(sid: str, body: PublicMessageIn):
-    student = await db.students.find_one(
+    student = await raw_db.students.find_one(
         {"id": sid}, {"_id": 0, "code": 1, "student.fullName": 1}
     )
     if not student:
@@ -1944,8 +2162,9 @@ async def create_public_message(sid: str, body: PublicMessageIn):
         "responseAt": None,
         "emailDeliveryStatus": None,
         "emailDeliveryError": None,
+        "branchId": student.get("branchId"),
     }
-    await db.verification_messages.insert_one(doc)
+    await raw_db.verification_messages.insert_one(doc)
     doc.pop("_id", None)
     return {"ok": True, "id": doc["id"]}
 
@@ -2477,7 +2696,9 @@ async def delete_student_document(sid: str, document_type: str,
 
 @api.get("/public/students/{sid}/validation/personal-photo")
 async def get_public_personal_photo(sid: str):
-    student = await db.students.find_one({"id": sid}, {"_id": 0, "documents.personal_photo": 1})
+    student = await raw_db.students.find_one(
+        {"id": sid}, {"_id": 0, "documents.personal_photo": 1}
+    )
     document = ((student or {}).get("documents") or {}).get("personal_photo") or {}
     if not document.get("filePath") or not os.path.exists(document["filePath"]):
         raise HTTPException(404, "لا توجد صورة شخصية")
@@ -3107,6 +3328,28 @@ async def update_settings(body: CodeSettingsIn, current=Depends(require_permissi
 #region Dashboard
 ATTENDANCE_REPEAT_ABSENCE_THRESHOLD = 3
 
+@api.get("/dashboard/filters")
+async def dashboard_filters(current=Depends(get_current_user)):
+    allowed = await allowed_class_ids(current)
+    class_query = {"status": {"$ne": "inactive"}}
+    if allowed is not None:
+        class_query["id"] = {"$in": allowed}
+    classes = await db.classes.find(
+        class_query,
+        {"_id": 0, "id": 1, "name": 1, "grade": 1, "section": 1, "academicYear": 1},
+    ).sort("name", 1).to_list(5000)
+    years = await db.students.distinct("fees.academicYear", {})
+    years = sorted({year for year in years if year}, reverse=True)
+    years = sorted(
+        set(years) | {item["academicYear"] for item in classes if item.get("academicYear")},
+        reverse=True,
+    )
+    return {
+        "classes": classes,
+        "academicYears": years,
+        "registrationPaths": await get_registration_paths(),
+    }
+
 async def _attendance_class_scope(current):
     allowed = await allowed_class_ids(current)
     if allowed is None:
@@ -3316,36 +3559,98 @@ async def repeated_absence_reports(
 @api.get("/dashboard/stats")
 async def dashboard_stats(
     student_status: str = Query(default="active", alias="studentStatus"),
+    class_id: Optional[str] = Query(default=None, alias="classId"),
+    academic_year: Optional[str] = Query(default=None, alias="academicYear"),
+    gender: Optional[str] = None,
+    final_registration_path: Optional[str] = Query(
+        default=None, alias="finalRegistrationPath"
+    ),
     current=Depends(get_current_user),
 ):
     if student_status not in ("active", "dropped", "all"):
         raise HTTPException(400, "حالة الطلاب غير صالحة")
+    if gender not in (None, "", "male", "female"):
+        raise HTTPException(400, "الجنس غير صالح")
     allowed = await allowed_class_ids(current)
-    student_scope = {} if allowed is None else {"currentClassId": {"$in": allowed}}
-    if student_status == "active":
-        student_scope["student.status"] = {"$ne": "inactive"}
-    elif student_status == "dropped":
-        student_scope["student.status"] = "inactive"
-    total = await db.students.count_documents(student_scope)
-    female = await db.students.count_documents({**student_scope, "student.gender": "female"})
-    male = await db.students.count_documents({**student_scope, "student.gender": "male"})
-    orphans = await db.students.count_documents({**student_scope, "student.orphan": True})
-    active = await db.students.count_documents({
-        **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
-        "student.status": {"$ne": "inactive"},
-    })
-    dropped = await db.students.count_documents({
-        **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
-        "student.status": "inactive",
-    })
-    teachers_count = await db.teachers.count_documents({} if allowed is None else {"id": current.get("teacherId")})
-    classes_count = await db.classes.count_documents({} if allowed is None else {"id": {"$in": allowed}})
+    if class_id:
+        await ensure_class_access(class_id, current)
+    class_query = {"status": {"$ne": "inactive"}}
+    if allowed is not None:
+        class_query["id"] = {"$in": allowed}
+    if class_id:
+        class_query["id"] = class_id
+    if academic_year:
+        class_query["academicYear"] = academic_year
+    filtered_classes = await db.classes.find(
+        class_query, {"_id": 0, "id": 1, "academicYear": 1}
+    ).to_list(5000)
+    filtered_class_ids = [item["id"] for item in filtered_classes]
 
-    scoped_student_query = {} if allowed is None else {"currentClassId": {"$in": allowed}}
+    student_query = {}
+    if allowed is not None or class_id or academic_year:
+        student_query["currentClassId"] = {"$in": filtered_class_ids}
+    if academic_year:
+        student_query["fees.academicYear"] = academic_year
+    if gender:
+        student_query["student.gender"] = gender
+    teachers_count = await db.teachers.count_documents({} if allowed is None else {"id": current.get("teacherId")})
+    classes_count = len(filtered_classes) if (allowed is not None or class_id or academic_year) else await db.classes.count_documents({})
+
     path_students = await db.students.find(
-        scoped_student_query,
-        {"_id": 0, "id": 1, "student": 1, "fees": 1},
+        student_query,
+        {"_id": 0, "id": 1, "student": 1, "fees": 1, "currentClassId": 1},
     ).to_list(None)
+    if final_registration_path:
+        path_students = [
+            student
+            for student in path_students
+            if (
+                (student.get("student") or {}).get("finalRegistrationPath")
+                or (student.get("student") or {}).get("registrationPath")
+                or "غير محدد"
+            )
+            == final_registration_path
+        ]
+    filtered_student_ids = {student["id"] for student in path_students}
+    student_class_ids = {
+        student["currentClassId"]
+        for student in path_students
+        if student.get("currentClassId")
+    }
+    status_students = [
+        student
+        for student in path_students
+        if student_status == "all"
+        or (
+            student_status == "dropped"
+            and (student.get("student") or {}).get("status") == "inactive"
+        )
+        or (
+            student_status == "active"
+            and (student.get("student") or {}).get("status") != "inactive"
+        )
+    ]
+    total = len(status_students)
+    female = sum(
+        (student.get("student") or {}).get("gender") == "female"
+        for student in status_students
+    )
+    male = sum(
+        (student.get("student") or {}).get("gender") == "male"
+        for student in status_students
+    )
+    orphans = sum(
+        (student.get("student") or {}).get("orphan") is True
+        for student in status_students
+    )
+    active = sum(
+        (student.get("student") or {}).get("status") != "inactive"
+        for student in path_students
+    )
+    dropped = sum(
+        (student.get("student") or {}).get("status") == "inactive"
+        for student in path_students
+    )
     registration_paths = await get_registration_paths()
     path_stats = {
         path: {"path": path, "total": 0, "dropped": 0}
@@ -3464,6 +3769,7 @@ async def dashboard_stats(
                     }
                 ),
                 **({} if allowed is None else {"student.currentClassId": {"$in": allowed}}),
+                "student.id": {"$in": list(finance_students)},
             }
         },
         {
@@ -3492,6 +3798,7 @@ async def dashboard_stats(
                     }
                 ),
                 **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
+                "id": {"$in": list(finance_students)},
             }
         },
         {
@@ -3610,11 +3917,40 @@ async def dashboard_stats(
         today = datetime.now().date().isoformat()
         attendance_scope = await _attendance_class_scope(current)
         session_query = {"attendanceDate": today}
-        if attendance_scope is not None:
+        if class_id:
+            session_query["classId"] = class_id
+        elif (
+            academic_year
+            or allowed is not None
+            or gender
+            or final_registration_path
+        ):
+            target_class_ids = (
+                set(filtered_class_ids)
+                if academic_year or allowed is not None
+                else student_class_ids
+            )
+            if gender or final_registration_path:
+                target_class_ids.intersection_update(student_class_ids)
+            session_query["classId"] = {"$in": list(target_class_ids)}
+        elif attendance_scope is not None:
             session_query["classId"] = attendance_scope["id"]
         sessions = await db.attendance_sessions.find(
             session_query, {"_id": 0, "records": 1}
         ).to_list(5000)
+        if gender or final_registration_path:
+            sessions = [
+                {
+                    **session,
+                    "records": [
+                        record
+                        for record in session.get("records", [])
+                        if record.get("studentId") in filtered_student_ids
+                    ],
+                }
+                for session in sessions
+            ]
+            sessions = [session for session in sessions if session["records"]]
         attendance_counts = [
             record
             for session in sessions
@@ -3622,6 +3958,22 @@ async def dashboard_stats(
         ]
         marked_classes = len(sessions)
         active_classes_filter = {**(attendance_scope or {}), "status": {"$ne": "inactive"}}
+        if class_id:
+            active_classes_filter["id"] = class_id
+        elif (
+            academic_year
+            or allowed is not None
+            or gender
+            or final_registration_path
+        ):
+            target_class_ids = (
+                set(filtered_class_ids)
+                if academic_year or allowed is not None
+                else student_class_ids
+            )
+            if gender or final_registration_path:
+                target_class_ids.intersection_update(student_class_ids)
+            active_classes_filter["id"] = {"$in": list(target_class_ids)}
         active_classes = await db.classes.count_documents(active_classes_filter)
         present_count = sum(record.get("status") == "present" for record in attendance_counts)
         absent_count = sum(record.get("status") == "absent" for record in attendance_counts)
@@ -3643,7 +3995,26 @@ async def dashboard_stats(
             ),
         }
     if "attendance.reports.view" in permissions:
-        result["repeatedAbsenceReports"] = len(await _repeated_absence_reports(current))
+        reports = await _repeated_absence_reports(current, class_id=class_id)
+        if academic_year or gender or final_registration_path:
+            reports = [
+                report
+                for report in reports
+                if report["studentId"] in filtered_student_ids
+            ]
+        if academic_year and not class_id:
+            class_id_set = set(filtered_class_ids)
+            filtered_reports = []
+            for report in reports:
+                absences = [
+                    absence
+                    for absence in report["absences"]
+                    if absence["classId"] in class_id_set
+                ]
+                if len({absence["date"] for absence in absences}) >= ATTENDANCE_REPEAT_ABSENCE_THRESHOLD:
+                    filtered_reports.append(report)
+            reports = filtered_reports
+        result["repeatedAbsenceReports"] = len(reports)
     return result
 
 @api.get("/reports/finance")
@@ -3828,6 +4199,39 @@ async def financial_reports(
 #region Startup / seed
 @app.on_event("startup")
 async def on_startup():
+    default_branch = await raw_db.branches.find_one({"isDefault": True})
+    if not default_branch:
+        default_branch = await raw_db.branches.find_one({"id": "default"})
+    if not default_branch:
+        default_branch = {
+            "id": str(uuid.uuid4()),
+            "name": "الفرع الرئيسي",
+            "active": True,
+            "isDefault": True,
+            "createdAt": now_iso(),
+            "updatedAt": now_iso(),
+        }
+        await raw_db.branches.insert_one(default_branch)
+    else:
+        await raw_db.branches.update_one(
+            {"id": default_branch["id"]},
+            {"$set": {"isDefault": True, "active": True}},
+        )
+        default_branch["isDefault"] = True
+        default_branch["active"] = True
+    set_default_branch_id(default_branch["id"])
+
+    for collection_name in await raw_db.list_collection_names():
+        if collection_name not in {"branches", "roles", "users"}:
+            await raw_db[collection_name].update_many(
+                {"$or": [{"branchId": {"$exists": False}}, {"branchId": None}]},
+                {"$set": {"branchId": default_branch["id"]}},
+            )
+    await raw_db.users.update_many(
+        {"branchIds": {"$exists": False}},
+        {"$set": {"branchIds": [default_branch["id"]]}},
+    )
+
     defaults = [
         {"name": "Administrator", "description": "صلاحيات كاملة", "permissions": ALL_PERMS},
         {"name": "Registration Staff", "description": "موظف تسجيل",
@@ -3887,29 +4291,45 @@ async def on_startup():
     )
 
     try:
-        await db.students.create_index("student.fullName")
-        await db.students.create_index("code", unique=True, sparse=True)
-        await db.students.create_index("currentClassId")
-        await db.students.create_index("createdAt")
-        await db.payments.create_index("student")
+        legacy_indexes = {
+            "students": ["code_1"],
+            "teachers": ["code_1"],
+            "classes": ["code_1"],
+            "subjects": ["code_1"],
+            "counters": ["key_1"],
+            "grades": [
+                "studentId_1_classId_1_subjectId_1_academicYear_1_period_1"
+            ],
+            "attendance_sessions": ["classId_1_attendanceDate_1"],
+        }
+        for collection_name, index_names in legacy_indexes.items():
+            indexes = await raw_db[collection_name].index_information()
+            for index_name in index_names:
+                if index_name in indexes:
+                    await raw_db[collection_name].drop_index(index_name)
+        await db.students.create_index([("branchId", 1), ("student.fullName", 1)])
+        await db.students.create_index([("branchId", 1), ("code", 1)], unique=True, sparse=True)
+        await db.students.create_index([("branchId", 1), ("currentClassId", 1)])
+        await db.students.create_index([("branchId", 1), ("createdAt", -1)])
+        await db.payments.create_index([("branchId", 1), ("student", 1)])
         await db.payments.create_index("academicYear")
-        await db.payments.create_index([("student", 1), ("academicYear", 1)])
+        await db.payments.create_index([("branchId", 1), ("student", 1), ("academicYear", 1)])
         await db.payments.create_index("paymentDate")
-        await db.payments.create_index([("academicYear", 1), ("paymentDate", -1)])
+        await db.payments.create_index([("branchId", 1), ("academicYear", 1), ("paymentDate", -1)])
         await db.users.create_index("username", unique=True)
         await db.roles.create_index("name", unique=True)
-        await db.teachers.create_index("code", unique=True, sparse=True)
-        await db.teachers.create_index("createdAt")
-        await db.classes.create_index("code", unique=True, sparse=True)
-        await db.classes.create_index("createdAt")
-        await db.counters.create_index("key", unique=True)
-        await db.subjects.create_index("code", unique=True, sparse=True)
+        await db.teachers.create_index([("branchId", 1), ("code", 1)], unique=True, sparse=True)
+        await db.teachers.create_index([("branchId", 1), ("createdAt", -1)])
+        await db.classes.create_index([("branchId", 1), ("code", 1)], unique=True, sparse=True)
+        await db.classes.create_index([("branchId", 1), ("createdAt", -1)])
+        await db.counters.create_index([("branchId", 1), ("key", 1)], unique=True)
+        await db.subjects.create_index([("branchId", 1), ("code", 1)], unique=True, sparse=True)
         await db.teacher_subject_assignments.create_index([("teacherId", 1), ("subjectId", 1)], unique=True)
         await db.class_subject_assignments.create_index([("classId", 1), ("subjectId", 1)], unique=True)
-        await db.grades.create_index([("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
-        await db.homework.create_index([("classId", 1), ("subjectId", 1), ("status", 1), ("homeworkDate", -1)])
-        await db.attendance_sessions.create_index([("classId", 1), ("attendanceDate", 1)], unique=True)
-        await db.attendance_sessions.create_index([("attendanceDate", -1)])
+        await db.grades.create_index([("branchId", 1), ("studentId", 1), ("classId", 1), ("subjectId", 1), ("academicYear", 1), ("period", 1)], unique=True)
+        await db.homework.create_index([("branchId", 1), ("classId", 1), ("subjectId", 1), ("status", 1), ("homeworkDate", -1)])
+        await db.attendance_sessions.create_index([("branchId", 1), ("classId", 1), ("attendanceDate", 1)], unique=True)
+        await db.attendance_sessions.create_index([("branchId", 1), ("attendanceDate", -1)])
         await db.verification_messages.create_index([("createdAt", -1)])
         await db.contact_messages.create_index([("createdAt", -1)])
     except Exception as e:
@@ -3923,16 +4343,17 @@ async def on_startup():
         except Exception:
             pass
 
-    if await db.users.count_documents({}) == 0:
+    if await raw_db.users.count_documents({}) == 0:
         u = os.environ.get("SEED_ADMIN_USERNAME", "admin")
         p = os.environ.get("SEED_ADMIN_PASSWORD", "admin123")
         n = os.environ.get("SEED_ADMIN_NAME", "مدير النظام")
-        await db.users.insert_one({"id": str(uuid.uuid4()), "name": n, "username": u,
+        await raw_db.users.insert_one({"id": str(uuid.uuid4()), "name": n, "username": u,
             "password": hash_pw(p), "roles": [admin_role_id],
+            "branchIds": [default_branch["id"]],
             "createdAt": now_iso(), "updatedAt": now_iso()})
     else:
-        await db.users.update_many({"roles": {"$exists": False}}, {"$set": {"roles": []}})
-        await db.users.update_many(
+        await raw_db.users.update_many({"roles": {"$exists": False}}, {"$set": {"roles": []}})
+        await raw_db.users.update_many(
             {"username": os.environ.get("SEED_ADMIN_USERNAME", "admin"),
              "roles": {"$not": {"$elemMatch": {"$eq": admin_role_id}}}},
             {"$addToSet": {"roles": admin_role_id}})

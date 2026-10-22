@@ -44,6 +44,7 @@ export function useUsers() {
       password: "",
       roles: [],
       teacherId: "",
+      branchIds: user?.activeBranch?.id ? [user.activeBranch.id] : [],
     });
   const openEdit = (account) =>
     setEditing({
@@ -53,12 +54,19 @@ export function useUsers() {
       password: "",
       roles: account.roles || [],
       teacherId: account.teacherId || "",
+      branchIds: account.branchIds || (user?.activeBranch?.id ? [user.activeBranch.id] : []),
     });
   const toggleRole = (roleId) => {
     const selected = new Set(editing.roles);
     if (selected.has(roleId)) selected.delete(roleId);
     else selected.add(roleId);
     setEditing({ ...editing, roles: Array.from(selected) });
+  };
+  const toggleBranch = (branchId) => {
+    const selected = new Set(editing.branchIds);
+    if (selected.has(branchId)) selected.delete(branchId);
+    else selected.add(branchId);
+    setEditing({ ...editing, branchIds: Array.from(selected) });
   };
   const save = async (event) => {
     event.preventDefault();
@@ -68,6 +76,7 @@ export function useUsers() {
           name: editing.name,
           roles: editing.roles,
           teacherId: editing.teacherId || null,
+          branchIds: editing.branchIds,
         };
         if (editing.password) body.password = editing.password;
         await api.put(`/users/${editing.id}`, body);
@@ -82,6 +91,7 @@ export function useUsers() {
           password: editing.password,
           roles: editing.roles,
           teacherId: editing.teacherId || null,
+          branchIds: editing.branchIds,
         });
       }
       toast.success("تم الحفظ");
@@ -108,6 +118,7 @@ export function useUsers() {
     has,
     items,
     roles,
+    branches: user?.branches || [],
     teachers,
     loading,
     editing,
@@ -117,6 +128,7 @@ export function useUsers() {
     openNew,
     openEdit,
     toggleRole,
+    toggleBranch,
     save,
     doDelete,
     roleName,

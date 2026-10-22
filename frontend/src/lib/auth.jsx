@@ -8,6 +8,7 @@ export function AuthProvider({ children }) {
     const raw = localStorage.getItem("iqra_user");
     return raw ? JSON.parse(raw) : null;
   });
+  const [pendingBranches, setPendingBranches] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,8 +20,15 @@ export function AuthProvider({ children }) {
     api
       .get("/auth/me")
       .then((res) => {
-        setUser(res.data);
-        localStorage.setItem("iqra_user", JSON.stringify(res.data));
+        if (res.data.activeBranch) {
+          setUser(res.data);
+          setPendingBranches([]);
+          localStorage.setItem("iqra_user", JSON.stringify(res.data));
+        } else {
+          setUser(null);
+          setPendingBranches(res.data.branches || []);
+          localStorage.removeItem("iqra_user");
+        }
       })
       .catch(() => {
         localStorage.removeItem("iqra_token");
@@ -33,20 +41,47 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     const res = await api.post("/auth/login", { username, password });
     localStorage.setItem("iqra_token", res.data.token);
+    if (res.data.requiresBranchSelection) {
+      setUser(null);
+      setPendingBranches(res.data.branches || []);
+      localStorage.removeItem("iqra_user");
+    } else {
+      setUser(res.data.user);
+      setPendingBranches([]);
+      localStorage.setItem("iqra_user", JSON.stringify(res.data.user));
+    }
+    return res.data;
+  };
+  const selectBranch = async (branchId) => {
+    const res = await api.post("/auth/select-branch", { branchId });
+    localStorage.setItem("iqra_token", res.data.token);
     localStorage.setItem("iqra_user", JSON.stringify(res.data.user));
     setUser(res.data.user);
+    setPendingBranches([]);
     return res.data.user;
   };
   const logout = () => {
     localStorage.removeItem("iqra_token");
     localStorage.removeItem("iqra_user");
     setUser(null);
+    setPendingBranches([]);
   };
   const has = (perm) => (user?.permissions || []).includes(perm);
   const hasAny = (list) => (list || []).some((p) => has(p));
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, has, hasAny }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        selectBranch,
+        pendingBranches,
+        logout,
+        loading,
+        has,
+        hasAny,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
