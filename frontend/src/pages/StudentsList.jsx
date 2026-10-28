@@ -15,11 +15,77 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  ChevronDown,
 } from "lucide-react";
 import { STATUS_LABELS, GENDER_LABELS } from "@/lib/studentDefaults";
 import { downloadTemplate } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import { useStudentsList } from "@/hooks/useStudentsList";
+
+const MultiSelectFilter = ({
+  label,
+  options,
+  value,
+  onChange,
+  testid,
+  emptyLabel = "الكل",
+  exclusiveValue,
+}) => (
+  <div>
+    <span className="text-xs text-gray-500 mb-1 block">{label}</span>
+    <details className="group relative">
+      <summary
+        data-testid={testid}
+        className="flex cursor-pointer list-none items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm marker:hidden"
+      >
+        <span>
+          {exclusiveValue && value.includes(exclusiveValue)
+            ? "الكل"
+            : value.length
+              ? `${value.length} محدد`
+              : emptyLabel}
+        </span>
+        <ChevronDown className="h-4 w-4 text-gray-500 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute right-0 z-30 mt-1 max-h-64 w-full min-w-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="mb-1 w-full rounded px-2 py-1 text-right text-xs text-[#036A87] hover:bg-gray-50"
+        >
+          مسح التحديد
+        </button>
+        {options.map(({ value: optionValue, label: optionLabel }) => (
+          <label
+            key={optionValue}
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <input
+              type="checkbox"
+              checked={value.includes(optionValue)}
+              onChange={(event) =>
+                onChange(
+                  exclusiveValue === optionValue
+                    ? event.target.checked
+                      ? [optionValue]
+                      : []
+                    : event.target.checked
+                      ? [
+                          ...value.filter((item) => item !== exclusiveValue),
+                          optionValue,
+                        ]
+                      : value.filter((item) => item !== optionValue),
+                )
+              }
+              className="rounded border-gray-300 text-[#036A87] focus:ring-[#04CDF9]"
+            />
+            {optionLabel}
+          </label>
+        ))}
+      </div>
+    </details>
+  </div>
+);
 
 export default function StudentsList() {
   const {
@@ -266,82 +332,55 @@ export default function StudentsList() {
                 <option value="false">لا</option>
               </select>
             </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">
-                مسار التسجيل
-              </label>
-              <select
-                value={filters.registrationPath}
-                onChange={(e) =>
-                  setFilters({ ...filters, registrationPath: e.target.value })
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">الكل</option>
-                {registrationPaths.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">
-                مسار التسجيل النهائي
-              </label>
-              <select
-                value={filters.finalRegistrationPath}
-                onChange={(e) =>
-                  setFilters({
-                    ...filters,
-                    finalRegistrationPath: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">الكل</option>
-                {registrationPaths.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">الصف</label>
-              <select
-                value={filters.classId}
-                onChange={(e) =>
-                  setFilters({ ...filters, classId: e.target.value })
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">الكل</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {c.section ? `— ${c.section}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 mb-1 block">الوضع</label>
-              <select
-                value={filters.status}
-                onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value })
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">النشطون فقط</option>
-                <option value="all">الكل</option>
-                {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MultiSelectFilter
+              label="مسار التسجيل"
+              value={filters.registrationPath}
+              options={registrationPaths.map((path) => ({
+                value: path,
+                label: path,
+              }))}
+              onChange={(registrationPath) =>
+                setFilters({ ...filters, registrationPath })
+              }
+              testid="filter-registration-path"
+            />
+            <MultiSelectFilter
+              label="مسار التسجيل النهائي"
+              value={filters.finalRegistrationPath}
+              options={registrationPaths.map((path) => ({
+                value: path,
+                label: path,
+              }))}
+              onChange={(finalRegistrationPath) =>
+                setFilters({ ...filters, finalRegistrationPath })
+              }
+              testid="filter-final-registration-path"
+            />
+            <MultiSelectFilter
+              label="الصف"
+              value={filters.classId}
+              options={classes.map((classItem) => ({
+                value: classItem.id,
+                label: `${classItem.name} ${classItem.section ? `— ${classItem.section}` : ""}`,
+              }))}
+              onChange={(classId) => setFilters({ ...filters, classId })}
+              testid="filter-class"
+            />
+            <MultiSelectFilter
+              label="الوضع"
+              value={filters.status}
+              options={[
+                { value: "all", label: "الكل" },
+                ...Object.entries(STATUS_LABELS).map(([value, label]) => ({
+                  value,
+                  label,
+                })),
+              ]}
+              onChange={(status) => setFilters({ ...filters, status })}
+              testid="filter-status"
+              emptyLabel="النشطون فقط"
+              exclusiveValue="all"
+            />
             <div>
               <label className="text-xs text-gray-500 mb-1 block">
                 السنة الدراسية

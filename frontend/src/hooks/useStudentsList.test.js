@@ -6,6 +6,8 @@ import { useStudentsList } from "@/hooks/useStudentsList";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+let mockSearchParams = new URLSearchParams();
+
 jest.mock("@/lib/api", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn() },
@@ -18,6 +20,7 @@ jest.mock("@/hooks/useClasses", () => ({
 }));
 jest.mock("react-router-dom", () => ({
   useNavigate: () => jest.fn(),
+  useSearchParams: () => [mockSearchParams],
 }), { virtual: true });
 
 function ListHarness() {
@@ -30,6 +33,7 @@ describe("student list pagination persistence", () => {
   let root;
 
   beforeEach(() => {
+    mockSearchParams = new URLSearchParams();
     window.sessionStorage.clear();
     window.sessionStorage.setItem("students-list-page", JSON.stringify(4));
     api.post.mockReset();
@@ -161,6 +165,38 @@ describe("student list pagination persistence", () => {
           sortBy: "name",
           sortOrder: "desc",
         }),
+      }),
+    );
+  });
+
+  it("applies comma-separated filters from dashboard links", async () => {
+    mockSearchParams = new URLSearchParams(
+      "filterSource=dashboard&registrationPath=%D8%AE%D8%A7%D8%B5%2C%D8%A7%D9%84%D9%82%D8%B1%D9%8A%D8%A9&finalRegistrationPath=%D8%A7%D9%84%D8%A7%D9%8A%D8%AA%D8%A7%D9%85&classId=class-a%2Cclass-b&status=inactive&gender=female",
+    );
+
+    await act(async () => {
+      root.render(<ListHarness />);
+    });
+
+    expect(api.get).toHaveBeenLastCalledWith(
+      "/students",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          registrationPath: "خاص,القرية",
+          finalRegistrationPath: "الايتام",
+          classId: "class-a,class-b",
+          status: "inactive",
+          gender: "female",
+        }),
+      }),
+    );
+    expect(window.studentListState.filters).toEqual(
+      expect.objectContaining({
+        registrationPath: ["خاص", "القرية"],
+        finalRegistrationPath: ["الايتام"],
+        classId: ["class-a", "class-b"],
+        status: ["inactive"],
+        gender: "female",
       }),
     );
   });

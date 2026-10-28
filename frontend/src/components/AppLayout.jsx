@@ -239,7 +239,6 @@ export default function AppLayout() {
         </a>
       </p>
       <div className="border-t border-gray-200 p-4">
-        <LanguageSwitcher className="mb-3 w-full" />
         <div className="mb-3 flex items-center gap-3 px-2">
           <div className="h-9 w-9 rounded-full bg-brand-light text-[#036A87] flex items-center justify-center text-sm font-bold">
             {user?.name?.charAt(0) || "؟"}
@@ -252,6 +251,7 @@ export default function AppLayout() {
               @{user?.username}
             </div>
           </div>
+          <LanguageSwitcher />
         </div>
         <button
           onClick={handleLogout}

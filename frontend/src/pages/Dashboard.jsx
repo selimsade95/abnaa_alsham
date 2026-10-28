@@ -16,11 +16,12 @@ import {
   LayoutGrid,
   Download,
   Printer,
+  ArrowUpRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { downloadXlsx, printReport } from "@/lib/reportExport";
+import { downloadXlsx, printChartReport } from "@/lib/reportExport";
 import {
   Bar,
   BarChart,
@@ -123,7 +124,11 @@ const FinanceBarChart = ({ totals }) => {
   const data = [
     { label: "المستحق", value: Number(totals?.payable ?? 0), color: "#1E40AF" },
     { label: "المدفوع", value: Number(totals?.paid ?? 0), color: "#16A34A" },
-    { label: "المتبقي", value: Number(totals?.remaining ?? 0), color: "#F59E0B" },
+    {
+      label: "المتبقي",
+      value: Number(totals?.remaining ?? 0),
+      color: "#F59E0B",
+    },
   ];
 
   return (
@@ -140,11 +145,7 @@ const FinanceBarChart = ({ totals }) => {
             axisLine={false}
             tick={{ fontSize: 11 }}
           />
-          <YAxis
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 10 }}
-          />
+          <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
           <Tooltip />
           <Bar
             dataKey="value"
@@ -163,7 +164,15 @@ const FinanceBarChart = ({ totals }) => {
   );
 };
 
-const StatCard = ({ title, value, icon: Icon, tint, testid }) => (
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  tint,
+  testid,
+  to,
+  linkLabel,
+}) => (
   <div
     data-testid={testid}
     className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow"
@@ -181,6 +190,17 @@ const StatCard = ({ title, value, icon: Icon, tint, testid }) => (
       >
         <Icon className="h-5 w-5" />
       </div>
+      {to && (
+        <Link
+          to={to}
+          aria-label={linkLabel || `عرض القائمة: ${title}`}
+          title={linkLabel || `عرض القائمة: ${title}`}
+          data-testid={testid ? `${testid}-link` : undefined}
+          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-[#036A87]"
+        >
+          <ArrowUpRight className="h-4 w-4" />
+        </Link>
+      )}
     </div>
   </div>
 );
@@ -253,18 +273,35 @@ export default function Dashboard() {
   const selectedClass = filterOptions.classes.find(
     (classItem) => classItem.id === filters.classId,
   );
-  const filterSummary = [
-    selectedClass ? `الصف: ${selectedClass.name}` : null,
-    filters.academicYear ? `العام الدراسي: ${filters.academicYear}` : null,
-    filters.gender
-      ? `الجنس: ${filters.gender === "male" ? "ذكور" : "إناث"}`
-      : null,
-    filters.finalRegistrationPath
-      ? `المسار: ${filters.finalRegistrationPath}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" - ") || "جميع البيانات";
+  const filterSummary =
+    [
+      selectedClass ? `الصف: ${selectedClass.name}` : null,
+      filters.academicYear ? `العام الدراسي: ${filters.academicYear}` : null,
+      filters.gender
+        ? `الجنس: ${filters.gender === "male" ? "ذكور" : "إناث"}`
+        : null,
+      filters.finalRegistrationPath
+        ? `المسار: ${filters.finalRegistrationPath}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" - ") || "جميع البيانات";
+
+  const studentListLink = (cardFilters = {}) => {
+    const params = new URLSearchParams({ filterSource: "dashboard" });
+    Object.entries({ ...filters, ...cardFilters }).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    return `/students?${params.toString()}`;
+  };
+  const teacherListLink = (gender) => {
+    const params = new URLSearchParams({
+      filterSource: "dashboard",
+      employmentStatus: "all",
+    });
+    if (gender) params.set("gender", gender);
+    return `/teachers?${params.toString()}`;
+  };
 
   const getExportSections = () => {
     if (!stats) return [];
@@ -360,6 +397,156 @@ export default function Dashboard() {
     return sections;
   };
 
+  const getChartExportSections = () => {
+    if (!stats) return [];
+
+    const charts = [
+      {
+        title: "توزيع الطلاب حسب الجنس",
+        items: [
+          { label: "الطالبات", value: stats.female ?? 0, color: "#B4356D" },
+          { label: "الطلاب الذكور", value: stats.male ?? 0, color: "#1E40AF" },
+        ],
+      },
+      {
+        title: "الطلاب حسب المسار",
+        items: (stats.studentPaths || []).map((item) => ({
+          label: item.path,
+          value: item.total ?? 0,
+          color: "#036A87",
+        })),
+      },
+      {
+        title: "المنسحبون حسب المسار",
+        items: (stats.studentPaths || []).map((item) => ({
+          label: item.path,
+          value: item.dropped ?? 0,
+          color: "#B45309",
+        })),
+      },
+    ];
+
+    if (has("teachers.view")) {
+      charts.push({
+        title: "توزيع المعلمين حسب الجنس",
+        items: [
+          {
+            label: "المعلمات",
+            value: stats.teacherStats?.female ?? 0,
+            color: "#B4356D",
+          },
+          {
+            label: "المعلمون الذكور",
+            value: stats.teacherStats?.male ?? 0,
+            color: "#1E40AF",
+          },
+        ],
+      });
+    }
+
+    if (has("payments.view")) {
+      const financeTypes = [
+        ["academic", "الرسوم الدراسية"],
+        ["transportation", "رسوم الحافلة"],
+      ];
+      financeTypes.forEach(([key, label]) => {
+        const totals = stats.finance?.all?.[key] || {};
+        charts.push({
+          title: `${label} - جميع المسارات`,
+          items: [
+            { label: "المستحق", value: totals.payable ?? 0, color: "#1E40AF" },
+            { label: "المدفوع", value: totals.paid ?? 0, color: "#16A34A" },
+            {
+              label: "المتبقي",
+              value: totals.remaining ?? 0,
+              color: "#F59E0B",
+            },
+          ],
+        });
+        (stats.finance?.byPath || []).forEach((path) => {
+          const pathTotals = path[key] || {};
+          charts.push({
+            title: `${label} - مسار ${path.path}`,
+            items: [
+              {
+                label: "المستحق",
+                value: pathTotals.payable ?? 0,
+                color: "#1E40AF",
+              },
+              {
+                label: "المدفوع",
+                value: pathTotals.paid ?? 0,
+                color: "#16A34A",
+              },
+              {
+                label: "المتبقي",
+                value: pathTotals.remaining ?? 0,
+                color: "#F59E0B",
+              },
+            ],
+          });
+        });
+      });
+    }
+
+    if (hasAny(["attendance.view", "attendance.manage"]) && stats.attendance) {
+      charts.push({
+        title: "حالة حضور الطلاب",
+        items: [
+          {
+            label: "حاضرون",
+            value: Math.max(
+              0,
+              Number(stats.attendance.present ?? 0) -
+                Number(stats.attendance.late ?? 0),
+            ),
+            color: "#16A34A",
+          },
+          {
+            label: "متأخرون",
+            value: stats.attendance.late ?? 0,
+            color: "#F59E0B",
+          },
+          {
+            label: "غائبون",
+            value: stats.attendance.absent ?? 0,
+            color: "#DC2626",
+          },
+        ],
+      });
+      charts.push({
+        title: "تسجيل الحضور حسب الصفوف",
+        items: [
+          {
+            label: "سُجل الحضور",
+            value: stats.attendance.markedClasses ?? 0,
+            color: "#036A87",
+          },
+          {
+            label: "إجمالي الصفوف",
+            value: stats.attendance.totalClasses ?? 0,
+            color: "#1E40AF",
+          },
+        ],
+      });
+    }
+
+    if (has("attendance.reports.view")) {
+      charts.push({
+        title: "تقارير الغياب المتكرر",
+        items: [
+          {
+            label: "تقارير الغياب المتكرر",
+            value: stats.repeatedAbsenceReports ?? 0,
+            color: "#B45309",
+          },
+        ],
+      });
+    }
+
+    return charts;
+  };
+
   const exportDashboardXlsx = async () => {
     try {
       const sections = getExportSections();
@@ -377,7 +564,7 @@ export default function Dashboard() {
 
   const exportDashboardPdf = () => {
     try {
-      if (!printReport("تقرير لوحة التحكم", filterSummary, getExportSections())) {
+      if (!printChartReport("تقرير لوحة التحكم", filterSummary, getChartExportSections())) {
         toast.error("يرجى السماح بالنوافذ المنبثقة لطباعة التقرير");
       }
     } catch {
@@ -391,8 +578,7 @@ export default function Dashboard() {
       .get("/dashboard/filters", { signal: controller.signal })
       .then((response) => setFilterOptions(response.data))
       .catch((error) => {
-        if (error?.code !== "ERR_CANCELED")
-          setErr("تعذر تحميل خيارات التصفية");
+        if (error?.code !== "ERR_CANCELED") setErr("تعذر تحميل خيارات التصفية");
       });
     return () => controller.abort();
   }, []);
@@ -641,6 +827,7 @@ export default function Dashboard() {
                 icon={Users}
                 tint={{ bg: "#E0F9FF", fg: "#036A87" }}
                 testid="stat-total"
+                to={studentListLink()}
               />
 
               <StatCard
@@ -649,6 +836,7 @@ export default function Dashboard() {
                 icon={User}
                 tint={{ bg: "#FDE9F1", fg: "#B4356D" }}
                 testid="stat-female"
+                to={studentListLink({ gender: "female" })}
               />
               <StatCard
                 title="الطلاب الذكور"
@@ -656,6 +844,7 @@ export default function Dashboard() {
                 icon={UserCheck}
                 tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
                 testid="stat-male"
+                to={studentListLink({ gender: "male" })}
               />
             </div>
           )}
@@ -708,6 +897,9 @@ export default function Dashboard() {
                   icon={Users}
                   tint={{ bg: "#E0F9FF", fg: "#036A87" }}
                   testid={`stat-path-students-${index}`}
+                  to={studentListLink({
+                    finalRegistrationPath: pathStats.path,
+                  })}
                 />
               ))}
             </div>
@@ -727,6 +919,10 @@ export default function Dashboard() {
                     icon={UserX}
                     tint={{ bg: "#FEF3E7", fg: "#B45309" }}
                     testid={`stat-path-dropped-${index}`}
+                    to={studentListLink({
+                      finalRegistrationPath: pathStats.path,
+                      status: "inactive",
+                    })}
                   />
                 ))}
               </div>
@@ -773,6 +969,7 @@ export default function Dashboard() {
                   icon={Users}
                   tint={{ bg: "#E0F9FF", fg: "#036A87" }}
                   testid="stat-teachers-total"
+                  to={teacherListLink()}
                 />
                 <StatCard
                   title="المعلمات"
@@ -780,6 +977,7 @@ export default function Dashboard() {
                   icon={User}
                   tint={{ bg: "#FDE9F1", fg: "#B4356D" }}
                   testid="stat-teachers-female"
+                  to={teacherListLink("female")}
                 />
                 <StatCard
                   title="المعلمون الذكور"
@@ -787,6 +985,7 @@ export default function Dashboard() {
                   icon={UserCheck}
                   tint={{ bg: "#E6EEFB", fg: "#1E40AF" }}
                   testid="stat-teachers-male"
+                  to={teacherListLink("male")}
                 />
               </div>
             )}

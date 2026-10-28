@@ -12,7 +12,6 @@ import {
   Upload,
 } from "lucide-react";
 import { GENDER_LABELS } from "@/lib/studentDefaults";
-import { downloadTemplate } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
 export default function Teachers() {
@@ -35,11 +34,11 @@ export default function Teachers() {
     reactivating,
     importRef,
     exportTeachers,
+    downloadTeacherTemplate,
     importTeachers,
     doDelete,
     doReactivate,
     clearFilters,
-    teacherTemplate,
     hasActiveFilters,
     load,
   } = useTeachersList();
@@ -72,9 +71,7 @@ export default function Teachers() {
           {has("teachers.create") && (
             <>
               <button
-                onClick={() =>
-                  downloadTemplate("teachers-template.csv", teacherTemplate)
-                }
+                onClick={downloadTeacherTemplate}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
               >
                 <Download className="h-4 w-4" /> قالب الاستيراد
@@ -88,7 +85,7 @@ export default function Teachers() {
               <input
                 ref={importRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
                 onChange={importTeachers}
                 className="hidden"
               />
@@ -105,7 +102,7 @@ export default function Teachers() {
               data-testid="teachers-search-input"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="ابحث بالاسم / الهاتف / التخصص / الكود..."
+              placeholder="ابحث بالاسم / الهاتف / القسم / الكود..."
               className="w-full rounded-lg border border-gray-300 pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-[#04CDF9]"
             />
           </div>
@@ -184,7 +181,7 @@ export default function Teachers() {
                 <th className="px-4 py-3 font-medium">الاسم</th>
                 <th className="px-4 py-3 font-medium">الجنس</th>
                 <th className="px-4 py-3 font-medium">الهاتف</th>
-                <th className="px-4 py-3 font-medium">التخصص</th>
+                <th className="px-4 py-3 font-medium">القسم / الوصف الوظيفي</th>
                 <th className="px-4 py-3 font-medium">الحالة</th>
                 <th className="px-4 py-3 font-medium text-left">إجراءات</th>
               </tr>
@@ -231,10 +228,10 @@ export default function Teachers() {
                       {GENDER_LABELS[t.gender] || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {t.phone || "—"}
+                      {t.contactPhone || t.phone || "—"}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
-                      {t.specialization || "—"}
+                      {t.department || t.jobDescription || t.specialization || "—"}
                     </td>
                     <td className="px-4 py-3">
                       <span

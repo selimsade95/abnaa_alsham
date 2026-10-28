@@ -67,6 +67,7 @@ export default function ClassView() {
             ["grade", "الصف"],
             ["section", "الشعبة"],
             ["academicYear", "السنة الدراسية"],
+            ["registrationDate", "تاريخ التسجيل"],
             ["teacherName", "المعلم"],
             ["capacity", "السعة"],
             ["status", "الحالة"],
@@ -79,6 +80,11 @@ export default function ClassView() {
                   ? classItem[key] === "active"
                     ? "نشط"
                     : "غير نشط"
+                  : key === "registrationDate"
+                    ? (classItem.reactivatedAt || classItem.createdAt)?.slice(
+                        0,
+                        10,
+                      ) || "—"
                   : classItem[key] || "—"}
               </dd>
             </div>

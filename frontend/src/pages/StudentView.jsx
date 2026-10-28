@@ -454,15 +454,17 @@ export default function StudentView() {
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="text-center text-gray-500 py-16">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
+  }
   if (!data) return null;
 
   const s = data.student || {};
+  console.log(`student`, s);
   const f = data.father || {};
   const m = data.mother || {};
   const fees = data.fees || {};
@@ -550,6 +552,10 @@ export default function StudentView() {
       <Section title="معلومات الطالب">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
           <Row label="الاسم الكامل" value={s.fullName} />
+          <Row
+            label="تاريخ التسجيل"
+            value={(data.reactivatedAt || data.createdAt)?.slice(0, 10)}
+          />
           <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
           <Row label="مكان الميلاد" value={s.birthPlace} />
           <Row label="الجنس" value={GENDER_LABELS[s.gender]} />

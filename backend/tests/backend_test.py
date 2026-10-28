@@ -268,7 +268,27 @@ class TestClasses:
         assert "pagination" in j
         assert any(c["id"] == created_class["id"] for c in j["data"])
 
+    def test_reactivate_class_keeps_original_created_at(self, admin_headers, created_class):
+        created_at = created_class["createdAt"]
+        r = requests.delete(
+            f"{API}/classes/{created_class['id']}",
+            headers=admin_headers,
+            json={"reason": "اختبار التعطيل"},
+        )
+        assert r.status_code == 200, r.text
+        r = requests.post(
+            f"{API}/classes/{created_class['id']}/reactivate",
+            headers=admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        class_record = requests.get(
+            f"{API}/classes/{created_class['id']}", headers=admin_headers
+        ).json()
+        assert class_record["createdAt"] == created_at
+        assert class_record["reactivatedAt"]
+
     def test_deactivate_teacher_with_class(self, admin_headers, created_teacher):
+        created_at = created_teacher["createdAt"]
         r = requests.delete(f"{API}/teachers/{created_teacher['id']}", headers=admin_headers,
                     json={"reason": "انتهاء الحاجة للاختبار"})
         assert r.status_code == 200
@@ -278,6 +298,16 @@ class TestClasses:
                        requests.get(f"{API}/teachers", headers=admin_headers).json()["data"])
         assert any(t["id"] == created_teacher["id"] for t in
                    requests.get(f"{API}/teachers?employmentStatus=inactive", headers=admin_headers).json()["data"])
+        r = requests.post(
+            f"{API}/teachers/{created_teacher['id']}/reactivate",
+            headers=admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        teacher = requests.get(
+            f"{API}/teachers/{created_teacher['id']}", headers=admin_headers
+        ).json()
+        assert teacher["createdAt"] == created_at
+        assert teacher["reactivatedAt"]
 
 
 # ---------- Students CRUD ----------
@@ -598,6 +628,26 @@ class TestStudents:
         assert "pagination" in j
         assert any(x["id"] == created_student["id"] for x in j["data"])
 
+    def test_list_students_accepts_multiple_filter_values(
+        self, admin_headers, created_student, created_class
+    ):
+        response = requests.get(
+            f"{API}/students",
+            headers=admin_headers,
+            params={
+                "registrationPath": "الايتام,خاص",
+                "finalRegistrationPath": "الايتام,خاص",
+                "classId": f"{created_class['id']},not-a-class",
+                "status": "active,inactive",
+                "limit": 50,
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert any(
+            student["id"] == created_student["id"]
+            for student in response.json()["data"]
+        )
+
     def test_bulk_promote_students_updates_class_and_payable(self, admin_headers):
         suffix = uuid.uuid4().hex[:8]
         source_response = requests.post(
@@ -795,6 +845,7 @@ class TestStudents:
 
     def test_reactivate_student(self, admin_headers, created_student):
         sid = created_student["id"]
+        created_at = created_student["createdAt"]
         r = requests.delete(f"{API}/students/{sid}", headers=admin_headers,
                     json={"reason": "اختبار التعطيل"})
         assert r.status_code == 200
@@ -807,6 +858,11 @@ class TestStudents:
         assert r.json()["reactivated"] is True
         active = requests.get(f"{API}/students", headers=admin_headers)
         assert any(s["id"] == sid for s in active.json()["data"])
+        reactivated_student = next(
+            s for s in active.json()["data"] if s["id"] == sid
+        )
+        assert reactivated_student["createdAt"] == created_at
+        assert reactivated_student["reactivatedAt"]
 
     def test_student_notes_are_private_to_their_teacher_author(self, admin_headers):
         suffix = uuid.uuid4().hex[:8]

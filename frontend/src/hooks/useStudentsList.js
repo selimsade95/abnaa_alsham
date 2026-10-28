@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -14,13 +14,72 @@ import {
 const DEFAULT_FILTERS = {
   gender: "",
   orphan: "",
-  registrationPath: "",
-  classId: "",
-  status: "",
+  registrationPath: [],
+  classId: [],
+  status: [],
   academicYear: "",
   paymentStatus: "",
-  finalRegistrationPath: "",
+  finalRegistrationPath: [],
 };
+
+const MULTI_VALUE_FILTERS = [
+  "registrationPath",
+  "finalRegistrationPath",
+  "classId",
+  "status",
+];
+
+const normalizeFilters = (filters) =>
+  Object.fromEntries(
+    Object.entries({ ...DEFAULT_FILTERS, ...filters }).map(([key, value]) => [
+      key,
+      MULTI_VALUE_FILTERS.includes(key)
+        ? Array.isArray(value)
+          ? value
+          : value
+            ? [value]
+            : []
+        : value,
+    ]),
+  );
+
+const getFiltersFromSearchParams = (searchParams) => {
+  const keys = [
+    "filterSource",
+    ...MULTI_VALUE_FILTERS,
+    "gender",
+    "orphan",
+    "academicYear",
+    "paymentStatus",
+  ];
+  if (!keys.some((key) => searchParams.has(key))) return null;
+  return normalizeFilters(
+    Object.fromEntries(
+      keys
+        .filter((key) => key !== "filterSource")
+        .filter((key) => searchParams.has(key))
+        .map((key) => [
+          key,
+          MULTI_VALUE_FILTERS.includes(key)
+            ? searchParams
+                .get(key)
+                .split(",")
+                .filter(Boolean)
+            : searchParams.get(key),
+        ]),
+    ),
+  );
+};
+
+const serializeFilters = (filters) =>
+  Object.fromEntries(
+    Object.entries(filters).flatMap(([key, value]) => {
+      if (Array.isArray(value)) {
+        return value.length ? [[key, value.join(",")]] : [];
+      }
+      return value ? [[key, value]] : [];
+    }),
+  );
 
 const studentColumns = [
   { label: "fullName", value: (s) => s.student?.fullName },
@@ -93,6 +152,14 @@ const studentTemplate = [
 export function useStudentsList() {
   const { has } = useAuth();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const filterSearch = searchParams.toString();
+  const initialUrlFilters = getFiltersFromSearchParams(
+    new URLSearchParams(filterSearch),
+  );
+  const [syncedFilterSearch, setSyncedFilterSearch] = useState(() =>
+    initialUrlFilters ? null : filterSearch,
+  );
   const [items, setItems] = useState([]);
   const [registrationPaths, setRegistrationPaths] =
     useState(REGISTRATION_PATHS);
@@ -144,7 +211,27 @@ export function useStudentsList() {
   const [reactivating, setReactivating] = useState(null);
   const [importProgress, setImportProgress] = useState(null);
   const importRef = useRef(null);
-  const currentPage = useRef(Math.max(1, Number(savedPage) || 1));
+  const currentPage = useRef(
+    initialUrlFilters ? 1 : Math.max(1, Number(savedPage) || 1),
+  );
+
+  useEffect(() => {
+    const urlFilters = getFiltersFromSearchParams(new URLSearchParams(filterSearch));
+    if (!urlFilters) {
+      setSyncedFilterSearch(filterSearch);
+      return;
+    }
+    setFilters(urlFilters);
+    currentPage.current = 1;
+    setSavedPage(1);
+    setSyncedFilterSearch(filterSearch);
+  }, [filterSearch, setFilters, setSavedPage]);
+
+  useEffect(() => {
+    const normalized = normalizeFilters(filters);
+    if (JSON.stringify(filters) !== JSON.stringify(normalized))
+      setFilters(normalized);
+  }, [filters, setFilters]);
 
   useEffect(() => {
     api
@@ -166,9 +253,7 @@ export function useStudentsList() {
           params.sortBy = sortBy;
           params.sortOrder = sortOrder;
         }
-        Object.entries(filters).forEach(([key, value]) => {
-          if (value) params[key] = value;
-        });
+        Object.assign(params, serializeFilters(normalizeFilters(filters)));
         let response = await api.get("/students", { params });
         const lastPage = Math.max(1, response.data.pagination?.totalPages || 1);
         if (page > lastPage) {
@@ -229,13 +314,18 @@ export function useStudentsList() {
   }, [q]);
 
   useEffect(() => {
+    if (syncedFilterSearch !== filterSearch) return;
     load(currentPage.current);
-  }, [load]);
+  }, [filterSearch, load, syncedFilterSearch]);
 
   const exportStudents = async () => {
     try {
-      const params = { page: 1, limit: 5000, search: debQ, ...filters };
-      Object.keys(params).forEach((key) => !params[key] && delete params[key]);
+      const params = {
+        page: 1,
+        limit: 5000,
+        ...(debQ ? { search: debQ } : {}),
+        ...serializeFilters(normalizeFilters(filters)),
+      };
       const response = await api.get("/students", { params });
       downloadCsv("students.csv", studentColumns, response.data.data);
     } catch {
@@ -306,6 +396,7 @@ export function useStudentsList() {
   };
 
   const clearFilters = () => setFilters(DEFAULT_FILTERS);
+  const normalizedFilters = normalizeFilters(filters);
 
   return {
     has,
@@ -323,7 +414,7 @@ export function useStudentsList() {
     setQ,
     showFilters,
     setShowFilters,
-    filters,
+    filters: normalizedFilters,
     setFilters,
     classes,
     confirmId,
@@ -341,6 +432,8 @@ export function useStudentsList() {
     exportStudents,
     importStudents,
     studentTemplate,
-    activeCount: Object.values(filters).filter(Boolean).length,
+    activeCount: Object.values(normalizedFilters).filter((value) =>
+      Array.isArray(value) ? value.length > 0 : Boolean(value),
+    ).length,
   };
 }
