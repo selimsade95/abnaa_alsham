@@ -4133,6 +4133,288 @@ async def dashboard_stats(
         result["repeatedAbsenceReports"] = len(reports)
     return result
 
+@api.get("/reports/overview")
+async def reports_overview(current=Depends(require_permission("reports.view"))):
+    allowed = await allowed_class_ids(current)
+    student_query = {}
+    if allowed is not None:
+        student_query["currentClassId"] = {"$in": allowed}
+    students = await db.students.find(
+        student_query,
+        {
+            "_id": 0,
+            "id": 1,
+            "code": 1,
+            "student": 1,
+            "fees": 1,
+            "currentClassId": 1,
+            "deactivationReason": 1,
+        },
+    ).to_list(None)
+    student_ids = [student.get("id") for student in students if student.get("id")]
+    class_ids = list(
+        {student.get("currentClassId") for student in students if student.get("currentClassId")}
+    )
+    classes = await db.classes.find(
+        {"id": {"$in": class_ids}} if class_ids else {"id": {"$in": []}},
+        {"_id": 0, "id": 1, "grade": 1, "name": 1},
+    ).to_list(len(class_ids))
+    classes_by_id = {item["id"]: item for item in classes}
+
+    def grade_for(student):
+        class_info = classes_by_id.get(student.get("currentClassId"), {})
+        student_info = student.get("student") or {}
+        return class_info.get("grade") or student_info.get("newClass") or "__unspecified__"
+
+    payments = await db.payments.find(
+        {"student": {"$in": student_ids}} if student_ids else {"student": {"$in": []}},
+        {
+            "_id": 0,
+            "student": 1,
+            "academicYear": 1,
+            "feeType": 1,
+            "semester": 1,
+            "amount": 1,
+            "paymentDate": 1,
+        },
+    ).to_list(None)
+    payments_by_student_year = {}
+    monthly = {}
+    for payment in payments:
+        student_id = payment.get("student")
+        year = payment.get("academicYear") or ""
+        fee_type = payment.get("feeType") or "academic"
+        amount = float(payment.get("amount") or 0)
+        key = (student_id, year)
+        totals = payments_by_student_year.setdefault(
+            key, {"academic": 0.0, "transportation": 0.0, "books": 0.0, "outfit": 0.0,
+                  "academicFirst": 0.0, "academicSecond": 0.0},
+        )
+        if fee_type in ("academic", "transportation", "books", "outfit"):
+            totals[fee_type] += amount
+        if fee_type == "academic":
+            semester = payment.get("semester") or "full_year"
+            if semester == "first":
+                totals["academicFirst"] += amount
+            elif semester == "second":
+                totals["academicSecond"] += amount
+            elif semester == "full_year":
+                totals["academicFirst"] += amount / 2
+                totals["academicSecond"] += amount / 2
+        date_value = payment.get("paymentDate") or ""
+        month_key = date_value[:7] if len(date_value) >= 7 else "__unknown__"
+        month_totals = monthly.setdefault(
+            month_key, {"month": month_key, "total": 0.0, "transportation": 0.0},
+        )
+        month_totals["total"] += amount
+        if fee_type == "transportation":
+            month_totals["transportation"] += amount
+
+    registered = len(students)
+    active_students = [
+        student for student in students
+        if (student.get("student") or {}).get("status") != "inactive"
+    ]
+    inactive_students = [
+        student for student in students
+        if (student.get("student") or {}).get("status") == "inactive"
+    ]
+    by_grade = {}
+    by_gender = {}
+    by_path = {}
+    financial_by_grade = {}
+    annual_amount_by_grade = {}
+    required_installments_by_grade = {}
+    discount_rows = []
+    annual_amounts = []
+    withdrawn_rows = []
+    total_financial = {"payable": 0.0, "collected": 0.0, "remaining": 0.0}
+    transport_financial = {"payable": 0.0, "collected": 0.0, "remaining": 0.0}
+    installments = {
+        "annualPayable": 0.0,
+        "firstSemesterPayable": 0.0,
+        "secondSemesterPayable": 0.0,
+        "firstSemesterPaid": 0.0,
+        "secondSemesterPaid": 0.0,
+        "firstSemesterRemaining": 0.0,
+        "secondSemesterRemaining": 0.0,
+    }
+
+    for student in students:
+        student_info = student.get("student") or {}
+        fees = student.get("fees") or {}
+        student_id = student.get("id")
+        year = fees.get("academicYear") or ""
+        paid = payments_by_student_year.get((student_id, year), {})
+        grade = grade_for(student)
+        path = (
+            student_info.get("finalRegistrationPath")
+            or student_info.get("registrationPath")
+            or "__unspecified__"
+        )
+        is_inactive = student_info.get("status") == "inactive"
+
+        if not is_inactive:
+            by_grade[grade] = by_grade.get(grade, 0) + 1
+            gender = student_info.get("gender") or "__unspecified__"
+            by_gender[gender] = by_gender.get(gender, 0) + 1
+            by_path[path] = by_path.get(path, 0) + 1
+
+        fee_payables = _fee_payables(fees)
+        academic_payable = fee_payables["academic"]
+        bus_payable = fee_payables["transportation"]
+        if not is_inactive:
+            academic_collected = paid.get("academic", 0.0)
+            bus_collected = paid.get("transportation", 0.0)
+            total_payable = sum(fee_payables.values())
+            total_collected_for_student = sum(
+                paid.get(fee_type, 0.0)
+                for fee_type in ("academic", "transportation", "books", "outfit")
+            )
+            total_financial["payable"] += total_payable
+            total_financial["collected"] += total_collected_for_student
+            transport_financial["payable"] += bus_payable
+            transport_financial["collected"] += bus_collected
+
+            grade_finance = financial_by_grade.setdefault(
+                grade, {"grade": grade, "students": 0, "payable": 0.0,
+                        "collected": 0.0, "remaining": 0.0},
+            )
+            grade_finance["students"] += 1
+            grade_finance["payable"] += total_payable
+            grade_finance["collected"] += total_collected_for_student
+
+            if academic_payable > 0:
+                grade_installments = required_installments_by_grade.setdefault(
+                    grade, {"grade": grade, "students": 0},
+                )
+                grade_installments["students"] += 1
+                annual_amounts.append({
+                    "studentId": student_id,
+                    "name": student_info.get("fullName") or student.get("code") or "",
+                    "grade": grade,
+                    "annualAmount": academic_payable,
+                })
+                annual_grade = annual_amount_by_grade.setdefault(
+                    grade, {"grade": grade, "students": 0, "total": 0.0},
+                )
+                annual_grade["students"] += 1
+                annual_grade["total"] += academic_payable
+
+                semester_amount = academic_payable / 2
+                installments["annualPayable"] += academic_payable
+                installments["firstSemesterPayable"] += semester_amount
+                installments["secondSemesterPayable"] += semester_amount
+                installments["firstSemesterPaid"] += paid.get("academicFirst", 0.0)
+                installments["secondSemesterPaid"] += paid.get("academicSecond", 0.0)
+
+            discount_enabled = bool(fees.get("discountEnabled"))
+            has_split_discounts = (
+                "generalDiscountPercentage" in fees
+                or "siblingsStaffDiscountPercentage" in fees
+            )
+            discount_categories = (
+                [
+                    (fees.get("generalDiscountName"), float(fees.get("generalDiscountPercentage") or 0), "general"),
+                    (fees.get("siblingsStaffDiscountName"), float(fees.get("siblingsStaffDiscountPercentage") or 0), "siblings_staff"),
+                ]
+                if has_split_discounts
+                else [(fees.get("discountName"), float(fees.get("discountPercentage") or 0), "general")]
+            )
+            if discount_enabled:
+                for discount_name, percentage, category in discount_categories:
+                    if percentage > 0:
+                        discount_rows.append({
+                            "studentId": student_id,
+                            "name": student_info.get("fullName") or student.get("code") or "",
+                            "grade": grade,
+                            "nameOfDiscount": discount_name or "",
+                            "percentage": percentage,
+                            "reason": discount_name or category,
+                        })
+
+        if is_inactive:
+            academic_collected = paid.get("academic", 0.0)
+            bus_collected = paid.get("transportation", 0.0)
+            withdrawn_rows.append({
+                "studentId": student_id,
+                "name": student_info.get("fullName") or student.get("code") or "",
+                "grade": grade,
+                "reason": student.get("deactivationReason") or "",
+                "payable": sum(fee_payables.values()),
+                "collected": sum(
+                    paid.get(fee_type, 0.0)
+                    for fee_type in ("academic", "transportation", "books", "outfit")
+                ),
+                "remaining": max(
+                    0.0,
+                    sum(fee_payables.values()) - sum(
+                        paid.get(fee_type, 0.0)
+                        for fee_type in ("academic", "transportation", "books", "outfit")
+                    ),
+                ),
+            })
+
+    for grade_finance in financial_by_grade.values():
+        grade_finance["remaining"] = max(
+            0.0, grade_finance["payable"] - grade_finance["collected"]
+        )
+    total_financial["remaining"] = max(
+        0.0, total_financial["payable"] - total_financial["collected"]
+    )
+    transport_financial["remaining"] = max(
+        0.0, transport_financial["payable"] - transport_financial["collected"]
+    )
+    installments["firstSemesterRemaining"] = max(
+        0.0, installments["firstSemesterPayable"] - installments["firstSemesterPaid"]
+    )
+    installments["secondSemesterRemaining"] = max(
+        0.0, installments["secondSemesterPayable"] - installments["secondSemesterPaid"]
+    )
+    for row in annual_amount_by_grade.values():
+        row["averagePerStudent"] = row["total"] / row["students"] if row["students"] else 0
+
+    return {
+        "counts": {
+            "registered": registered,
+            "active": len(active_students),
+            "inactive": len(inactive_students),
+        },
+        "distributions": {
+            "byGrade": [
+                {"grade": grade, "students": count}
+                for grade, count in sorted(by_grade.items(), key=lambda item: item[0])
+            ],
+            "byGender": [
+                {"gender": gender, "students": count}
+                for gender, count in sorted(by_gender.items())
+            ],
+            "byPath": [
+                {"path": path, "students": count}
+                for path, count in sorted(by_path.items(), key=lambda item: item[0])
+            ],
+        },
+        "financial": {
+            "byGrade": sorted(financial_by_grade.values(), key=lambda item: item["grade"]),
+            "total": total_financial,
+            "transportation": transport_financial,
+            "monthly": sorted(monthly.values(), key=lambda item: item["month"]),
+            "sponsorshipAvailable": False,
+            "sponsorship": [],
+            "withdrawnStudents": withdrawn_rows,
+            "installments": installments,
+            "installmentScheduleAvailable": False,
+            "requiredInstallmentsByGrade": sorted(
+                required_installments_by_grade.values(), key=lambda item: item["grade"]
+            ),
+            "annualAmountByGrade": sorted(
+                annual_amount_by_grade.values(), key=lambda item: item["grade"]
+            ),
+            "annualAmounts": annual_amounts,
+            "discounts": discount_rows,
+        },
+    }
+
 @api.get("/reports/finance")
 async def financial_reports(
     date_from: Optional[date] = Query(default=None, alias="dateFrom"),
