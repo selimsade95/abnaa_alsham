@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import {
-  BarChart3,
   CalendarRange,
+  ChevronDown,
   FileSpreadsheet,
   Loader2,
   Printer,
@@ -14,10 +14,19 @@ import { downloadXlsx, localDateStamp, printReport } from "@/lib/reportExport";
 const PAYMENT_TYPES = ["all", "academic", "transportation", "books", "outfit"];
 
 const money = (value) =>
-  Number(value || 0).toLocaleString(i18n.language === "ar" ? "ar-EG" : "en-US", {
+  Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+const westernDigits = (value) =>
+  String(value ?? "").replace(/[٠-٩۰-۹]/g, (digit) =>
+    String.fromCharCode(
+      digit >= "۰"
+        ? digit.charCodeAt(0) - "۰".charCodeAt(0) + 48
+        : digit.charCodeAt(0) - "٠".charCodeAt(0) + 48,
+    ),
+  );
 
 const DataTable = ({ headers, rows, emptyMessage }) => (
   <div className="overflow-x-auto">
@@ -37,7 +46,9 @@ const DataTable = ({ headers, rows, emptyMessage }) => (
             <tr key={row.key || index} className="border-t border-gray-100">
               {row.cells.map((cell, cellIndex) => (
                 <td key={cellIndex} className="px-4 py-3 align-top">
-                  {cell ?? "—"}
+                  {typeof cell === "string" || typeof cell === "number"
+                    ? westernDigits(cell)
+                    : cell ?? "—"}
                 </td>
               ))}
             </tr>
@@ -57,15 +68,30 @@ const DataTable = ({ headers, rows, emptyMessage }) => (
   </div>
 );
 
-const Panel = ({ title, description, children }) => (
-  <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-    <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
-      <h2 className="font-semibold text-gray-800">{title}</h2>
-      {description && <p className="mt-1 text-xs text-gray-500">{description}</p>}
-    </div>
-    {children}
-  </section>
-);
+const Panel = ({ title, description, children }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-5 py-3 [&::-webkit-details-marker]:hidden">
+        <div>
+          <h2 className="font-semibold text-gray-800">{title}</h2>
+          {description && (
+            <p className="mt-1 text-xs text-gray-500">{description}</p>
+          )}
+        </div>
+        <ChevronDown
+          className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      {children}
+    </details>
+  );
+};
 
 export default function Reports() {
   const [dateFrom, setDateFrom] = useState("");
@@ -272,7 +298,12 @@ export default function Reports() {
       headers: [tr("path"), tr("payable"), tr("collected"), tr("remaining"), tr("fullyPaidStudents"), tr("partiallyPaidStudents"), tr("unpaidStudents")],
       rows: byCourse.map((row) => [row.course, row.payable, row.collected, row.remaining, row.paidStudents, row.partialStudents, row.unpaidStudents]),
     });
-    return sections;
+    return sections.map((section) => ({
+      ...section,
+      rows: section.rows.map((row) =>
+        row.map((cell) => (typeof cell === "string" ? westernDigits(cell) : cell)),
+      ),
+    }));
   };
 
   const exportXlsx = async () => {
@@ -314,7 +345,9 @@ export default function Reports() {
     return (
       <div className={`rounded-xl border p-4 ${tones[tone] || tones.sky}`}>
         <div className="text-xs font-medium opacity-80">{label}</div>
-        <div className="mt-2 text-2xl font-extrabold tabular-nums">{value}</div>
+        <div className="mt-2 text-2xl font-extrabold tabular-nums">
+          {typeof value === "string" ? westernDigits(value) : value}
+        </div>
       </div>
     );
   };
@@ -357,12 +390,14 @@ export default function Reports() {
         </div>
       ) : overview ? (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label={tr("numberOfStudents")} value={counts.registered ?? 0} />
-            <StatCard label={tr("registeredStudents")} value={counts.registered ?? 0} tone="slate" />
-            <StatCard label={tr("activeStudentsTotal")} value={counts.active ?? 0} tone="green" />
-            <StatCard label={tr("inactiveStudentsTotal")} value={counts.inactive ?? 0} tone="amber" />
-          </div>
+          <Panel title={tr("studentCounts")}>
+            <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard label={tr("numberOfStudents")} value={counts.registered ?? 0} />
+              <StatCard label={tr("registeredStudents")} value={counts.registered ?? 0} tone="slate" />
+              <StatCard label={tr("activeStudentsTotal")} value={counts.active ?? 0} tone="green" />
+              <StatCard label={tr("inactiveStudentsTotal")} value={counts.inactive ?? 0} tone="amber" />
+            </div>
+          </Panel>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <Panel title={tr("distributionByGrade")}>
@@ -521,16 +556,14 @@ export default function Reports() {
         </>
       ) : null}
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center gap-2 text-gray-800">
-          <BarChart3 className="h-5 w-5 text-[#036A87]" />
-          <h2 className="text-lg font-semibold">{tr("reportFilter")}</h2>
-        </div>
+      <Panel title={tr("reportFilter")}>
+        <div className="p-5">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="text-sm text-gray-700">
             {tr("monthLabel")}
             <input
               type="month"
+              lang="en"
               value={month}
               onChange={(event) => {
                 setMonth(event.target.value);
@@ -546,6 +579,7 @@ export default function Reports() {
             {tr("from")}
             <input
               type="date"
+              lang="en"
               value={dateFrom}
               onChange={(event) => {
                 setDateFrom(event.target.value);
@@ -558,6 +592,7 @@ export default function Reports() {
             {tr("to")}
             <input
               type="date"
+              lang="en"
               value={dateTo}
               onChange={(event) => {
                 setDateTo(event.target.value);
@@ -588,7 +623,8 @@ export default function Reports() {
             />
           </label>
         </div>
-      </section>
+        </div>
+      </Panel>
 
       {loading ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
@@ -597,6 +633,7 @@ export default function Reports() {
         </div>
       ) : report ? (
         <>
+          <Panel title={tr("filteredPaymentReport")}>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <CalendarRange className="h-4 w-4" />
             <span>{activePeriodLabel}</span>
@@ -615,6 +652,7 @@ export default function Reports() {
             <StatCard label={tr("remaining")} value={`${money(summary.totalRemaining)} $`} tone="amber" />
             <StatCard label={tr("payable")} value={`${money(summary.totalPayable)} $`} />
           </div>
+          </Panel>
           <Panel title={tr("filteredByPath")}>
             <DataTable
               headers={[tr("path"), tr("payable"), tr("collected"), tr("remaining"), tr("fullyPaidStudents"), tr("partiallyPaidStudents"), tr("unpaidStudents")]}
