@@ -3,6 +3,7 @@ import api from "@/lib/api";
 import {
   CalendarRange,
   ChevronDown,
+  ChevronsUpDown,
   FileSpreadsheet,
   Loader2,
   Printer,
@@ -29,44 +30,118 @@ const westernDigits = (value) =>
   );
 
 const DataTable = ({ headers, rows, emptyMessage }) => (
-  <div className="overflow-x-auto">
-    <table className="min-w-full text-start text-sm">
-      <thead className="bg-gray-50 text-gray-600">
-        <tr>
-          {headers.map((header) => (
-            <th key={header} className="px-4 py-3 font-medium text-start">
-              {header}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length ? (
-          rows.map((row, index) => (
-            <tr key={row.key || index} className="border-t border-gray-100">
-              {row.cells.map((cell, cellIndex) => (
-                <td key={cellIndex} className="px-4 py-3 align-top">
-                  {typeof cell === "string" || typeof cell === "number"
-                    ? westernDigits(cell)
-                    : cell ?? "—"}
-                </td>
-              ))}
-            </tr>
-          ))
-        ) : (
-          <tr>
-            <td
-              colSpan={headers.length}
-              className="px-4 py-8 text-center text-gray-500"
-            >
-              {emptyMessage}
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
+  <DataTableContent headers={headers} rows={rows} emptyMessage={emptyMessage} />
 );
+
+function DataTableContent({ headers, rows, emptyMessage }) {
+  const [sortColumn, setSortColumn] = useState(0);
+  const [sortDirection, setSortDirection] = useState("asc");
+  const collator = useMemo(
+    () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: "base" }),
+    [i18n.language],
+  );
+  const sortedRows = useMemo(() => {
+    const parseNumeric = (value) => {
+      if (typeof value === "number") return value;
+      if (typeof value !== "string") return Number.NaN;
+      const cleaned = westernDigits(value).replace(/[,$%\s]/g, "");
+      if (!cleaned) return Number.NaN;
+      return Number(cleaned);
+    };
+    return rows
+      .map((row, originalIndex) => ({ row, originalIndex }))
+      .sort((left, right) => {
+        const a = left.row.cells[sortColumn];
+        const b = right.row.cells[sortColumn];
+        const aEmpty = a == null || a === "" || a === "—";
+        const bEmpty = b == null || b === "" || b === "—";
+        if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+        if (aEmpty && bEmpty) return left.originalIndex - right.originalIndex;
+        const aNumber = parseNumeric(a);
+        const bNumber = parseNumeric(b);
+        let comparison =
+          Number.isFinite(aNumber) && Number.isFinite(bNumber)
+            ? aNumber - bNumber
+            : collator.compare(westernDigits(a), westernDigits(b));
+        if (sortDirection === "desc") comparison *= -1;
+        return comparison || left.originalIndex - right.originalIndex;
+      })
+      .map(({ row }) => row);
+  }, [rows, sortColumn, sortDirection, collator]);
+
+  const sortBy = (columnIndex) => {
+    if (columnIndex === sortColumn) {
+      setSortDirection((direction) => (direction === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(columnIndex);
+      setSortDirection("asc");
+    }
+  };
+
+  return (
+    <div className="max-h-96 overflow-auto">
+      <table className="min-w-full text-start text-sm">
+        <thead className="sticky top-0 z-10 bg-gray-50 text-gray-600 shadow-sm">
+          <tr>
+            <th className="whitespace-nowrap px-4 py-3 text-start font-medium">
+              {i18n.t("reports.orderColumn")}
+            </th>
+            {headers.map((header, index) => (
+              <th
+                key={`${header}-${index}`}
+                aria-sort={
+                  index === sortColumn
+                    ? sortDirection === "asc"
+                      ? "ascending"
+                      : "descending"
+                    : "none"
+                }
+                className="whitespace-nowrap px-4 py-3 text-start font-medium"
+              >
+                <button
+                  type="button"
+                  onClick={() => sortBy(index)}
+                  className="inline-flex items-center gap-1 hover:text-gray-900"
+                  title={i18n.t("reports.sortBy", { 0: header })}
+                >
+                  {header}
+                  <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sortedRows.length ? (
+            sortedRows.map((row, index) => (
+              <tr key={row.key || index} className="border-t border-gray-100">
+                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-gray-500">
+                  {index + 1}
+                </td>
+                {row.cells.map((cell, cellIndex) => (
+                  <td key={cellIndex} className="px-4 py-3 align-top">
+                    {typeof cell === "string" || typeof cell === "number"
+                      ? westernDigits(cell)
+                      : cell ?? "—"}
+                  </td>
+                ))}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td
+                colSpan={headers.length + 1}
+                className="px-4 py-8 text-center text-gray-500"
+              >
+                {emptyMessage}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 const Panel = ({ title, description, children }) => {
   const [open, setOpen] = useState(true);
@@ -300,9 +375,13 @@ export default function Reports() {
     });
     return sections.map((section) => ({
       ...section,
-      rows: section.rows.map((row) =>
-        row.map((cell) => (typeof cell === "string" ? westernDigits(cell) : cell)),
-      ),
+      headers: [tr("orderColumn"), ...section.headers],
+      rows: section.rows.map((row, index) => [
+        index + 1,
+        ...row.map((cell) =>
+          typeof cell === "string" ? westernDigits(cell) : cell,
+        ),
+      ]),
     }));
   };
 

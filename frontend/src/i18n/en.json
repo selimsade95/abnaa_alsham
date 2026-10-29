@@ -563,6 +563,8 @@
     "exportExcelFailed": "Could not export the report to Excel",
     "numberOfStudents": "Number of students",
     "studentCounts": "Student counts",
+    "orderColumn": "Order",
+    "sortBy": "Sort by {{0}}",
     "registeredStudents": "Total registered students",
     "activeStudentsTotal": "Total active students",
     "inactiveStudentsTotal": "Total inactive students",
