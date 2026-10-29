@@ -618,6 +618,7 @@
     "academicYearFilter": "Academic year: {{0}}",
     "genderFilter": "Gender: {{0}}",
     "pathFilter": "Path: {{0}}",
+    "showList": "Show list: {{0}}",
     "financialStatistics": "Financial statistics",
     "totalStudents": "Total students",
     "femaleStudents": "Female students",

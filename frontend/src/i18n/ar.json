@@ -618,6 +618,7 @@
     "academicYearFilter": "العام الدراسي: {{0}}",
     "genderFilter": "الجنس: {{0}}",
     "pathFilter": "المسار: {{0}}",
+    "showList": "عرض القائمة: {{0}}",
     "financialStatistics": "الإحصائيات المالية",
     "studentsByPath": "الطلاب حسب المسار",
     "totalStudents": "إجمالي الطلاب",

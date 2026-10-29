@@ -21,7 +21,8 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { downloadXlsx, printChartReport } from "@/lib/reportExport";
+import { downloadXlsx, localDateStamp, printChartReport } from "@/lib/reportExport";
+import { i18n } from "@/i18n";
 import {
   Bar,
   BarChart,
@@ -193,8 +194,8 @@ const StatCard = ({
       {to && (
         <Link
           to={to}
-          aria-label={linkLabel || `عرض القائمة: ${title}`}
-          title={linkLabel || `عرض القائمة: ${title}`}
+          aria-label={linkLabel || i18n.t("dashboard.showList", { 0: title })}
+          title={linkLabel || i18n.t("dashboard.showList", { 0: title })}
           data-testid={testid ? `${testid}-link` : undefined}
           className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-[#036A87]"
         >
@@ -275,13 +276,23 @@ export default function Dashboard() {
   );
   const filterSummary =
     [
-      selectedClass ? `الصف: ${selectedClass.name}` : null,
-      filters.academicYear ? `العام الدراسي: ${filters.academicYear}` : null,
+      selectedClass
+        ? i18n.t("dashboard.classFilter", { 0: selectedClass.name })
+        : null,
+      filters.academicYear
+        ? i18n.t("dashboard.academicYearFilter", { 0: filters.academicYear })
+        : null,
       filters.gender
-        ? `الجنس: ${filters.gender === "male" ? "ذكور" : "إناث"}`
+        ? i18n.t("dashboard.genderFilter", {
+            0: i18n.t(
+              filters.gender === "male"
+                ? "dashboard.male"
+                : "dashboard.female",
+            ),
+          })
         : null,
       filters.finalRegistrationPath
-        ? `المسار: ${filters.finalRegistrationPath}`
+        ? i18n.t("dashboard.pathFilter", { 0: filters.finalRegistrationPath })
         : null,
     ]
       .filter(Boolean)
@@ -403,6 +414,9 @@ export default function Dashboard() {
     const charts = [
       {
         title: "توزيع الطلاب حسب الجنس",
+        type: "donut",
+        total: stats.total ?? 0,
+        centerLabel: "إجمالي الطلاب",
         items: [
           { label: "الطالبات", value: stats.female ?? 0, color: "#B4356D" },
           { label: "الطلاب الذكور", value: stats.male ?? 0, color: "#1E40AF" },
@@ -429,6 +443,9 @@ export default function Dashboard() {
     if (has("teachers.view")) {
       charts.push({
         title: "توزيع المعلمين حسب الجنس",
+        type: "donut",
+        total: stats.teacherStats?.total ?? 0,
+        centerLabel: "إجمالي المعلمين",
         items: [
           {
             label: "المعلمات",
@@ -452,7 +469,8 @@ export default function Dashboard() {
       financeTypes.forEach(([key, label]) => {
         const totals = stats.finance?.all?.[key] || {};
         charts.push({
-          title: `${label} - جميع المسارات`,
+          title: `${label} - ${i18n.t("dashboard.allPaths")}`,
+          type: "column",
           items: [
             { label: "المستحق", value: totals.payable ?? 0, color: "#1E40AF" },
             { label: "المدفوع", value: totals.paid ?? 0, color: "#16A34A" },
@@ -466,7 +484,8 @@ export default function Dashboard() {
         (stats.finance?.byPath || []).forEach((path) => {
           const pathTotals = path[key] || {};
           charts.push({
-            title: `${label} - مسار ${path.path}`,
+            title: `${label} - ${i18n.t("path")} ${path.path}`,
+            type: "column",
             items: [
               {
                 label: "المستحق",
@@ -492,6 +511,7 @@ export default function Dashboard() {
     if (hasAny(["attendance.view", "attendance.manage"]) && stats.attendance) {
       charts.push({
         title: "حالة حضور الطلاب",
+        type: "donut",
         items: [
           {
             label: "حاضرون",
@@ -551,7 +571,7 @@ export default function Dashboard() {
     try {
       const sections = getExportSections();
       await downloadXlsx(
-        `dashboard-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        `dashboard-report-${localDateStamp()}.xlsx`,
         sections.map((section) => ({
           name: section.title,
           rows: [section.headers, ...section.rows],
@@ -892,7 +912,7 @@ export default function Dashboard() {
               {(stats?.studentPaths || []).map((pathStats, index) => (
                 <StatCard
                   key={pathStats.path}
-                  title={`طلاب المسار: ${pathStats.path}`}
+                  title={i18n.t("studentsInPath", { 0: pathStats.path })}
                   value={loading ? "…" : pathStats.total}
                   icon={Users}
                   tint={{ bg: "#E0F9FF", fg: "#036A87" }}
@@ -914,7 +934,9 @@ export default function Dashboard() {
                 {(stats?.studentPaths || []).map((pathStats, index) => (
                   <StatCard
                     key={pathStats.path}
-                    title={`المنسحبون من المسار: ${pathStats.path}`}
+                    title={i18n.t("withdrawnFromPath", {
+                      0: pathStats.path,
+                    })}
                     value={loading ? "…" : pathStats.dropped}
                     icon={UserX}
                     tint={{ bg: "#FEF3E7", fg: "#B45309" }}
