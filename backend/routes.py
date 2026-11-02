@@ -1619,13 +1619,7 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                         current=Depends(require_permission("students.view"))):
     # Inactive records are retained for history but stay out of normal lists.
     statuses = _split_filter_values(status)
-    q = (
-        {}
-        if status == "all" or "all" in statuses
-        else {"student.status": {"$in": statuses}}
-        if statuses
-        else {"student.status": {"$ne": "inactive"}}
-    )
+    q = {}
     if gender: q["student.gender"] = gender
     if orphan in ("true", "false"): q["student.orphan"] = (orphan == "true")
     registration_paths = _split_filter_values(registrationPath)
@@ -1690,6 +1684,16 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
             if paymentStatus == "unpaid": return paid == 0
             return True
         matched_docs = [d for d in matched_docs if matches(d)]
+    financial_docs = matched_docs
+    if "all" not in statuses:
+        matched_docs = [
+            d for d in matched_docs
+            if (
+                (d.get("student") or {}).get("status") in statuses
+                if statuses
+                else (d.get("student") or {}).get("status") != "inactive"
+            )
+        ]
     if sortBy:
         class_names = {}
         if sortBy == "class":
@@ -1735,11 +1739,29 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
         {doc["id"]: totals_by_student[doc["id"]] for doc in docs},
     )
     summary = {
-        "totalPayable": sum(_overall_student_payable(d.get("fees") or {}) for d in matched_docs),
-        "totalPaid": sum(totals_by_student[d["id"]]["totalPaid"] for d in matched_docs),
-        "totalBooksFee": sum(float((d.get("fees") or {}).get("booksFee") or 0) for d in matched_docs),
-        "totalBusFee": sum(_fee_payables(d.get("fees") or {})["transportation"] for d in matched_docs),
-        "totalOutfitFee": sum(float((d.get("fees") or {}).get("outfitFee") or 0) for d in matched_docs),
+        "totalPayable": sum(
+            _overall_student_payable(d.get("fees") or {})
+            for d in matched_docs
+            if (d.get("student") or {}).get("status") != "inactive"
+        ),
+        "totalPaid": sum(
+            totals_by_student[d["id"]]["totalPaid"] for d in financial_docs
+        ),
+        "totalBooksFee": sum(
+            _fee_payables(d.get("fees") or {})["books"]
+            for d in matched_docs
+            if (d.get("student") or {}).get("status") != "inactive"
+        ),
+        "totalBusFee": sum(
+            _fee_payables(d.get("fees") or {})["transportation"]
+            for d in matched_docs
+            if (d.get("student") or {}).get("status") != "inactive"
+        ),
+        "totalOutfitFee": sum(
+            _fee_payables(d.get("fees") or {})["outfit"]
+            for d in matched_docs
+            if (d.get("student") or {}).get("status") != "inactive"
+        ),
     }
     summary["totalRemaining"] = max(0, summary["totalPayable"] - summary["totalPaid"])
     return {"data": docs, "summary": summary,
@@ -2616,10 +2638,11 @@ async def delete_student(sid: str, body: DeactivationIn, current=Depends(require
     reason = body.reason.strip()
     if not reason: raise HTTPException(400, "سبب التعطيل مطلوب")
     await ensure_student_access(sid, current)
+    deactivated_at = now_iso()
     r = await db.students.update_one(
         {"id": sid},
-        {"$set": {"student.status": "inactive", "deactivatedAt": now_iso(),
-                   "deactivationReason": reason, "updatedAt": now_iso()}},
+        {"$set": {"student.status": "inactive", "deactivatedAt": deactivated_at,
+                   "deactivationReason": reason, "updatedAt": deactivated_at}},
     )
     if r.matched_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True, "deactivated": True}
@@ -2634,8 +2657,7 @@ async def reactivate_student(sid: str, current=Depends(require_permission("stude
             "student.status": "resident",
             "reactivatedAt": reactivated_at,
             "updatedAt": reactivated_at,
-        },
-         "$unset": {"deactivatedAt": ""}},
+        }},
     )
     if r.matched_count == 0:
         student = await db.students.find_one({"id": sid}, {"_id": 0, "id": 1})
@@ -3116,7 +3138,7 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
 @api.get("/payments/summary")
 async def payment_summary(search: Optional[str] = None, academicYear: Optional[str] = None,
                           current=Depends(require_permission("payments.view"))):
-    student_query = {"student.status": {"$ne": "inactive"}}
+    student_query = {}
     if academicYear:
         student_query["fees.academicYear"] = academicYear
     if search:
@@ -3127,7 +3149,10 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
     allowed = await allowed_class_ids(current)
     if allowed is not None:
         student_query["currentClassId"] = {"$in": allowed}
-    students = await db.students.find(student_query, {"_id": 0, "id": 1, "fees": 1}).to_list(None)
+    students = await db.students.find(
+        student_query,
+        {"_id": 0, "id": 1, "fees": 1, "student.status": 1},
+    ).to_list(None)
     student_ids = [student["id"] for student in students]
     current_fee_years = {
         student["id"]: (student.get("fees") or {}).get("academicYear") or ""
@@ -3138,8 +3163,9 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
         for fee_type in FEE_TYPE_FIELDS
     }
     for student in students:
-        for fee_type, payable in _fee_payables(student.get("fees") or {}).items():
-            categories[fee_type]["payable"] += payable
+        if (student.get("student") or {}).get("status") != "inactive":
+            for fee_type, payable in _fee_payables(student.get("fees") or {}).items():
+                categories[fee_type]["payable"] += payable
     if student_ids:
         payment_query = {"student": {"$in": student_ids}}
         if academicYear:
@@ -3811,10 +3837,6 @@ async def dashboard_stats(
     for student in path_students:
         student_data = student.get("student") or {}
         is_dropped = student_data.get("status") == "inactive"
-        if student_status == "active" and is_dropped:
-            continue
-        if student_status == "dropped" and not is_dropped:
-            continue
         path = (
             student_data.get("finalRegistrationPath")
             or student_data.get("registrationPath")
@@ -3826,6 +3848,8 @@ async def dashboard_stats(
             "path": path,
             "academicYear": fees.get("academicYear") or "",
         }
+        if is_dropped:
+            continue
         for fee_type in ("academic", "transportation"):
             payable = fee_payables[fee_type]
             all_finance[fee_type]["payable"] += payable
@@ -3858,7 +3882,7 @@ async def dashboard_stats(
         for totals in group.values():
             totals["remaining"] = max(0, totals["payable"] - totals["paid"])
 
-    # Payment and payable totals follow the selected student status.
+    # Collections retain payments for dropped students; payables below exclude them.
     pay_agg = await db.payments.aggregate([
         {
             "$lookup": {
@@ -3873,17 +3897,6 @@ async def dashboard_stats(
         },
         {
             "$match": {
-                **(
-                    {}
-                    if student_status == "all"
-                    else {
-                        "student.student.status": (
-                            "inactive"
-                            if student_status == "dropped"
-                            else {"$ne": "inactive"}
-                        )
-                    }
-                ),
                 **({} if allowed is None else {"student.currentClassId": {"$in": allowed}}),
                 "student.id": {"$in": list(finance_students)},
             }
@@ -3902,17 +3915,7 @@ async def dashboard_stats(
     stu_agg = await db.students.aggregate([
         {
             "$match": {
-                **(
-                    {}
-                    if student_status == "all"
-                    else {
-                        "student.status": (
-                            "inactive"
-                            if student_status == "dropped"
-                            else {"$ne": "inactive"}
-                        )
-                    }
-                ),
+                "student.status": {"$ne": "inactive"},
                 **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
                 "id": {"$in": list(finance_students)},
             }
@@ -4621,7 +4624,10 @@ async def financial_reports(
         "paid": 0,
         "partial": 0,
         "unpaid": 0,
-        "dropped": 0,
+        "dropped": sum(
+            (student.get("student") or {}).get("status") == "inactive"
+            for student in students
+        ),
         "totalPayable": 0.0,
         "totalCollected": 0.0,
         "totalRemaining": 0.0,
@@ -4630,12 +4636,28 @@ async def financial_reports(
 
     for student in students:
         student_data = student.get("student") or {}
-        if student_data.get("status") == "inactive":
-            summary["dropped"] += 1
-            continue
-
         course_name = student_data.get("finalRegistrationPath") or student_data.get("registrationPath") or "غير محدد"
         if course and course_name.lower() != course.lower():
+            continue
+
+        student_id = student.get("id")
+        collected_for_student = (
+            sum(payment_totals_by_student.get(student_id, {}).values())
+            if payment_type == "all"
+            else payment_totals_by_student.get(student_id, {}).get(payment_type, 0.0)
+        )
+        summary["totalCollected"] += collected_for_student
+        course_entry = by_course.setdefault(course_name, {
+            "course": course_name,
+            "payable": 0.0,
+            "collected": 0.0,
+            "remaining": 0.0,
+            "paidStudents": 0,
+            "partialStudents": 0,
+            "unpaidStudents": 0,
+        })
+        course_entry["collected"] += collected_for_student
+        if student_data.get("status") == "inactive":
             continue
 
         payable_by_type = {fee: 0.0 for fee in fee_types}
@@ -4668,14 +4690,6 @@ async def financial_reports(
             payable_by_type[payment_type] = payable
             summary["totalPayable"] += payable
 
-        paid_for_type = sum(payment_totals_by_student.get(student.get("id"), {}).values()) if payment_type == "all" else payment_totals_by_student.get(student.get("id"), {}).get(payment_type, 0.0)
-        if payment_type == "all":
-            collected_for_student = sum(payment_totals_by_student.get(student.get("id"), {}).values())
-            summary["totalCollected"] += collected_for_student
-        else:
-            collected_for_student = payment_totals_by_student.get(student.get("id"), {}).get(payment_type, 0.0)
-            summary["totalCollected"] += collected_for_student
-
         payable_total = sum(payable_by_type.values())
         if payable_total > 0:
             if collected_for_student >= payable_total:
@@ -4690,17 +4704,7 @@ async def financial_reports(
             else:
                 summary["unpaid"] += 1
 
-        course_entry = by_course.setdefault(course_name, {
-            "course": course_name,
-            "payable": 0.0,
-            "collected": 0.0,
-            "remaining": 0.0,
-            "paidStudents": 0,
-            "partialStudents": 0,
-            "unpaidStudents": 0,
-        })
         course_entry["payable"] += payable_total
-        course_entry["collected"] += collected_for_student
         course_entry["remaining"] = max(0, course_entry["payable"] - course_entry["collected"])
         if payable_total > 0:
             if collected_for_student >= payable_total:

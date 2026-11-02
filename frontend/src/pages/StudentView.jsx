@@ -71,6 +71,7 @@ function StudentNotesSection({
   onSave,
   onDelete,
 }) {
+  console.log(`notes`, notes);
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -165,7 +166,8 @@ function StudentNotesSection({
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-gray-500">
-                  {note.authorName} · {new Date(note.createdAt)}
+                  {note.authorName} ·{" "}
+                  {new Date(note.createdAt).toLocaleString()}
                 </div>
               </article>
             );
@@ -478,7 +480,8 @@ export default function StudentView() {
           data-testid="student-deactivation-alert"
         >
           <span className="font-bold">الطالب غير نشط.</span> سبب التعطيل:{" "}
-          {data.deactivationReason}
+          {data.deactivationReason} -{" "}
+          <span className="underline">{data.deactivatedAt.slice(0, 10)}</span>
         </div>
       )}
       <div className="flex items-end justify-between flex-wrap gap-3">
@@ -556,6 +559,13 @@ export default function StudentView() {
             label="تاريخ التسجيل"
             value={(data.reactivatedAt || data.createdAt)?.slice(0, 10)}
           />
+          {/* {data.deactivatedAt && (
+            <Row
+              label="تاريخ الانسحاب"
+              value={data.deactivatedAt.slice(0, 10)}
+              color={"text-red-800"}
+            />
+          )} */}
           <Row label="تاريخ الميلاد" value={s.birthdate?.slice(0, 10)} />
           <Row label="مكان الميلاد" value={s.birthPlace} />
           <Row label="الجنس" value={GENDER_LABELS[s.gender]} />

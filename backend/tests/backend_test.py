@@ -852,6 +852,10 @@ class TestStudents:
         inactive = requests.get(f"{API}/students?status=inactive", headers=admin_headers)
         inactive_student = next(s for s in inactive.json()["data"] if s["id"] == sid)
         assert inactive_student["deactivationReason"] == "اختبار التعطيل"
+        dropped_at = inactive_student["deactivatedAt"]
+        student_details = requests.get(f"{API}/students/{sid}", headers=admin_headers)
+        assert student_details.status_code == 200
+        assert student_details.json()["deactivatedAt"] == dropped_at
 
         r = requests.post(f"{API}/students/{sid}/reactivate", headers=admin_headers)
         assert r.status_code == 200
@@ -863,6 +867,7 @@ class TestStudents:
         )
         assert reactivated_student["createdAt"] == created_at
         assert reactivated_student["reactivatedAt"]
+        assert reactivated_student["deactivatedAt"] == dropped_at
 
     def test_student_notes_are_private_to_their_teacher_author(self, admin_headers):
         suffix = uuid.uuid4().hex[:8]
@@ -1111,6 +1116,141 @@ class TestPayments:
         assert dashboard_finance["transportation"]["paid"] - dashboard_before_finance[
             "transportation"
         ]["paid"] == pytest.approx(200)
+
+    def test_dropped_student_totals_keep_payments_but_exclude_payables(self, admin_headers):
+        unique = uuid.uuid4().hex[:8]
+        student_name = f"TEST Dropped Totals {unique}"
+        path = f"TEST Dropped Path {unique}"
+        created = requests.post(
+            f"{API}/students",
+            headers=admin_headers,
+            json={
+                "student": {
+                    "fullName": student_name,
+                    "gender": "male",
+                    "registrationPath": path,
+                    "finalRegistrationPath": path,
+                },
+                "fees": {
+                    "academicYear": "2026-2027",
+                    "totalPayable": 100,
+                    "busFee": 40,
+                    "busRegistered": True,
+                },
+            },
+        )
+        assert created.status_code == 200, created.text
+        student = created.json()
+
+        payment_ids = []
+        for fee_type, amount in (("academic", 60), ("transportation", 20)):
+            payment = requests.post(
+                f"{API}/payments",
+                headers=admin_headers,
+                json={
+                    "student": student["id"],
+                    "academicYear": "2026-2027",
+                    "feeType": fee_type,
+                    "semester": "full_year",
+                    "amount": amount,
+                    "paymentDate": datetime.utcnow().isoformat(),
+                },
+            )
+            assert payment.status_code == 200, payment.text
+            payment_ids.append(payment.json()["id"])
+
+        refund = requests.post(
+            f"{API}/payments/refund",
+            headers=admin_headers,
+            json={
+                "student": student["id"],
+                "academicYear": "2026-2027",
+                "feeType": "academic",
+                "semester": "full_year",
+                "amount": 10,
+                "paymentDate": datetime.utcnow().isoformat(),
+            },
+        )
+        assert refund.status_code == 200, refund.text
+        payment_ids.append(refund.json()["id"])
+        dropped = requests.delete(
+            f"{API}/students/{student['id']}",
+            headers=admin_headers,
+            json={"reason": "TEST dropped totals"},
+        )
+        assert dropped.status_code == 200, dropped.text
+
+        students = requests.get(
+            f"{API}/students",
+            headers=admin_headers,
+            params={"search": student_name},
+        )
+        assert students.status_code == 200, students.text
+        assert students.json()["data"] == []
+        assert students.json()["summary"]["totalPayable"] == 0
+        assert students.json()["summary"]["totalPaid"] == 70
+
+        all_students = requests.get(
+            f"{API}/students",
+            headers=admin_headers,
+            params={"search": student_name, "status": "all"},
+        )
+        assert all_students.status_code == 200, all_students.text
+        assert len(all_students.json()["data"]) == 1
+        assert all_students.json()["summary"]["totalPayable"] == 0
+        assert all_students.json()["summary"]["totalPaid"] == 70
+
+        dropped_students = requests.get(
+            f"{API}/students",
+            headers=admin_headers,
+            params={"search": student_name, "status": "inactive"},
+        )
+        assert dropped_students.status_code == 200, dropped_students.text
+        assert len(dropped_students.json()["data"]) == 1
+        assert dropped_students.json()["summary"]["totalPayable"] == 0
+        assert dropped_students.json()["summary"]["totalPaid"] == 70
+
+        payment_summary = requests.get(
+            f"{API}/payments/summary",
+            headers=admin_headers,
+            params={"search": student_name},
+        )
+        assert payment_summary.status_code == 200, payment_summary.text
+        fee_types = payment_summary.json()["feeTypes"]
+        assert fee_types["academic"]["payable"] == 0
+        assert fee_types["academic"]["paid"] == 50
+        assert fee_types["transportation"]["payable"] == 0
+        assert fee_types["transportation"]["paid"] == 20
+
+        finance_report = requests.get(
+            f"{API}/reports/finance",
+            headers=admin_headers,
+            params={"course": path},
+        )
+        assert finance_report.status_code == 200, finance_report.text
+        report_summary = finance_report.json()["summary"]
+        assert report_summary["totalPayable"] == 0
+        assert report_summary["totalCollected"] == 70
+
+        dashboard = requests.get(
+            f"{API}/dashboard/stats",
+            headers=admin_headers,
+            params={"finalRegistrationPath": path},
+        )
+        assert dashboard.status_code == 200, dashboard.text
+        dashboard_data = dashboard.json()
+        assert dashboard_data["totalPayable"] == 0
+        assert dashboard_data["totalCollected"] == 70
+        assert dashboard_data["finance"]["all"]["academic"]["payable"] == 0
+        assert dashboard_data["finance"]["all"]["academic"]["paid"] == 50
+        assert dashboard_data["finance"]["all"]["transportation"]["payable"] == 0
+        assert dashboard_data["finance"]["all"]["transportation"]["paid"] == 20
+        for payment_id in payment_ids:
+            deleted = requests.delete(
+                f"{API}/payments/{payment_id}",
+                headers=admin_headers,
+            )
+            assert deleted.status_code == 200, deleted.text
 
     def test_bus_fee_is_ignored_without_bus_registration(self, admin_headers):
         student_response = requests.post(

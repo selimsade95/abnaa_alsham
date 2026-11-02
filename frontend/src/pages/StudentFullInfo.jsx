@@ -105,6 +105,12 @@ export default function StudentFullInfo() {
           <Row label="رقم الحافلة" value={s.busNumber} />
           <Row label="الجنسية" value={fi.nationality} />
           <Row label="حالة الطالب" value={STATUS_LABELS[s.status]} />
+          {data.deactivatedAt && (
+            <Row
+              label="تاريخ الانسحاب"
+              value={data.deactivatedAt.slice(0, 10)}
+            />
+          )}
           <Row label="حالة الطالب الأسرية" value={fi.familyStatus} />
           <Row label="لغة الطالب" value={fi.primaryLanguage} />
           <Row label="لغات يتقنها" value={(s.languages || []).join("، ")} />
