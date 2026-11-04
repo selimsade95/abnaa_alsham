@@ -69,9 +69,10 @@ class FakeCollection:
 
 
 class FakeRawDatabase:
-    def __init__(self, students=None):
+    def __init__(self, students=None, daily_reports=None):
         self.collections = {
             "students": FakeCollection(students),
+            "daily_reports": FakeCollection(daily_reports),
             "payments": FakeCollection(),
             "users": FakeCollection(),
             "classes": FakeCollection(),
@@ -148,6 +149,47 @@ def test_related_payment_queries_are_limited_to_permitted_students():
             {"student": {"$in": ["west-female"]}},
         ]
     }
+
+
+def test_daily_reports_allow_empty_absences_and_filter_restricted_names():
+    set_access_context("west", ["students.gender.male.view"])
+    database = BranchScopedDatabase(
+        FakeRawDatabase(
+            students=[
+                {
+                    "id": "west-male",
+                    "branchId": "west",
+                    "student": {"gender": "male"},
+                },
+                {
+                    "id": "west-female",
+                    "branchId": "west",
+                    "student": {"gender": "female"},
+                },
+            ],
+            daily_reports=[
+                {"id": "empty", "branchId": "west", "absences": []},
+                {
+                    "id": "mixed",
+                    "branchId": "west",
+                    "absences": [
+                        {"studentId": "west-male"},
+                        {"studentId": "west-female"},
+                    ],
+                },
+            ],
+        )
+    )
+
+    empty_report = asyncio.run(
+        database.daily_reports.find_one({"id": "empty"}, {"_id": 0})
+    )
+    mixed_report = asyncio.run(
+        database.daily_reports.find_one({"id": "mixed"}, {"_id": 0})
+    )
+
+    assert empty_report["absences"] == []
+    assert mixed_report["absences"] == [{"studentId": "west-male"}]
 
 
 def test_user_directory_is_branch_scoped_unless_access_all_is_granted():

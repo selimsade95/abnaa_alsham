@@ -31,6 +31,15 @@ reports is controlled by `attendance.reports.print`. Absence records require
 an excused/unexcused reason; present students may optionally have a late
 duration recorded in minutes.
 
+Daily statistics and shift reports are recorded once per class/division and
+date through `GET /api/daily-reports/classes`,
+`GET /api/daily-reports/{classId}`, `POST /api/daily-reports`, and
+`PUT /api/daily-reports/{classId}`. The `dailyReports.view`,
+`dailyReports.create`, `dailyReports.update`, and `dailyReports.print`
+permissions control access; reports cannot be deleted. Absent student counts
+are derived from the selected active students, and each absence requires an
+excused/unexcused reason. Updates record the timestamp and user name.
+
 Run the API from this directory with:
 
 ```text

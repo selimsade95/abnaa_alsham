@@ -19,6 +19,7 @@ GLOBAL_COLLECTIONS = frozenset({"branches", "roles"})
 STUDENT_RELATIONS = {
     "attendance": "records.studentId",
     "attendance_sessions": "records.studentId",
+    "daily_reports": "absences.studentId",
     "grades": "studentId",
     "homework": "studentId",
     "payments": "student",
@@ -166,7 +167,7 @@ class ScopedCursor:
             cursor = getattr(cursor, name)(*args, **kwargs)
         documents = await cursor.to_list(length)
         permitted_ids = None
-        if self.collection.name in {"attendance", "attendance_sessions"}:
+        if self.collection.name in {"attendance", "attendance_sessions", "daily_reports"}:
             permitted_ids = await self.collection._permitted_student_ids()
         return [
             self.collection._filter_related_records(document, permitted_ids)
@@ -225,7 +226,11 @@ class ScopedCollection:
         elif self.name == "students" and genders is not None:
             filters.append({"student.gender": {"$in": list(genders)}})
         relation_field = STUDENT_RELATIONS.get(self.name)
-        if relation_field and (genders is not None or grade_rules is not None):
+        if (
+            relation_field
+            and self.name != "daily_reports"
+            and (genders is not None or grade_rules is not None)
+        ):
             student_ids = await self._permitted_student_ids()
             filters.append({relation_field: {"$in": student_ids}})
         return _merge_filters(*filters)
@@ -304,19 +309,20 @@ class ScopedCollection:
         return query_filters[0] if len(query_filters) == 1 else {"$or": query_filters}
 
     def _filter_related_records(self, document, permitted_ids):
-        if self.name not in {"attendance", "attendance_sessions"}:
+        if self.name not in {"attendance", "attendance_sessions", "daily_reports"}:
             return document
         genders = allowed_student_genders()
         grade_rules = _allowed_student_grade_rules.get()
+        field = "absences" if self.name == "daily_reports" else "records"
         if (
             (genders is None and grade_rules is None)
             or permitted_ids is None
-            or not isinstance(document.get("records"), list)
+            or not isinstance(document.get(field), list)
         ):
             return document
-        document["records"] = [
+        document[field] = [
             record
-            for record in document["records"]
+            for record in document[field]
             if record.get("studentId") in permitted_ids
         ]
         return document
@@ -332,7 +338,7 @@ class ScopedCollection:
         if not document:
             return None
         permitted_ids = None
-        if self.name in {"attendance", "attendance_sessions"}:
+        if self.name in {"attendance", "attendance_sessions", "daily_reports"}:
             permitted_ids = await self._permitted_student_ids()
         return self._filter_related_records(document, permitted_ids)
 
@@ -400,10 +406,11 @@ class ScopedCollection:
             raise HTTPException(403, "لا تملك صلاحية لهذا الصف أو الجنس")
 
     def _relation_ids(self, document, relation_field):
-        if relation_field == "records.studentId":
+        if relation_field in {"records.studentId", "absences.studentId"}:
+            records_field = "absences" if relation_field == "absences.studentId" else "records"
             return [
                 record.get("studentId")
-                for record in document.get("records", [])
+                for record in document.get(records_field, [])
                 if isinstance(record, dict)
             ]
         value = document.get(relation_field)
@@ -469,8 +476,9 @@ class ScopedCollection:
             for key in ("$set", "$setOnInsert"):
                 values = update.get(key, {})
                 document = values
-                if relation_field == "records.studentId":
-                    document = {"records": values.get("records", [])}
+                if relation_field in {"records.studentId", "absences.studentId"}:
+                    records_field = "absences" if relation_field == "absences.studentId" else "records"
+                    document = {records_field: values.get(records_field, [])}
                 related_ids = self._relation_ids(document, relation_field)
                 if not set(related_ids).issubset(set(student_ids)):
                     raise HTTPException(404, "غير موجود")
@@ -491,6 +499,24 @@ class ScopedCollection:
             ]
             update["$set"]["records"] = (
                 preserved_records + update["$set"]["records"]
+            )
+        if (
+            self.name == "daily_reports"
+            and (genders is not None or grade_rules is not None)
+            and isinstance(update.get("$set", {}).get("absences"), list)
+        ):
+            student_ids = set(await self._permitted_student_ids())
+            existing_reports = await self.raw.find(
+                await self._scope_filter(query), {"_id": 0, "absences": 1}
+            ).to_list(None)
+            preserved_absences = [
+                absence
+                for report in existing_reports
+                for absence in report.get("absences", [])
+                if absence.get("studentId") not in student_ids
+            ]
+            update["$set"]["absences"] = (
+                preserved_absences + update["$set"]["absences"]
             )
         branch_id = await self._branch_filter()
         if branch_id and self.name != "users":

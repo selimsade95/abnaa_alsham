@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   CalendarCheck,
+  Clipboard,
   MessageSquareText,
   BarChart3,
   Building2,
@@ -23,9 +24,11 @@ import {
 import { toast } from "sonner";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { getLanguage } from "@/i18n";
+import { useTranslation } from "react-i18next";
 
 export default function AppLayout() {
   const { user, logout, selectBranch, has, hasAny } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const isRtl = getLanguage() === "ar";
@@ -107,6 +110,18 @@ export default function AppLayout() {
         "attendance.view",
         "attendance.manage",
         "attendance.reports.view",
+      ]),
+    },
+    {
+      to: "/daily-reports",
+      label: t("navigation.dailyReports"),
+      icon: Clipboard,
+      testid: "nav-daily-reports",
+      show: hasAny([
+        "dailyReports.view",
+        "dailyReports.create",
+        "dailyReports.update",
+        "dailyReports.print",
       ]),
     },
     {

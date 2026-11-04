@@ -89,6 +89,32 @@ html[dir="ltr"] [dir="rtl"] .text-left {
   .no-print * {
     display: none !important;
   }
+  .daily-report-edit-text {
+    display: none !important;
+  }
+  .daily-report-print-text {
+    display: block !important;
+    min-height: 2rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .daily-report-stat-card {
+    border: 1px solid currentColor !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .daily-report-stat-attended {
+    background-color: #f0fdf4 !important;
+    color: #166534 !important;
+  }
+  .daily-report-stat-absent {
+    background-color: #fef2f2 !important;
+    color: #991b1b !important;
+  }
+  .daily-report-stat-total {
+    background-color: #f0f9ff !important;
+    color: #075985 !important;
+  }
   aside {
     display: none !important;
   }
@@ -118,6 +144,10 @@ html[dir="ltr"] [dir="rtl"] .text-left {
     color: #000 !important;
     padding: 0 !important;
   }
+}
+
+.daily-report-print-text {
+  display: none;
 }
 
 /* Custom scrollbar */

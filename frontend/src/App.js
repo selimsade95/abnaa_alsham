@@ -34,6 +34,7 @@ import Subjects from "@/pages/Subjects";
 import Grades from "@/pages/Grades";
 import Homework from "@/pages/Homework";
 import Attendance from "@/pages/Attendance";
+import DailyReports from "@/pages/DailyReports";
 import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
 import AppLayout from "@/components/AppLayout";
@@ -256,6 +257,21 @@ function App() {
                   ]}
                 >
                   <Attendance />
+                </Protected>
+              }
+            />
+            <Route
+              path="/daily-reports"
+              element={
+                <Protected
+                  perm={[
+                    "dailyReports.view",
+                    "dailyReports.create",
+                    "dailyReports.update",
+                    "dailyReports.print",
+                  ]}
+                >
+                  <DailyReports />
                 </Protected>
               }
             />
