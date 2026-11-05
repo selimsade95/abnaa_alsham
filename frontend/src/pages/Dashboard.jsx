@@ -262,6 +262,7 @@ export default function Dashboard() {
     gender: "",
     finalRegistrationPath: "",
   });
+  const [includeDropped, setIncludeDropped] = useState(false);
   const [viewMode, setViewMode] = useState(
     () => localStorage.getItem("dashboard-view-mode") || "numbers",
   );
@@ -294,6 +295,7 @@ export default function Dashboard() {
       filters.finalRegistrationPath
         ? i18n.t("dashboard.pathFilter", { 0: filters.finalRegistrationPath })
         : null,
+      includeDropped ? "تضمين الطلاب المنسحبين في إجمالي المستحق" : null,
     ]
       .filter(Boolean)
       .join(" - ") || "جميع البيانات";
@@ -610,6 +612,7 @@ export default function Dashboard() {
     const params = Object.fromEntries(
       Object.entries(filters).filter(([, value]) => value),
     );
+    if (includeDropped) params.includeDropped = true;
     api
       .get("/dashboard/stats", {
         params,
@@ -623,7 +626,7 @@ export default function Dashboard() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [filters]);
+  }, [filters, includeDropped]);
 
   return (
     <div className="space-y-8">
@@ -778,17 +781,30 @@ export default function Dashboard() {
             </select>
           </label>
         </div>
-        {Object.values(filters).some(Boolean) && (
+        {has("payments.view") && (
+          <label className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-gray-600">
+            <input
+              type="checkbox"
+              checked={includeDropped}
+              onChange={(event) => setIncludeDropped(event.target.checked)}
+              data-testid="dashboard-include-dropped"
+              className="rounded border-gray-300 text-[#036A87] focus:ring-[#04CDF9]"
+            />
+            تضمين الطلاب المنسحبين في إجمالي المستحق
+          </label>
+        )}
+        {(Object.values(filters).some(Boolean) || includeDropped) && (
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
               setFilters({
                 classId: "",
                 academicYear: "",
                 gender: "",
                 finalRegistrationPath: "",
-              })
-            }
+              });
+              setIncludeDropped(false);
+            }}
             className="mt-3 text-xs font-medium text-[#036A87] hover:underline"
           >
             مسح التصفية

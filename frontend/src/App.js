@@ -37,6 +37,7 @@ import Attendance from "@/pages/Attendance";
 import DailyReports from "@/pages/DailyReports";
 import VerificationMessages from "@/pages/VerificationMessages";
 import StudentFullInfoEdit from "@/pages/StudentFullInfoEdit";
+import AuditLogs from "@/pages/AuditLogs";
 import AppLayout from "@/components/AppLayout";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { initializeLanguage } from "@/i18n";
@@ -308,6 +309,14 @@ function App() {
               element={
                 <Protected perm="reports.view">
                   <Reports />
+                </Protected>
+              }
+            />
+            <Route
+              path="/audit-logs"
+              element={
+                <Protected perm="auditLogs.view">
+                  <AuditLogs />
                 </Protected>
               }
             />

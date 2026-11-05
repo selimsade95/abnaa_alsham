@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 
 export default function StudentSearchSelect({
   excludeIds = [],
+  includeDropped = false,
   onSelect,
   placeholder = "ابحث عن طالب",
 }) {
@@ -41,6 +42,7 @@ export default function StudentSearchSelect({
           params: {
             ...(query.trim() ? { search: query.trim() } : {}),
             ...(excludeKey ? { excludeIds: excludeKey } : {}),
+            ...(includeDropped ? { includeDropped: true } : {}),
           },
         });
         if (currentRequest === requestId.current)
@@ -59,7 +61,7 @@ export default function StudentSearchSelect({
       clearTimeout(timer);
       requestId.current += 1;
     };
-  }, [excludeKey, open, query]);
+  }, [excludeKey, includeDropped, open, query]);
 
   return (
     <div className="relative">

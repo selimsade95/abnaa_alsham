@@ -21,6 +21,7 @@ import { STATUS_LABELS, GENDER_LABELS } from "@/lib/studentDefaults";
 import { downloadTemplate } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import { useStudentsList } from "@/hooks/useStudentsList";
+import { t } from "@/i18n";
 
 const MultiSelectFilter = ({
   label,
@@ -42,7 +43,7 @@ const MultiSelectFilter = ({
           {exclusiveValue && value.includes(exclusiveValue)
             ? "الكل"
             : value.length
-              ? `${value.length} محدد`
+              ? t("general.selectedCount", { count: value.length })
               : emptyLabel}
         </span>
         <ChevronDown className="h-4 w-4 text-gray-500 transition-transform group-open:rotate-180" />

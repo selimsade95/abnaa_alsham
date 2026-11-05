@@ -79,6 +79,7 @@
     "allItems": "Select all",
     "deselectAll": "Deselect all",
     "selected": "Selected:",
+    "selectedCount": "{{count}} selected",
     "selectAllStudents": "Select all students",
     "oneMinute": "minute",
     "score": "Score",
@@ -145,6 +146,7 @@
     "welcomeDescription": "A fast, secure, reliable, and elegant platform for managing Abnaa Alsham School."
   },
   "navigation": {
+    "auditLogs": "Audit log",
     "attendance": "Attendance",
     "branches": "School branches",
     "classes": "Classes",
@@ -161,6 +163,24 @@
     "subjects": "Subjects & assignments",
     "teachers": "Teachers",
     "users": "Users"
+  },
+  "auditLog": {
+    "title": "Audit log",
+    "description": "View successful data-changing requests made in the system.",
+    "actor": "User",
+    "request": "Request",
+    "method": "Type",
+    "status": "Status",
+    "createdAt": "Date and time",
+    "anonymous": "Unknown user",
+    "empty": "No requests have been recorded.",
+    "loading": "Loading audit log...",
+    "loadError": "Unable to load the audit log.",
+    "page": "Page {{count}}",
+    "entryCount": "Entries: {{count}}",
+    "refresh": "Refresh",
+    "previous": "Previous",
+    "next": "Next"
   },
   "students": {
     "active": "Active",

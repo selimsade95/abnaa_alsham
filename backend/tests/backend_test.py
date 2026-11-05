@@ -78,7 +78,8 @@ class TestAuthAndCatalog:
         # spot check new perms
         for p in ("teachers.view", "teachers.create", "classes.view", "classes.create",
                   "students.fullInformation.view",
-                  "settings.codeGeneration.view", "settings.codeGeneration.update"):
+                  "settings.codeGeneration.view", "settings.codeGeneration.update",
+                  "auditLogs.view"):
             assert p in perms, f"missing perm {p}"
 
     def test_login_bad_credentials(self):
@@ -98,8 +99,39 @@ class TestAuthAndCatalog:
         assert len(arr) >= 32
         names = {p["name"] for p in arr}
         for req in ("teachers.delete", "classes.update", "settings.codeGeneration.update",
-                    "students.fullInformation.view"):
+                    "students.fullInformation.view", "auditLogs.view"):
             assert req in names
+
+    def test_audit_logs_are_permission_protected_and_record_changes(
+        self, admin_headers, reg_staff_headers
+    ):
+        reg_headers, _ = reg_staff_headers
+        denied = requests.get(f"{API}/audit-logs", headers=reg_headers)
+        assert denied.status_code == 403
+
+        current_options = requests.get(
+            f"{API}/discount-options", headers=admin_headers
+        )
+        assert current_options.status_code == 200
+        changed = requests.put(
+            f"{API}/settings/discount-options",
+            headers=admin_headers,
+            json=current_options.json(),
+        )
+        assert changed.status_code == 200, changed.text
+
+        logs = requests.get(
+            f"{API}/audit-logs",
+            headers=admin_headers,
+            params={"limit": 200},
+        )
+        assert logs.status_code == 200, logs.text
+        assert logs.json()["total"] >= 1
+        assert any(
+            item["method"] == "PUT"
+            and item["path"] == "/api/settings/discount-options"
+            for item in logs.json()["items"]
+        )
 
     def test_roles_seeded(self, admin_headers):
         r = requests.get(f"{API}/roles", headers=admin_headers)
@@ -1221,6 +1253,15 @@ class TestPayments:
         assert fee_types["academic"]["paid"] == 50
         assert fee_types["transportation"]["payable"] == 0
         assert fee_types["transportation"]["paid"] == 20
+        payment_summary_with_dropped = requests.get(
+            f"{API}/payments/summary",
+            headers=admin_headers,
+            params={"search": student_name, "includeDropped": "true"},
+        )
+        assert payment_summary_with_dropped.status_code == 200
+        included_fee_types = payment_summary_with_dropped.json()["feeTypes"]
+        assert included_fee_types["academic"]["payable"] == 100
+        assert included_fee_types["transportation"]["payable"] == 40
 
         finance_report = requests.get(
             f"{API}/reports/finance",
@@ -1245,6 +1286,16 @@ class TestPayments:
         assert dashboard_data["finance"]["all"]["academic"]["paid"] == 50
         assert dashboard_data["finance"]["all"]["transportation"]["payable"] == 0
         assert dashboard_data["finance"]["all"]["transportation"]["paid"] == 20
+        dashboard_with_dropped = requests.get(
+            f"{API}/dashboard/stats",
+            headers=admin_headers,
+            params={"finalRegistrationPath": path, "includeDropped": "true"},
+        )
+        assert dashboard_with_dropped.status_code == 200, dashboard_with_dropped.text
+        dashboard_with_dropped_data = dashboard_with_dropped.json()
+        assert dashboard_with_dropped_data["totalPayable"] == 140
+        assert dashboard_with_dropped_data["finance"]["all"]["academic"]["payable"] == 100
+        assert dashboard_with_dropped_data["finance"]["all"]["transportation"]["payable"] == 40
         for payment_id in payment_ids:
             deleted = requests.delete(
                 f"{API}/payments/{payment_id}",

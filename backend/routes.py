@@ -9,7 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, EmailStr, TypeAdapter, ValidationError
 from typing import List, Optional
 from datetime import date, datetime, timezone, timedelta
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 import requests
 from models import *
 from services import (
@@ -49,6 +49,52 @@ configure_services(db, JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRE_HOURS)
 app = FastAPI(title="IQRA School API")
 api = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
+
+AUDIT_IGNORED_PATHS = {
+    "/api/auth/login",
+    "/api/auth/select-branch",
+    "/api/auth/logout",
+    "/api/settings/code-generation/preview",
+}
+
+@app.middleware("http")
+async def audit_data_changes(request, call_next):
+    response = await call_next(request)
+    if (
+        request.method not in {"POST", "PUT", "PATCH", "DELETE"}
+        or request.url.path in AUDIT_IGNORED_PATHS
+        or response.status_code >= 400
+    ):
+        return response
+
+    claims = {}
+    authorization = request.headers.get("authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() == "bearer" and token:
+        try:
+            claims = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        except jwt.InvalidTokenError:
+            pass
+
+    audit_record = {
+        "id": str(uuid.uuid4()),
+        "method": request.method,
+        "path": request.url.path,
+        "statusCode": response.status_code,
+        "userId": claims.get("sub"),
+        "username": claims.get("username"),
+        "branchId": claims.get("branchId"),
+        "createdAt": now_iso(),
+    }
+    try:
+        await raw_db.audit_logs.insert_one(audit_record)
+    except PyMongoError:
+        logging.exception(
+            "Failed to write audit log for %s %s",
+            request.method,
+            request.url.path,
+        )
+    return response
 
 def now_iso(): return datetime.now(timezone.utc).isoformat()
 def hash_pw(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
@@ -109,6 +155,7 @@ PERMISSIONS_CATALOG = [
     ("roles.update", "تعديل الأدوار", "roles", "update"),
     ("roles.delete", "حذف الأدوار", "roles", "delete"),
     ("permissions.view", "عرض الصلاحيات", "permissions", "view"),
+    ("auditLogs.view", "عرض سجل التدقيق", "auditLogs", "view"),
     ("settings.codeGeneration.view", "عرض إعدادات توليد الأكواد", "settings", "codeGeneration.view"),
     ("settings.codeGeneration.update", "تعديل إعدادات توليد الأكواد", "settings", "codeGeneration.update"),
     ("subjects.view", "عرض المواد", "subjects", "view"),
@@ -360,6 +407,23 @@ async def me(current=Depends(get_current_user)):
 @api.get("/permissions")
 async def list_permissions(current=Depends(get_current_user)):
     return [{"name": n, "description": d, "resource": r, "action": a} for (n, d, r, a) in PERMISSIONS_CATALOG]
+
+@api.get("/audit-logs")
+async def list_audit_logs(
+    limit: int = Query(default=50, ge=1, le=200),
+    skip: int = Query(default=0, ge=0),
+    current=Depends(require_permission("auditLogs.view")),
+):
+    if "branches.accessAll" in (current.get("permissions") or []):
+        query = {}
+    else:
+        query = {"branchId": current["branchId"]}
+    collection = raw_db.audit_logs
+    total = await collection.count_documents(query)
+    items = await collection.find(query, {"_id": 0}).sort(
+        "createdAt", -1
+    ).skip(skip).limit(limit).to_list(limit)
+    return {"items": items, "total": total}
 #endregion
 
 #region Branches
@@ -1777,9 +1841,12 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
 async def student_options(
     search: Optional[str] = None,
     exclude_ids: Optional[str] = Query(default=None, alias="excludeIds"),
+    include_dropped: bool = Query(default=False, alias="includeDropped"),
     current=Depends(require_permission("students.view")),
 ):
-    query = {"student.status": {"$ne": "inactive"}}
+    if include_dropped and "payments.create" not in (current.get("permissions") or []):
+        raise HTTPException(403, "لا تملك صلاحية عرض الطلاب المنسحبين للاسترداد")
+    query = {} if include_dropped else {"student.status": {"$ne": "inactive"}}
     if exclude_ids:
         query["id"] = {"$nin": [student_id for student_id in exclude_ids.split(",") if student_id]}
     if search and search.strip():
@@ -3142,6 +3209,7 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
 
 @api.get("/payments/summary")
 async def payment_summary(search: Optional[str] = None, academicYear: Optional[str] = None,
+                          include_dropped: bool = Query(default=False, alias="includeDropped"),
                           current=Depends(require_permission("payments.view"))):
     student_query = {}
     if academicYear:
@@ -3168,7 +3236,7 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
         for fee_type in FEE_TYPE_FIELDS
     }
     for student in students:
-        if (student.get("student") or {}).get("status") != "inactive":
+        if include_dropped or (student.get("student") or {}).get("status") != "inactive":
             for fee_type, payable in _fee_payables(student.get("fees") or {}).items():
                 categories[fee_type]["payable"] += payable
     if student_ids:
@@ -3874,6 +3942,7 @@ async def repeated_absence_reports(
 @api.get("/dashboard/stats")
 async def dashboard_stats(
     student_status: str = Query(default="active", alias="studentStatus"),
+    include_dropped: bool = Query(default=False, alias="includeDropped"),
     class_id: Optional[str] = Query(default=None, alias="classId"),
     academic_year: Optional[str] = Query(default=None, alias="academicYear"),
     gender: Optional[str] = None,
@@ -4021,7 +4090,7 @@ async def dashboard_stats(
             "path": path,
             "academicYear": fees.get("academicYear") or "",
         }
-        if is_dropped:
+        if is_dropped and not include_dropped:
             continue
         for fee_type in ("academic", "transportation"):
             payable = fee_payables[fee_type]
@@ -4084,11 +4153,15 @@ async def dashboard_stats(
 
     total_collected = pay_agg[0]["sum"] if pay_agg else 0
 
-    # Only payable fees of active students
+    # Include dropped students' payable fees only when explicitly requested.
     stu_agg = await db.students.aggregate([
         {
             "$match": {
-                "student.status": {"$ne": "inactive"},
+                **(
+                    {}
+                    if include_dropped
+                    else {"student.status": {"$ne": "inactive"}}
+                ),
                 **({} if allowed is None else {"currentClassId": {"$in": allowed}}),
                 "id": {"$in": list(finance_students)},
             }
@@ -4932,7 +5005,7 @@ async def on_startup():
     set_default_branch_id(default_branch["id"])
 
     for collection_name in await raw_db.list_collection_names():
-        if collection_name not in {"branches", "roles", "users"}:
+        if collection_name not in {"branches", "roles", "users", "audit_logs"}:
             await raw_db[collection_name].update_many(
                 {"$or": [{"branchId": {"$exists": False}}, {"branchId": None}]},
                 {"$set": {"branchId": default_branch["id"]}},
@@ -5044,6 +5117,7 @@ async def on_startup():
         await db.daily_reports.create_index([("branchId", 1), ("reportDate", -1)])
         await db.verification_messages.create_index([("createdAt", -1)])
         await db.contact_messages.create_index([("createdAt", -1)])
+        await raw_db.audit_logs.create_index([("branchId", 1), ("createdAt", -1)])
     except Exception as e:
         logging.warning(f"index setup: {e}")
 

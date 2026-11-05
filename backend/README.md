@@ -40,6 +40,16 @@ permissions control access; reports cannot be deleted. Absent student counts
 are derived from the selected active students, and each absence requires an
 excused/unexcused reason. Updates record the timestamp and user name.
 
+Successful data-changing API requests are recorded in the read-only audit log.
+Users need the `auditLogs.view` permission to view `GET /api/audit-logs`; results
+are scoped to the active branch unless the user has `branches.accessAll`.
+Entries include the method, path, status, actor, branch, and timestamp, but not
+request bodies.
+
+Dashboard and payment summaries exclude dropped students from payable totals by
+default. Pass `includeDropped=true` to `GET /api/dashboard/stats` or
+`GET /api/payments/summary` to include their payable fees.
+
 Run the API from this directory with:
 
 ```text

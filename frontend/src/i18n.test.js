@@ -32,6 +32,14 @@ describe("frontend localization", () => {
     expect(t("لا توجد نتائج.")).toBe("No results.");
   });
 
+  test("interpolates the selected item count in both languages", () => {
+    setLanguage("ar");
+    expect(t("general.selectedCount", { count: 2 })).toBe("2 محدد");
+
+    setLanguage("en");
+    expect(t("general.selectedCount", { count: 2 })).toBe("2 selected");
+  });
+
   test("does not translate unknown or user-provided text", () => {
     setLanguage("en");
     expect(t("اسم طالب غير معروف")).toBe("اسم طالب غير معروف");

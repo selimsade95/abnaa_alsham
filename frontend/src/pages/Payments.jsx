@@ -98,6 +98,7 @@ export default function Payments() {
   const [students, setStudents] = useState([]);
   const [confirmId, setConfirmId] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [includeDropped, setIncludeDropped] = useState(false);
   const [refund, setRefund] = useState(null);
   const [refundPaid, setRefundPaid] = useState(0);
   const [refundLoading, setRefundLoading] = useState(false);
@@ -191,7 +192,11 @@ export default function Payments() {
     let cancelled = false;
     api
       .get("/payments/summary", {
-        params: { search: debouncedQ, academicYear: year },
+        params: {
+          search: debouncedQ,
+          academicYear: year,
+          ...(includeDropped ? { includeDropped: true } : {}),
+        },
       })
       .then((response) => {
         if (!cancelled) setSummary(response.data);
@@ -202,7 +207,7 @@ export default function Payments() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQ, year, summaryVersion]);
+  }, [debouncedQ, includeDropped, year, summaryVersion]);
 
   const changePageSize = (size) => {
     setPageSize(size);
@@ -417,6 +422,17 @@ export default function Payments() {
           )}
         </div>
       </div>
+
+      <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={includeDropped}
+          onChange={(event) => setIncludeDropped(event.target.checked)}
+          data-testid="payments-include-dropped"
+          className="rounded border-gray-300 text-[#036A87] focus:ring-[#04CDF9]"
+        />
+        تضمين الطلاب المنسحبين في إجمالي المستحق
+      </label>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {FEE_TYPE_ORDER.map((feeType) => {
@@ -971,6 +987,7 @@ export default function Payments() {
                 </label>
                 <StudentSearchSelect
                   excludeIds={refund.student ? [refund.student] : []}
+                  includeDropped
                   onSelect={(selectedStudent) => {
                     const refundTypes = FEE_TYPE_ORDER.filter(
                       (feeType) => studentFeePaid(selectedStudent, feeType) > 0,

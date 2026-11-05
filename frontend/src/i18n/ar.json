@@ -79,6 +79,7 @@
     "allItems": "تحديد الكل",
     "deselectAll": "إلغاء تحديد الكل",
     "selected": "المحدد:",
+    "selectedCount": "{{count}} محدد",
     "selectAllStudents": "تحديد كل الطلاب",
     "oneMinute": "دقيقة",
     "score": "الدرجة",
@@ -145,6 +146,7 @@
     "welcomeDescription": "منصة سريعة, آمنة, موثوقة, وأنيقة لإدارة مدرسة أبناء الشام."
   },
   "navigation": {
+    "auditLogs": "سجل التدقيق",
     "attendance": "الحضور",
     "branches": "فروع المدرسة",
     "classes": "الصفوف",
@@ -161,6 +163,24 @@
     "subjects": "المواد والإسنادات",
     "teachers": "المعلمون",
     "users": "المستخدمون"
+  },
+  "auditLog": {
+    "title": "سجل التدقيق",
+    "description": "عرض سجل طلبات التغيير الناجحة في النظام.",
+    "actor": "المستخدم",
+    "request": "الطلب",
+    "method": "النوع",
+    "status": "الحالة",
+    "createdAt": "التاريخ والوقت",
+    "anonymous": "مستخدم غير معروف",
+    "empty": "لا توجد طلبات مسجلة.",
+    "loading": "جاري تحميل سجل التدقيق...",
+    "loadError": "تعذر تحميل سجل التدقيق.",
+    "page": "الصفحة {{count}}",
+    "entryCount": "عدد السجلات: {{count}}",
+    "refresh": "تحديث",
+    "previous": "السابق",
+    "next": "التالي"
   },
   "students": {
     "active": "نشط",

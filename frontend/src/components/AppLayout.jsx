@@ -146,6 +146,13 @@ export default function AppLayout() {
       show: has("reports.view"),
     },
     {
+      to: "/audit-logs",
+      label: t("navigation.auditLogs"),
+      icon: ClipboardList,
+      testid: "nav-audit-logs",
+      show: has("auditLogs.view"),
+    },
+    {
       to: "/users",
       label: "المستخدمون",
       icon: UsersIcon,

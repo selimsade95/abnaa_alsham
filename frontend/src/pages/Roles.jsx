@@ -43,6 +43,7 @@ export default function Roles() {
     users: "المستخدمون",
     roles: "الأدوار",
     permissions: "الصلاحيات",
+    auditLogs: "سجل التدقيق",
     subjects: "المواد",
     grades: "الدرجات",
     homework: "الواجبات",
