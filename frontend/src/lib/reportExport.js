@@ -14,16 +14,59 @@ export const downloadXlsx = async (filename, sheets) => {
       .join("")
       .slice(0, 31);
     const worksheet = workbook.addWorksheet(worksheetName, {
-      views: [{ rightToLeft: getLanguage() === "ar" }],
+      views: [
+        {
+          state: "frozen",
+          ySplit: 1,
+          rightToLeft: getLanguage() === "ar",
+        },
+      ],
+      pageSetup: {
+        orientation: "landscape",
+        paperSize: 9,
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
     });
     rows.forEach((row) => worksheet.addRow(row));
     const header = worksheet.getRow(1);
+    header.height = 28;
     header.font = { bold: true, color: { argb: "FFFFFFFF" } };
     header.fill = {
       type: "pattern",
       pattern: "solid",
       fgColor: { argb: "FF036A87" },
     };
+    header.alignment = {
+      vertical: "middle",
+      horizontal: getLanguage() === "ar" ? "right" : "left",
+      wrapText: true,
+    };
+    worksheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: Math.max(rows[0]?.length || 1, 1) },
+    };
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+      const row = worksheet.getRow(rowNumber);
+      row.alignment = {
+        vertical: "middle",
+        horizontal: getLanguage() === "ar" ? "right" : "left",
+        wrapText: true,
+      };
+      if (rowNumber % 2 === 0) {
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF1F7F9" },
+        };
+      }
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.border = {
+          bottom: { style: "hair", color: { argb: "FFD8E2E7" } },
+        };
+      });
+    }
     worksheet.columns.forEach((column) => {
       const longest = column.values.reduce(
         (width, value) => Math.max(width, String(value ?? "").length),
@@ -96,21 +139,32 @@ export const printReport = (title, subtitle, sections) => {
         <meta charset="utf-8" />
         <title>${escapeHtml(title)}</title>
         <style>
-          body { font-family: Arial, sans-serif; color: #1f2937; margin: 28px; }
-          h1 { margin: 0 0 6px; color: #036a87; }
-          .subtitle { margin: 0 0 24px; color: #6b7280; font-size: 13px; }
-          section { margin: 0 0 24px; break-inside: avoid; }
-          h2 { font-size: 16px; margin: 0 0 8px; }
+          * { box-sizing: border-box; }
+          body { font-family: Arial, "Noto Naskh Arabic", sans-serif; color: #1f2937; margin: 0; background: #eef3f6; }
+          .report { max-width: 1200px; margin: 24px auto; padding: 28px; background: white; border-top: 6px solid #036a87; }
+          header { margin: 0 0 24px; padding: 0 0 16px; border-bottom: 1px solid #d8e2e7; }
+          h1 { margin: 0 0 8px; color: #036a87; font-size: 24px; }
+          .subtitle { margin: 0; color: #64748b; font-size: 13px; }
+          section { margin: 0 0 24px; }
+          h2 { color: #164e63; font-size: 16px; margin: 0 0 10px; }
           table { border-collapse: collapse; width: 100%; font-size: 12px; }
-          th, td { border: 1px solid #d1d5db; padding: 8px; text-align: start; }
-          th { background: #f3f4f6; }
-          @page { size: A4 landscape; margin: 14mm; }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; }
+          th, td { border-bottom: 1px solid #d8e2e7; padding: 9px 10px; text-align: start; }
+          th { background: #036a87; color: white; font-weight: 700; }
+          tbody tr:nth-child(even) { background: #f1f7f9; }
+          @page { size: A4 landscape; margin: 12mm; }
+          @media print { body { background: white; } .report { max-width: none; margin: 0; padding: 0; border-top: 0; } }
         </style>
       </head>
       <body>
-        <h1>${escapeHtml(title)}</h1>
-        <p class="subtitle">${escapeHtml(subtitle)}</p>
-        ${sectionsHtml}
+        <main class="report">
+          <header>
+            <h1>${escapeHtml(title)}</h1>
+            <p class="subtitle">${escapeHtml(subtitle)}</p>
+          </header>
+          ${sectionsHtml}
+        </main>
         <script>
           window.onload = () => {
             window.focus();

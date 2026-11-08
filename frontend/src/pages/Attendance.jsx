@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarCheck,
-  Check,
   Loader2,
   Printer,
   Save,
   Users,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSearchParams } from "react-router-dom";
@@ -24,6 +23,8 @@ const dateLabel = (date) =>
   new Date(`${date}T00:00:00`).toLocaleDateString(getIntlLocale());
 
 export default function Attendance() {
+  const { t } = useTranslation();
+  const at = (key, options) => t(`attendance.${key}`, options);
   const { has, hasAny } = useAuth();
   const [searchParams] = useSearchParams();
   const canViewAttendance = hasAny(["attendance.view", "attendance.manage"]);
@@ -126,6 +127,15 @@ export default function Attendance() {
     () => students.filter((student) => student.status === "absent").length,
     [students],
   );
+  const earlyDismissalCount = useMemo(
+    () =>
+      students.filter((student) => student.status === "early_dismissal").length,
+    [students],
+  );
+  const truancyCount = useMemo(
+    () => students.filter((student) => student.status === "truancy").length,
+    [students],
+  );
   const presentCount = useMemo(
     () => students.filter((student) => student.status === "present").length,
     [students],
@@ -145,6 +155,10 @@ export default function Attendance() {
         student.status &&
         (student.status !== "absent" ||
           ["excused", "unexcused"].includes(student.absenceReason)) &&
+        (student.status !== "early_dismissal" ||
+          (student.earlyDismissalReason?.trim() &&
+            student.earlyDismissalRelation &&
+            student.earlyDismissalBy?.trim())) &&
         (student.status !== "present" ||
           student.lateMinutes == null ||
           (Number.isInteger(Number(student.lateMinutes)) &&
@@ -162,6 +176,12 @@ export default function Attendance() {
                 student.status === status ? student.absenceReason : null,
               lateMinutes:
                 student.status === status ? student.lateMinutes : null,
+              earlyDismissalReason:
+                student.status === status ? student.earlyDismissalReason : "",
+              earlyDismissalRelation:
+                student.status === status ? student.earlyDismissalRelation : "",
+              earlyDismissalBy:
+                student.status === status ? student.earlyDismissalBy : "",
             }
           : student,
       ),
@@ -181,12 +201,26 @@ export default function Attendance() {
       await api.put(`/attendance/classes/${classId}`, {
         attendanceDate,
         records: students.map(
-          ({ studentId, status, absenceReason, lateMinutes }) => ({
+          ({
+            studentId,
+            status,
+            absenceReason,
+            lateMinutes,
+            earlyDismissalReason,
+            earlyDismissalRelation,
+            earlyDismissalBy,
+          }) => ({
             studentId,
             status,
             absenceReason: status === "absent" ? absenceReason : null,
             lateMinutes:
               status === "present" && lateMinutes ? Number(lateMinutes) : null,
+            earlyDismissalReason:
+              status === "early_dismissal" ? earlyDismissalReason : null,
+            earlyDismissalRelation:
+              status === "early_dismissal" ? earlyDismissalRelation : null,
+            earlyDismissalBy:
+              status === "early_dismissal" ? earlyDismissalBy : null,
           }),
         ),
       });
@@ -291,15 +325,21 @@ export default function Attendance() {
                   {markedAt && " · تم تسجيل الحضور لهذا اليوم"}
                 </p>
               </div>
-              <div className="flex gap-3 text-sm">
+              <div className="flex flex-wrap gap-2 text-sm">
                 <span className="rounded-lg bg-green-50 px-3 py-2 text-green-800">
-                  حاضر: {presentCount}
+                  {at("presentCount", { 0: presentCount })}
                 </span>
                 <span className="rounded-lg bg-red-50 px-3 py-2 text-red-800">
-                  غائب: {absentCount}
+                  {at("absentCount", { 0: absentCount })}
+                </span>
+                <span className="rounded-lg bg-sky-50 px-3 py-2 text-sky-800">
+                  {at("earlyDismissalCount", { 0: earlyDismissalCount })}
+                </span>
+                <span className="rounded-lg bg-rose-50 px-3 py-2 text-rose-800">
+                  {at("truancyCount", { 0: truancyCount })}
                 </span>
                 <span className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800">
-                  متأخر: {lateCount}
+                  {at("lateCount", { 0: lateCount })}
                 </span>
               </div>
             </div>
@@ -351,41 +391,34 @@ export default function Attendance() {
                         <td className="px-4 py-3">
                           {canManage ? (
                             <div className="space-y-2">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    markStudent(student.studentId, "present")
-                                  }
-                                  aria-pressed={student.status === "present"}
-                                  className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${
-                                    student.status === "present"
-                                      ? "bg-green-600 text-white"
-                                      : "bg-green-50 text-green-800 hover:bg-green-100"
-                                  }`}
-                                >
-                                  <Check className="h-3.5 w-3.5" /> حاضر
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    markStudent(student.studentId, "absent")
-                                  }
-                                  aria-pressed={student.status === "absent"}
-                                  className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${
-                                    student.status === "absent"
-                                      ? "bg-red-600 text-white"
-                                      : "bg-red-50 text-red-800 hover:bg-red-100"
-                                  }`}
-                                >
-                                  <X className="h-3.5 w-3.5" /> غائب
-                                </button>
-                              </div>
+                              <select
+                                value={student.status || ""}
+                                onChange={(event) =>
+                                  markStudent(
+                                    student.studentId,
+                                    event.target.value,
+                                  )
+                                }
+                                aria-label={`${at("statusForStudent")} ${student.studentName}`}
+                                className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                              >
+                                <option value="">{at("chooseStatus")}</option>
+                                {[
+                                  "present",
+                                  "absent",
+                                  "early_dismissal",
+                                  "truancy",
+                                ].map((status) => (
+                                  <option key={status} value={status}>
+                                    {at(status)}
+                                  </option>
+                                ))}
+                              </select>
                               {student.status === "absent" && (
                                 <div className="flex flex-wrap gap-3 text-xs">
                                   {[
-                                    ["excused", "بعذر"],
-                                    ["unexcused", "دون عذر"],
+                                    ["excused", at("excused")],
+                                    ["unexcused", at("unexcused")],
                                   ].map(([reason, label]) => (
                                     <label
                                       key={reason}
@@ -408,6 +441,75 @@ export default function Attendance() {
                                     </label>
                                   ))}
                                 </div>
+                              )}
+                              {student.status === "early_dismissal" && (
+                                <div className="grid max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
+                                  <label className="text-xs text-gray-600 sm:col-span-2">
+                                    {at("earlyDismissalReason")}
+                                    <textarea
+                                      required
+                                      maxLength={1000}
+                                      value={student.earlyDismissalReason || ""}
+                                      onChange={(event) =>
+                                        updateStudent(student.studentId, {
+                                          earlyDismissalReason:
+                                            event.target.value,
+                                        })
+                                      }
+                                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5"
+                                    />
+                                  </label>
+                                  <label className="text-xs text-gray-600">
+                                    {at("earlyDismissalRelation")}
+                                    <select
+                                      required
+                                      value={
+                                        student.earlyDismissalRelation || ""
+                                      }
+                                      onChange={(event) =>
+                                        updateStudent(student.studentId, {
+                                          earlyDismissalRelation:
+                                            event.target.value,
+                                        })
+                                      }
+                                      className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5"
+                                    >
+                                      <option value="">
+                                        {at("selectRelation")}
+                                      </option>
+                                      {[
+                                        "father",
+                                        "mother",
+                                        "relative",
+                                        "guardian",
+                                        "other",
+                                      ].map((relation) => (
+                                        <option key={relation} value={relation}>
+                                          {at(relation)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="text-xs text-gray-600">
+                                    {at("earlyDismissalBy")}
+                                    <input
+                                      required
+                                      maxLength={160}
+                                      value={student.earlyDismissalBy || ""}
+                                      onChange={(event) =>
+                                        updateStudent(student.studentId, {
+                                          earlyDismissalBy: event.target.value,
+                                        })
+                                      }
+                                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5"
+                                    />
+                                  </label>
+                                </div>
+                              )}
+                              {student.status === "truancy" && (
+                                <p className="text-xs text-rose-700">
+                                  {at("truancyHelp")}
+                                </p>
                               )}
                               {student.status === "present" && (
                                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -455,29 +557,40 @@ export default function Attendance() {
                                 className={`rounded-md px-3 py-1.5 text-xs font-medium ${
                                   student.status === "present"
                                     ? "bg-green-50 text-green-800"
-                                    : student.status === "absent"
+                                    : ["absent", "truancy"].includes(
+                                          student.status,
+                                        )
                                       ? "bg-red-50 text-red-800"
-                                      : "text-gray-400"
+                                      : student.status === "early_dismissal"
+                                        ? "bg-sky-50 text-sky-800"
+                                        : "text-gray-400"
                                 }`}
                               >
-                                {student.status === "present"
-                                  ? "حاضر"
-                                  : student.status === "absent"
-                                    ? "غائب"
-                                    : "لم يسجل"}
+                                {student.status
+                                  ? at(student.status)
+                                  : at("notRecorded")}
                               </span>
                               {student.status === "absent" &&
                                 student.absenceReason && (
                                   <div className="text-xs text-gray-500">
                                     {student.absenceReason === "excused"
-                                      ? "بعذر"
-                                      : "دون عذر"}
+                                      ? at("excused")
+                                      : at("unexcused")}
                                   </div>
                                 )}
+                              {student.status === "early_dismissal" && (
+                                <div className="text-xs text-gray-500">
+                                  {student.earlyDismissalReason} ·{" "}
+                                  {at(student.earlyDismissalRelation)}:{" "}
+                                  {student.earlyDismissalBy}
+                                </div>
+                              )}
                               {student.status === "present" &&
                                 student.lateMinutes != null && (
                                   <div className="text-xs text-amber-700">
-                                    متأخر {student.lateMinutes} دقيقة
+                                    {at("lateMinutesLabel", {
+                                      0: student.lateMinutes,
+                                    })}
                                   </div>
                                 )}
                             </div>
@@ -608,8 +721,11 @@ export default function Attendance() {
                                 key={`${absence.date}-${absence.classId}-${index}`}
                               >
                                 {dateLabel(absence.date)} · {absence.className}
-                                {absence.reason &&
-                                  ` · ${absence.reason === "excused" ? "بعذر" : "دون عذر"}`}
+                                {absence.status === "truancy"
+                                  ? ` · ${at("truancy")}`
+                                  : absence.reason
+                                    ? ` · ${at(absence.reason)}`
+                                    : ""}
                               </li>
                             ))}
                           </ul>

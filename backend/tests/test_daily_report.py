@@ -1,7 +1,24 @@
 import pytest
 from pydantic import ValidationError
 
-from models import DailyReportAbsenceIn
+from models import AttendanceRecordIn, DailyReportAbsenceIn
+
+
+def test_attendance_records_support_early_dismissal_and_truancy():
+    early_dismissal = AttendanceRecordIn(
+        studentId="student-1",
+        status="early_dismissal",
+        earlyDismissalReason="Medical appointment",
+        earlyDismissalRelation="mother",
+        earlyDismissalBy="Parent name",
+    )
+    truancy = AttendanceRecordIn(studentId="student-2", status="truancy")
+
+    assert early_dismissal.earlyDismissalRelation == "mother"
+    assert truancy.status == "truancy"
+
+    with pytest.raises(ValidationError):
+        AttendanceRecordIn(studentId="student-3", status="skipped")
 
 
 def test_excused_absence_requires_a_reason():

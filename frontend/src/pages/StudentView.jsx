@@ -481,7 +481,7 @@ export default function StudentView() {
         >
           <span className="font-bold">الطالب غير نشط.</span> سبب التعطيل:{" "}
           {data.deactivationReason} -{" "}
-          <span className="underline">{data.deactivatedAt.slice(0, 10)}</span>
+          <span className="underline">{data.deactivatedAt?.slice(0, 10)}</span>
         </div>
       )}
       <div className="flex items-end justify-between flex-wrap gap-3">

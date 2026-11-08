@@ -865,8 +865,10 @@ export default function Classes() {
                     : ""}
                   <span className="mt-1 block">
                     تاريخ التسجيل:{" "}
-                    {(classDetails.classItem.reactivatedAt ||
-                      classDetails.classItem.createdAt)?.slice(0, 10) || "—"}
+                    {(
+                      classDetails.classItem.reactivatedAt ||
+                      classDetails.classItem.createdAt
+                    )?.slice(0, 10) || "—"}
                   </span>
                 </p>
               </div>

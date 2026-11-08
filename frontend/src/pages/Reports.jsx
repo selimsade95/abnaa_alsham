@@ -37,7 +37,8 @@ function DataTableContent({ headers, rows, emptyMessage }) {
   const [sortColumn, setSortColumn] = useState(0);
   const [sortDirection, setSortDirection] = useState("asc");
   const collator = useMemo(
-    () => new Intl.Collator(i18n.language, { numeric: true, sensitivity: "base" }),
+    () =>
+      new Intl.Collator(i18n.language, { numeric: true, sensitivity: "base" }),
     [i18n.language],
   );
   const sortedRows = useMemo(() => {
@@ -122,7 +123,7 @@ function DataTableContent({ headers, rows, emptyMessage }) {
                   <td key={cellIndex} className="px-4 py-3 align-top">
                     {typeof cell === "string" || typeof cell === "number"
                       ? westernDigits(cell)
-                      : cell ?? "—"}
+                      : (cell ?? "—")}
                   </td>
                 ))}
               </tr>
@@ -174,6 +175,11 @@ export default function Reports() {
   const [month, setMonth] = useState("");
   const [paymentType, setPaymentType] = useState("all");
   const [course, setCourse] = useState("");
+  const [classReportId, setClassReportId] = useState("");
+  const [classReportPaymentType, setClassReportPaymentType] = useState("all");
+  const [classReport, setClassReport] = useState(null);
+  const [classReportLoading, setClassReportLoading] = useState(false);
+  const [selectedSectionIds, setSelectedSectionIds] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [report, setReport] = useState(null);
@@ -192,7 +198,8 @@ export default function Reports() {
       .get("/reports/overview", { signal: controller.signal })
       .then((response) => setOverview(response.data))
       .catch((error) => {
-        if (error?.code !== "ERR_CANCELED") toast.error(tr("loadOverviewFailed"));
+        if (error?.code !== "ERR_CANCELED")
+          toast.error(tr("loadOverviewFailed"));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingOverview(false);
@@ -231,6 +238,12 @@ export default function Reports() {
 
   const summary = report?.summary || {};
   const byCourse = report?.byCourse || [];
+  const reportClasses = overview?.classes || [];
+  const selectedClassReport = reportClasses.find(
+    (item) => item.id === classReportId,
+  );
+  const classReportDetails = classReport?.studentDetails || [];
+  const classReportSummary = classReport?.summary || {};
   const counts = overview?.counts || {};
   const distributions = overview?.distributions || {};
   const financial = overview?.financial || {};
@@ -247,11 +260,47 @@ export default function Reports() {
   const activePeriodLabel = useMemo(() => {
     if (month) return tr("month", { 0: month });
     if (dateFrom || dateTo)
-      return tr("periodRange", { 0: dateFrom || tr("start"), 1: dateTo || tr("now") });
+      return tr("periodRange", {
+        0: dateFrom || tr("start"),
+        1: dateTo || tr("now"),
+      });
     return tr("allPeriods");
   }, [dateFrom, dateTo, month, i18n.language]);
 
   const paymentTypeLabel = (type) => tr(`paymentType_${type}`);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!classReportId) {
+      setClassReport(null);
+      setClassReportLoading(false);
+      return () => controller.abort();
+    }
+
+    const loadClassReport = async () => {
+      setClassReport(null);
+      setClassReportLoading(true);
+      try {
+        const response = await api.get("/reports/finance", {
+          params: {
+            classId: classReportId,
+            paymentType: classReportPaymentType,
+          },
+          signal: controller.signal,
+        });
+        setClassReport(response.data);
+      } catch (error) {
+        if (error?.code !== "ERR_CANCELED") {
+          toast.error(tr("loadPaymentsFailed"));
+        }
+      } finally {
+        if (!controller.signal.aborted) setClassReportLoading(false);
+      }
+    };
+
+    loadClassReport();
+    return () => controller.abort();
+  }, [classReportId, classReportPaymentType]);
   const selectSponsorshipStudent = (studentId) => {
     const existing = (financial.sponsorship || []).find(
       (item) => item.studentId === studentId,
@@ -270,7 +319,9 @@ export default function Reports() {
       setSponsorshipForm({ studentId: "", donorName: "" });
       setOverviewReload((value) => value + 1);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || tr("sponsorAssignmentFailed"));
+      toast.error(
+        error?.response?.data?.detail || tr("sponsorAssignmentFailed"),
+      );
     } finally {
       setSavingSponsorship(false);
     }
@@ -279,6 +330,7 @@ export default function Reports() {
     if (!overview || !report) return null;
     const sections = [
       {
+        id: "studentCounts",
         title: tr("studentCounts"),
         headers: [tr("metric"), tr("value")],
         rows: [
@@ -289,11 +341,16 @@ export default function Reports() {
         ],
       },
       {
+        id: "distributionByGrade",
         title: tr("distributionByGrade"),
         headers: [tr("grade"), tr("students")],
-        rows: (distributions.byGrade || []).map((row) => [row.grade, row.students]),
+        rows: (distributions.byGrade || []).map((row) => [
+          row.grade,
+          row.students,
+        ]),
       },
       {
+        id: "distributionByGender",
         title: tr("distributionByGender"),
         headers: [tr("gender"), tr("students")],
         rows: (distributions.byGender || []).map((row) => [
@@ -306,28 +363,58 @@ export default function Reports() {
         ]),
       },
       {
+        id: "distributionByPath",
         title: tr("distributionByPath"),
         headers: [tr("path"), tr("students")],
-        rows: (distributions.byPath || []).map((row) => [row.path, row.students]),
-      },
-      {
-        title: tr("financialByGrade"),
-        headers: [tr("grade"), tr("students"), tr("payable"), tr("collected"), tr("remaining")],
-        rows: (financial.byGrade || []).map((row) => [
-          row.grade, row.students, row.payable, row.collected, row.remaining,
+        rows: (distributions.byPath || []).map((row) => [
+          row.path,
+          row.students,
         ]),
       },
       {
-        title: tr("totalFinancialReport"),
-        headers: [tr("feeType"), tr("payable"), tr("collected"), tr("remaining")],
-        rows: [[tr("allFees"), financial.total?.payable, financial.total?.collected, financial.total?.remaining]],
+        id: "financialByGrade",
+        title: tr("financialByGrade"),
+        headers: [
+          tr("grade"),
+          tr("students"),
+          tr("payable"),
+          tr("collected"),
+          tr("remaining"),
+        ],
+        rows: (financial.byGrade || []).map((row) => [
+          row.grade,
+          row.students,
+          row.payable,
+          row.collected,
+          row.remaining,
+        ]),
       },
       {
+        id: "totalFinancialReport",
+        title: tr("totalFinancialReport"),
+        headers: [
+          tr("feeType"),
+          tr("payable"),
+          tr("collected"),
+          tr("remaining"),
+        ],
+        rows: [
+          [
+            tr("allFees"),
+            financial.total?.payable,
+            financial.total?.collected,
+            financial.total?.remaining,
+          ],
+        ],
+      },
+      {
+        id: "monthlyCollections",
         title: tr("monthlyCollections"),
         headers: [tr("monthColumn"), tr("collected")],
         rows: (financial.monthly || []).map((row) => [row.month, row.total]),
       },
       {
+        id: "transportationStatement",
         title: tr("transportationStatement"),
         headers: [tr("metric"), tr("value")],
         rows: [
@@ -337,82 +424,180 @@ export default function Reports() {
         ],
       },
       {
+        id: "withdrawnFinancialStatus",
         title: tr("withdrawnFinancialStatus"),
-        headers: [tr("student"), tr("grade"), tr("payable"), tr("collected"), tr("remaining")],
+        headers: [
+          tr("student"),
+          tr("grade"),
+          tr("payable"),
+          tr("collected"),
+          tr("remaining"),
+        ],
         rows: (financial.withdrawnStudents || []).map((row) => [
-          row.name, row.grade, row.payable, row.collected, row.remaining,
+          row.name,
+          row.grade,
+          row.payable,
+          row.collected,
+          row.remaining,
         ]),
       },
       {
+        id: "withdrawnWithReasons",
         title: tr("withdrawnWithReasons"),
         headers: [tr("student"), tr("grade"), tr("withdrawalReason")],
-        rows: (financial.withdrawnStudents || []).map((row) => [row.name, row.grade, row.reason || tr("noReasonRecorded")]),
-      },
-      {
-        title: tr("remainingInstallments"),
-        headers: [tr("student"), tr("grade"), tr("annualAmount"), tr("firstSemesterAmount"), tr("firstSemesterPaid"), tr("firstSemesterRemaining"), tr("secondSemesterAmount"), tr("secondSemesterPaid"), tr("secondSemesterRemaining")],
-        rows: (financial.installmentStudents || []).map((row) => [
-          row.name, row.grade, row.annualAmount,
-          row.firstSemesterAmount, row.firstSemesterPaid, row.firstSemesterRemaining,
-          row.secondSemesterAmount, row.secondSemesterPaid, row.secondSemesterRemaining,
+        rows: (financial.withdrawnStudents || []).map((row) => [
+          row.name,
+          row.grade,
+          row.reason || tr("noReasonRecorded"),
         ]),
       },
       {
+        id: "remainingInstallments",
+        title: tr("remainingInstallments"),
+        headers: [
+          tr("student"),
+          tr("grade"),
+          tr("annualAmount"),
+          tr("firstSemesterAmount"),
+          tr("firstSemesterPaid"),
+          tr("firstSemesterRemaining"),
+          tr("secondSemesterAmount"),
+          tr("secondSemesterPaid"),
+          tr("secondSemesterRemaining"),
+        ],
+        rows: (financial.installmentStudents || []).map((row) => [
+          row.name,
+          row.grade,
+          row.annualAmount,
+          row.firstSemesterAmount,
+          row.firstSemesterPaid,
+          row.firstSemesterRemaining,
+          row.secondSemesterAmount,
+          row.secondSemesterPaid,
+          row.secondSemesterRemaining,
+        ]),
+      },
+      {
+        id: "installmentsPerGrade",
         title: tr("installmentsPerGrade"),
         headers: [tr("grade"), tr("studentsRequiredToPay")],
-        rows: (financial.requiredInstallmentsByGrade || []).map((row) => [row.grade, row.students]),
+        rows: (financial.requiredInstallmentsByGrade || []).map((row) => [
+          row.grade,
+          row.students,
+        ]),
       },
       {
+        id: "annualAmountPerStudent",
         title: tr("annualAmountPerStudent"),
         headers: [tr("student"), tr("grade"), tr("annualAmount")],
-        rows: (financial.annualAmounts || []).map((row) => [row.name, row.grade, row.annualAmount]),
+        rows: (financial.annualAmounts || []).map((row) => [
+          row.name,
+          row.grade,
+          row.annualAmount,
+        ]),
       },
       {
+        id: "discountsGranted",
         title: tr("discountsGranted"),
-        headers: [tr("student"), tr("grade"), tr("annualAmount"), tr("firstDiscount"), tr("percentage"), tr("valueAfterFirstDiscount"), tr("secondDiscount"), tr("percentage"), tr("valueAfterSecondDiscount")],
+        headers: [
+          tr("student"),
+          tr("grade"),
+          tr("annualAmount"),
+          tr("firstDiscount"),
+          tr("percentage"),
+          tr("valueAfterFirstDiscount"),
+          tr("secondDiscount"),
+          tr("percentage"),
+          tr("valueAfterSecondDiscount"),
+        ],
         rows: (financial.discounts || []).map((row) => [
-          row.name, row.grade, row.annualBeforeDiscount,
-          row.firstDiscountName || (row.firstDiscountPercentage > 0 ? tr("generalDiscountReason") : "—"),
-          row.firstDiscountPercentage, row.valueAfterFirstDiscount,
-          row.secondDiscountName || (row.secondDiscountPercentage > 0 ? tr("siblingStaffDiscountReason") : "—"),
-          row.secondDiscountPercentage, row.valueAfterSecondDiscount,
+          row.name,
+          row.grade,
+          row.annualBeforeDiscount,
+          row.firstDiscountName ||
+            (row.firstDiscountPercentage > 0
+              ? tr("generalDiscountReason")
+              : "—"),
+          row.firstDiscountPercentage,
+          row.valueAfterFirstDiscount,
+          row.secondDiscountName ||
+            (row.secondDiscountPercentage > 0
+              ? tr("siblingStaffDiscountReason")
+              : "—"),
+          row.secondDiscountPercentage,
+          row.valueAfterSecondDiscount,
         ]),
       },
     ];
     sections.push(
       financial.sponsorshipAvailable
         ? {
+            id: "sponsorObligations",
             title: tr("sponsorObligations"),
-        headers: [tr("student"), tr("className"), tr("sponsor"), tr("payable"), tr("collected"), tr("remaining")],
+            headers: [
+              tr("student"),
+              tr("className"),
+              tr("sponsor"),
+              tr("payable"),
+              tr("collected"),
+              tr("remaining"),
+            ],
             rows: (financial.sponsorship || []).map((row) => [
-              row.studentName, row.className, row.donorName || tr("unassigned"),
-              row.payable, row.collected, row.remaining,
+              row.studentName,
+              row.className,
+              row.donorName || tr("unassigned"),
+              row.payable,
+              row.collected,
+              row.remaining,
             ]),
           }
         : {
+            id: "sponsorObligations",
             title: tr("sponsorObligations"),
             headers: [tr("details")],
             rows: [[tr("sponsorDataUnavailable")]],
           },
     );
     sections.push({
+      id: "orphanFinancialByClass",
       title: tr("orphanFinancialByClass"),
-      headers: [tr("className"), tr("grade"), tr("students"), tr("payable"), tr("collected"), tr("remaining")],
+      headers: [
+        tr("className"),
+        tr("grade"),
+        tr("students"),
+        tr("payable"),
+        tr("collected"),
+        tr("remaining"),
+      ],
       rows: [
         ...(financial.sponsorshipByClass || []).map((row) => [
-          row.className, row.grade, row.students, row.payable, row.collected, row.remaining,
+          row.className,
+          row.grade,
+          row.students,
+          row.payable,
+          row.collected,
+          row.remaining,
         ]),
-        [tr("orphanPathTotal"), "—", orphanSummary.students, orphanSummary.payable, orphanSummary.collected, orphanSummary.remaining],
+        [
+          tr("orphanPathTotal"),
+          "—",
+          orphanSummary.students,
+          orphanSummary.payable,
+          orphanSummary.collected,
+          orphanSummary.remaining,
+        ],
       ],
     });
     if (!financial.installmentScheduleAvailable) {
       sections.push({
+        id: "installmentNotes",
         title: tr("installmentNotes"),
         headers: [tr("details")],
         rows: [[tr("installmentScheduleUnavailable")]],
       });
     }
     sections.push({
+      id: "filteredPaymentReport",
       title: tr("filteredPaymentReport"),
       headers: [tr("metric"), tr("value")],
       rows: [
@@ -428,12 +613,33 @@ export default function Reports() {
       ],
     });
     sections.push({
+      id: "filteredByPath",
       title: tr("filteredByPath"),
-      headers: [tr("path"), tr("payable"), tr("collected"), tr("remaining"), tr("fullyPaidStudents"), tr("partiallyPaidStudents"), tr("unpaidStudents")],
-      rows: byCourse.map((row) => [row.course, row.payable, row.collected, row.remaining, row.paidStudents, row.partialStudents, row.unpaidStudents]),
+      headers: [
+        tr("path"),
+        tr("payable"),
+        tr("collected"),
+        tr("remaining"),
+        tr("fullyPaidStudents"),
+        tr("partiallyPaidStudents"),
+        tr("unpaidStudents"),
+      ],
+      rows: byCourse.map((row) => [
+        row.course,
+        row.payable,
+        row.collected,
+        row.remaining,
+        row.paidStudents,
+        row.partialStudents,
+        row.unpaidStudents,
+      ]),
     });
+    if (classReport && selectedClassReport) {
+      sections.push(...classReportSections());
+    }
     return sections.map((section) => ({
       ...section,
+      id: section.id,
       headers: [tr("orderColumn"), ...section.headers],
       rows: section.rows.map((row, index) => [
         index + 1,
@@ -444,13 +650,68 @@ export default function Reports() {
     }));
   };
 
+  const classReportSections = () => {
+    if (!classReport || !selectedClassReport) return null;
+    return [
+      {
+        id: "classReportSummary",
+        title: tr("classReportSummary"),
+        headers: [tr("metric"), tr("value")],
+        rows: [
+          [
+            tr("className"),
+            [selectedClassReport.grade, selectedClassReport.name]
+              .filter(Boolean)
+              .join(" - "),
+          ],
+          [tr("paymentType"), paymentTypeLabel(classReportPaymentType)],
+          [tr("students"), classReportDetails.length],
+          [tr("payable"), classReportSummary.totalPayable ?? 0],
+          [tr("collected"), classReportSummary.totalCollected ?? 0],
+          [tr("remaining"), classReportSummary.totalRemaining ?? 0],
+        ],
+      },
+      {
+        id: "classStudentFinancialDetails",
+        title: tr("classStudentFinancialDetails"),
+        headers: [
+          tr("student"),
+          tr("studentCode"),
+          tr("payable"),
+          tr("collected"),
+          tr("remaining"),
+        ],
+        rows: classReportDetails.map((row) => [
+          row.name,
+          row.code,
+          row.payable,
+          row.collected,
+          row.remaining,
+        ]),
+      },
+    ];
+  };
+
+  const availableSections = exportSections() || [];
+  const selectedSections = availableSections.filter(
+    ({ id }) => selectedSectionIds === null || selectedSectionIds.includes(id),
+  );
+  const toggleSection = (sectionId) => {
+    setSelectedSectionIds((currentSelection) => {
+      const currentIds =
+        currentSelection ?? availableSections.map(({ id }) => id);
+      return currentIds.includes(sectionId)
+        ? currentIds.filter((id) => id !== sectionId)
+        : [...currentIds, sectionId];
+    });
+  };
+
   const exportXlsx = async () => {
     try {
-      const sections = exportSections();
-      if (!sections) return;
+      if (!selectedSections.length) return;
       await downloadXlsx(
         `school-reports-${localDateStamp()}.xlsx`,
-        sections.map((section) => ({
+        selectedSections.map((section) => ({
           name: section.title,
           rows: [section.headers, ...section.rows],
         })),
@@ -462,9 +723,10 @@ export default function Reports() {
 
   const exportPdf = () => {
     try {
-      const sections = exportSections();
-      if (!sections) return;
-      if (!printReport(tr("financialReport"), activePeriodLabel, sections)) {
+      if (!selectedSections.length) return;
+      if (
+        !printReport(tr("financialReport"), activePeriodLabel, selectedSections)
+      ) {
         toast.error(tr("popupPrintPermission"));
       }
     } catch {
@@ -500,26 +762,88 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{tr("financialReport")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{tr("reportsDescription")}</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {tr("financialReport")}
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            {tr("reportsDescription")}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={exportPdf}
-            disabled={!overview || !report || loading || loadingOverview}
+            disabled={!selectedSections.length || loading || loadingOverview}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
           >
             <Printer className="h-4 w-4" /> PDF
           </button>
           <button
             onClick={exportXlsx}
-            disabled={!overview || !report || loading || loadingOverview}
+            disabled={!selectedSections.length || loading || loadingOverview}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
           >
             <FileSpreadsheet className="h-4 w-4" /> Excel
           </button>
         </div>
       </div>
+
+      {availableSections.length > 0 && (
+        <Panel
+          title={tr("selectExportSections")}
+          description={tr("selectExportSectionsHelp")}
+        >
+          <div className="space-y-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-gray-600">
+                {tr("selectedReportSectionsCount", {
+                  0: selectedSections.length,
+                  1: availableSections.length,
+                })}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedSectionIds(availableSections.map(({ id }) => id))
+                  }
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {tr("selectAllReportSections")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSectionIds([])}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {tr("clearReportSectionSelection")}
+                </button>
+              </div>
+            </div>
+            <div
+              role="group"
+              aria-label={tr("selectExportSections")}
+              className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+            >
+              {availableSections.map((section) => (
+                <label
+                  key={section.id}
+                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSections.some(
+                      ({ id }) => id === section.id,
+                    )}
+                    onChange={() => toggleSection(section.id)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                  />
+                  <span>{section.title}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </Panel>
+      )}
 
       {loadingOverview ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
@@ -530,10 +854,25 @@ export default function Reports() {
         <>
           <Panel title={tr("studentCounts")}>
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard label={tr("numberOfStudents")} value={counts.registered ?? 0} />
-              <StatCard label={tr("registeredStudents")} value={counts.registered ?? 0} tone="slate" />
-              <StatCard label={tr("activeStudentsTotal")} value={counts.active ?? 0} tone="green" />
-              <StatCard label={tr("inactiveStudentsTotal")} value={counts.inactive ?? 0} tone="amber" />
+              <StatCard
+                label={tr("numberOfStudents")}
+                value={counts.registered ?? 0}
+              />
+              <StatCard
+                label={tr("registeredStudents")}
+                value={counts.registered ?? 0}
+                tone="slate"
+              />
+              <StatCard
+                label={tr("activeStudentsTotal")}
+                value={counts.active ?? 0}
+                tone="green"
+              />
+              <StatCard
+                label={tr("inactiveStudentsTotal")}
+                value={counts.inactive ?? 0}
+                tone="amber"
+              />
             </div>
           </Panel>
 
@@ -541,21 +880,37 @@ export default function Reports() {
             <Panel title={tr("distributionByGrade")}>
               <DataTable
                 headers={[tr("grade"), tr("students")]}
-                rows={distributionRows(distributions.byGrade, "grade", (value) => value === "__unspecified__" ? tr("unspecified") : value)}
+                rows={distributionRows(
+                  distributions.byGrade,
+                  "grade",
+                  (value) =>
+                    value === "__unspecified__" ? tr("unspecified") : value,
+                )}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
             <Panel title={tr("distributionByGender")}>
               <DataTable
                 headers={[tr("gender"), tr("students")]}
-                rows={distributionRows(distributions.byGender, "gender", (value) => value === "male" ? tr("male") : value === "female" ? tr("female") : tr("unspecified"))}
+                rows={distributionRows(
+                  distributions.byGender,
+                  "gender",
+                  (value) =>
+                    value === "male"
+                      ? tr("male")
+                      : value === "female"
+                        ? tr("female")
+                        : tr("unspecified"),
+                )}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
             <Panel title={tr("distributionByPath")}>
               <DataTable
                 headers={[tr("path"), tr("students")]}
-                rows={distributionRows(distributions.byPath, "path", (value) => value === "__unspecified__" ? tr("unspecified") : value)}
+                rows={distributionRows(distributions.byPath, "path", (value) =>
+                  value === "__unspecified__" ? tr("unspecified") : value,
+                )}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
@@ -563,10 +918,22 @@ export default function Reports() {
 
           <Panel title={tr("financialByGrade")}>
             <DataTable
-              headers={[tr("grade"), tr("students"), tr("payable"), tr("collected"), tr("remaining")]}
+              headers={[
+                tr("grade"),
+                tr("students"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+              ]}
               rows={(financial.byGrade || []).map((row) => ({
                 key: row.grade,
-                cells: [row.grade, row.students, `${money(row.payable)} $`, `${money(row.collected)} $`, `${money(row.remaining)} $`],
+                cells: [
+                  row.grade,
+                  row.students,
+                  `${money(row.payable)} $`,
+                  `${money(row.collected)} $`,
+                  `${money(row.remaining)} $`,
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
@@ -574,9 +941,20 @@ export default function Reports() {
 
           <Panel title={tr("totalFinancialReport")}>
             <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
-              <StatCard label={tr("payable")} value={`${money(financial.total?.payable)} $`} />
-              <StatCard label={tr("collected")} value={`${money(financial.total?.collected)} $`} tone="green" />
-              <StatCard label={tr("remaining")} value={`${money(financial.total?.remaining)} $`} tone="amber" />
+              <StatCard
+                label={tr("payable")}
+                value={`${money(financial.total?.payable)} $`}
+              />
+              <StatCard
+                label={tr("collected")}
+                value={`${money(financial.total?.collected)} $`}
+                tone="green"
+              />
+              <StatCard
+                label={tr("remaining")}
+                value={`${money(financial.total?.remaining)} $`}
+                tone="amber"
+              />
             </div>
           </Panel>
 
@@ -586,23 +964,46 @@ export default function Reports() {
                 headers={[tr("monthColumn"), tr("collected")]}
                 rows={(financial.monthly || []).map((row) => ({
                   key: row.month,
-                  cells: [row.month === "__unknown__" ? tr("unknownMonth") : row.month, `${money(row.total)} $`],
+                  cells: [
+                    row.month === "__unknown__"
+                      ? tr("unknownMonth")
+                      : row.month,
+                    `${money(row.total)} $`,
+                  ],
                 }))}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
             <Panel title={tr("transportationStatement")}>
               <div className="grid grid-cols-3 gap-2 p-4">
-                <StatCard label={tr("payable")} value={`${money(financial.transportation?.payable)} $`} />
-                <StatCard label={tr("collected")} value={`${money(financial.transportation?.collected)} $`} tone="green" />
-                <StatCard label={tr("remaining")} value={`${money(financial.transportation?.remaining)} $`} tone="amber" />
+                <StatCard
+                  label={tr("payable")}
+                  value={`${money(financial.transportation?.payable)} $`}
+                />
+                <StatCard
+                  label={tr("collected")}
+                  value={`${money(financial.transportation?.collected)} $`}
+                  tone="green"
+                />
+                <StatCard
+                  label={tr("remaining")}
+                  value={`${money(financial.transportation?.remaining)} $`}
+                  tone="amber"
+                />
               </div>
               <DataTable
                 headers={[tr("monthColumn"), tr("collected")]}
-                rows={(financial.monthly || []).filter((row) => row.transportation !== 0).map((row) => ({
-                  key: row.month,
-                  cells: [row.month === "__unknown__" ? tr("unknownMonth") : row.month, `${money(row.transportation)} $`],
-                }))}
+                rows={(financial.monthly || [])
+                  .filter((row) => row.transportation !== 0)
+                  .map((row) => ({
+                    key: row.month,
+                    cells: [
+                      row.month === "__unknown__"
+                        ? tr("unknownMonth")
+                        : row.month,
+                      `${money(row.transportation)} $`,
+                    ],
+                  }))}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
@@ -613,9 +1014,20 @@ export default function Reports() {
             description={tr("sponsorAssignmentHelp")}
           >
             <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-              <StatCard label={tr("orphanPathTotalPayable")} value={`${money(orphanSummary.payable)} $`} />
-              <StatCard label={tr("collected")} value={`${money(orphanSummary.collected)} $`} tone="green" />
-              <StatCard label={tr("remaining")} value={`${money(orphanSummary.remaining)} $`} tone="amber" />
+              <StatCard
+                label={tr("orphanPathTotalPayable")}
+                value={`${money(orphanSummary.payable)} $`}
+              />
+              <StatCard
+                label={tr("collected")}
+                value={`${money(orphanSummary.collected)} $`}
+                tone="green"
+              />
+              <StatCard
+                label={tr("remaining")}
+                value={`${money(orphanSummary.remaining)} $`}
+                tone="amber"
+              />
             </div>
             <form
               onSubmit={saveSponsorship}
@@ -626,13 +1038,16 @@ export default function Reports() {
                 <select
                   required
                   value={sponsorshipForm.studentId}
-                  onChange={(event) => selectSponsorshipStudent(event.target.value)}
+                  onChange={(event) =>
+                    selectSponsorshipStudent(event.target.value)
+                  }
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
                 >
                   <option value="">{tr("selectOrphanStudent")}</option>
                   {(financial.orphanStudents || []).map((student) => (
                     <option key={student.studentId} value={student.studentId}>
-                      {westernDigits(student.name)} — {westernDigits(student.className)}
+                      {westernDigits(student.name)} —{" "}
+                      {westernDigits(student.className)}
                     </option>
                   ))}
                 </select>
@@ -654,17 +1069,35 @@ export default function Reports() {
               </label>
               <button
                 type="submit"
-                disabled={savingSponsorship || !financial.orphanStudents?.length}
+                disabled={
+                  savingSponsorship || !financial.orphanStudents?.length
+                }
                 className="rounded-lg bg-[#036A87] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
-                {savingSponsorship ? tr("savingAssignment") : tr("saveDonorAssignment")}
+                {savingSponsorship
+                  ? tr("savingAssignment")
+                  : tr("saveDonorAssignment")}
               </button>
             </form>
             <DataTable
-              headers={[tr("student"), tr("className"), tr("sponsor"), tr("payable"), tr("collected"), tr("remaining")]}
+              headers={[
+                tr("student"),
+                tr("className"),
+                tr("sponsor"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+              ]}
               rows={(financial.sponsorship || []).map((row) => ({
                 key: row.id || row.studentId,
-                cells: [row.studentName, row.className, row.donorName || tr("unassigned"), `${money(row.payable)} $`, `${money(row.collected)} $`, `${money(row.remaining)} $`],
+                cells: [
+                  row.studentName,
+                  row.className,
+                  row.donorName || tr("unassigned"),
+                  `${money(row.payable)} $`,
+                  `${money(row.collected)} $`,
+                  `${money(row.remaining)} $`,
+                ],
               }))}
               emptyMessage={tr("noOrphanStudents")}
             />
@@ -672,15 +1105,36 @@ export default function Reports() {
               {tr("orphanFinancialByClass")}
             </div>
             <DataTable
-              headers={[tr("className"), tr("grade"), tr("students"), tr("payable"), tr("collected"), tr("remaining")]}
+              headers={[
+                tr("className"),
+                tr("grade"),
+                tr("students"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+              ]}
               rows={[
                 ...orphanClassTotals.map((row) => ({
-                key: row.classId || row.className,
-                cells: [row.className, row.grade, row.students, `${money(row.payable)} $`, `${money(row.collected)} $`, `${money(row.remaining)} $`],
+                  key: row.classId || row.className,
+                  cells: [
+                    row.className,
+                    row.grade,
+                    row.students,
+                    `${money(row.payable)} $`,
+                    `${money(row.collected)} $`,
+                    `${money(row.remaining)} $`,
+                  ],
                 })),
                 {
                   key: "orphan-total",
-                  cells: [tr("orphanPathTotal"), "—", orphanSummary.students, `${money(orphanSummary.payable)} $`, `${money(orphanSummary.collected)} $`, `${money(orphanSummary.remaining)} $`],
+                  cells: [
+                    tr("orphanPathTotal"),
+                    "—",
+                    orphanSummary.students,
+                    `${money(orphanSummary.payable)} $`,
+                    `${money(orphanSummary.collected)} $`,
+                    `${money(orphanSummary.remaining)} $`,
+                  ],
                 },
               ]}
               emptyMessage={tr("noOrphanStudents")}
@@ -689,10 +1143,24 @@ export default function Reports() {
 
           <Panel title={tr("withdrawnFinancialStatus")}>
             <DataTable
-              headers={[tr("student"), tr("grade"), tr("payable"), tr("collected"), tr("remaining")]}
+              headers={[
+                tr("student"),
+                tr("grade"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+              ]}
               rows={(financial.withdrawnStudents || []).map((row) => ({
                 key: row.studentId,
-                cells: [row.name, row.grade === "__unspecified__" ? tr("unspecified") : row.grade, `${money(row.payable)} $`, `${money(row.collected)} $`, `${money(row.remaining)} $`],
+                cells: [
+                  row.name,
+                  row.grade === "__unspecified__"
+                    ? tr("unspecified")
+                    : row.grade,
+                  `${money(row.payable)} $`,
+                  `${money(row.collected)} $`,
+                  `${money(row.remaining)} $`,
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
@@ -703,7 +1171,13 @@ export default function Reports() {
               headers={[tr("student"), tr("grade"), tr("withdrawalReason")]}
               rows={(financial.withdrawnStudents || []).map((row) => ({
                 key: row.studentId,
-                cells: [row.name, row.grade === "__unspecified__" ? tr("unspecified") : row.grade, row.reason || tr("noReasonRecorded")],
+                cells: [
+                  row.name,
+                  row.grade === "__unspecified__"
+                    ? tr("unspecified")
+                    : row.grade,
+                  row.reason || tr("noReasonRecorded"),
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
@@ -711,13 +1185,39 @@ export default function Reports() {
 
           <Panel
             title={tr("remainingInstallments")}
-            description={financial.installmentScheduleAvailable ? "" : tr("installmentScheduleUnavailable")}
+            description={
+              financial.installmentScheduleAvailable
+                ? ""
+                : tr("installmentScheduleUnavailable")
+            }
           >
             <DataTable
-              headers={[tr("student"), tr("grade"), tr("annualAmount"), tr("firstSemesterAmount"), tr("firstSemesterPaid"), tr("firstSemesterRemaining"), tr("secondSemesterAmount"), tr("secondSemesterPaid"), tr("secondSemesterRemaining")]}
+              headers={[
+                tr("student"),
+                tr("grade"),
+                tr("annualAmount"),
+                tr("firstSemesterAmount"),
+                tr("firstSemesterPaid"),
+                tr("firstSemesterRemaining"),
+                tr("secondSemesterAmount"),
+                tr("secondSemesterPaid"),
+                tr("secondSemesterRemaining"),
+              ]}
               rows={(financial.installmentStudents || []).map((row) => ({
                 key: row.studentId,
-                cells: [row.name, row.grade === "__unspecified__" ? tr("unspecified") : row.grade, `${money(row.annualAmount)} $`, `${money(row.firstSemesterAmount)} $`, `${money(row.firstSemesterPaid)} $`, `${money(row.firstSemesterRemaining)} $`, `${money(row.secondSemesterAmount)} $`, `${money(row.secondSemesterPaid)} $`, `${money(row.secondSemesterRemaining)} $`],
+                cells: [
+                  row.name,
+                  row.grade === "__unspecified__"
+                    ? tr("unspecified")
+                    : row.grade,
+                  `${money(row.annualAmount)} $`,
+                  `${money(row.firstSemesterAmount)} $`,
+                  `${money(row.firstSemesterPaid)} $`,
+                  `${money(row.firstSemesterRemaining)} $`,
+                  `${money(row.secondSemesterAmount)} $`,
+                  `${money(row.secondSemesterPaid)} $`,
+                  `${money(row.secondSemesterRemaining)} $`,
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
@@ -727,10 +1227,17 @@ export default function Reports() {
             <Panel title={tr("installmentsPerGrade")}>
               <DataTable
                 headers={[tr("grade"), tr("studentsRequiredToPay")]}
-                rows={(financial.requiredInstallmentsByGrade || []).map((row) => ({
-                  key: row.grade,
-                  cells: [row.grade === "__unspecified__" ? tr("unspecified") : row.grade, row.students],
-                }))}
+                rows={(financial.requiredInstallmentsByGrade || []).map(
+                  (row) => ({
+                    key: row.grade,
+                    cells: [
+                      row.grade === "__unspecified__"
+                        ? tr("unspecified")
+                        : row.grade,
+                      row.students,
+                    ],
+                  }),
+                )}
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
@@ -739,7 +1246,13 @@ export default function Reports() {
                 headers={[tr("student"), tr("grade"), tr("annualAmount")]}
                 rows={(financial.annualAmounts || []).map((row) => ({
                   key: row.studentId,
-                  cells: [row.name, row.grade === "__unspecified__" ? tr("unspecified") : row.grade, `${money(row.annualAmount)} $`],
+                  cells: [
+                    row.name,
+                    row.grade === "__unspecified__"
+                      ? tr("unspecified")
+                      : row.grade,
+                    `${money(row.annualAmount)} $`,
+                  ],
                 }))}
                 emptyMessage={tr("noReportData")}
               />
@@ -748,10 +1261,38 @@ export default function Reports() {
 
           <Panel title={tr("discountsGranted")}>
             <DataTable
-              headers={[tr("student"), tr("grade"), tr("annualAmount"), tr("firstDiscount"), tr("percentage"), tr("valueAfterFirstDiscount"), tr("secondDiscount"), tr("percentage"), tr("valueAfterSecondDiscount")]}
+              headers={[
+                tr("student"),
+                tr("grade"),
+                tr("annualAmount"),
+                tr("firstDiscount"),
+                tr("percentage"),
+                tr("valueAfterFirstDiscount"),
+                tr("secondDiscount"),
+                tr("percentage"),
+                tr("valueAfterSecondDiscount"),
+              ]}
               rows={(financial.discounts || []).map((row) => ({
                 key: row.studentId,
-                cells: [row.name, row.grade === "__unspecified__" ? tr("unspecified") : row.grade, `${money(row.annualBeforeDiscount)} $`, row.firstDiscountName || (row.firstDiscountPercentage > 0 ? tr("generalDiscountReason") : "—"), `${money(row.firstDiscountPercentage)}%`, `${money(row.valueAfterFirstDiscount)} $`, row.secondDiscountName || (row.secondDiscountPercentage > 0 ? tr("siblingStaffDiscountReason") : "—"), `${money(row.secondDiscountPercentage)}%`, `${money(row.valueAfterSecondDiscount)} $`],
+                cells: [
+                  row.name,
+                  row.grade === "__unspecified__"
+                    ? tr("unspecified")
+                    : row.grade,
+                  `${money(row.annualBeforeDiscount)} $`,
+                  row.firstDiscountName ||
+                    (row.firstDiscountPercentage > 0
+                      ? tr("generalDiscountReason")
+                      : "—"),
+                  `${money(row.firstDiscountPercentage)}%`,
+                  `${money(row.valueAfterFirstDiscount)} $`,
+                  row.secondDiscountName ||
+                    (row.secondDiscountPercentage > 0
+                      ? tr("siblingStaffDiscountReason")
+                      : "—"),
+                  `${money(row.secondDiscountPercentage)}%`,
+                  `${money(row.valueAfterSecondDiscount)} $`,
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
@@ -761,71 +1302,73 @@ export default function Reports() {
 
       <Panel title={tr("reportFilter")}>
         <div className="p-5">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <label className="text-sm text-gray-700">
-            {tr("monthLabel")}
-            <input
-              type="month"
-              lang="en"
-              value={month}
-              onChange={(event) => {
-                setMonth(event.target.value);
-                if (event.target.value) {
-                  setDateFrom("");
-                  setDateTo("");
-                }
-              }}
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-gray-700">
-            {tr("from")}
-            <input
-              type="date"
-              lang="en"
-              value={dateFrom}
-              onChange={(event) => {
-                setDateFrom(event.target.value);
-                if (event.target.value) setMonth("");
-              }}
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-gray-700">
-            {tr("to")}
-            <input
-              type="date"
-              lang="en"
-              value={dateTo}
-              onChange={(event) => {
-                setDateTo(event.target.value);
-                if (event.target.value) setMonth("");
-              }}
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            />
-          </label>
-          <label className="text-sm text-gray-700">
-            {tr("paymentType")}
-            <select
-              value={paymentType}
-              onChange={(event) => setPaymentType(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            >
-              {PAYMENT_TYPES.map((type) => (
-                <option key={type} value={type}>{paymentTypeLabel(type)}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm text-gray-700">
-            {tr("path")}
-            <input
-              value={course}
-              onChange={(event) => setCourse(event.target.value)}
-              placeholder={tr("searchPath")}
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            />
-          </label>
-        </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <label className="text-sm text-gray-700">
+              {tr("monthLabel")}
+              <input
+                type="month"
+                lang="en"
+                value={month}
+                onChange={(event) => {
+                  setMonth(event.target.value);
+                  if (event.target.value) {
+                    setDateFrom("");
+                    setDateTo("");
+                  }
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              />
+            </label>
+            <label className="text-sm text-gray-700">
+              {tr("from")}
+              <input
+                type="date"
+                lang="en"
+                value={dateFrom}
+                onChange={(event) => {
+                  setDateFrom(event.target.value);
+                  if (event.target.value) setMonth("");
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              />
+            </label>
+            <label className="text-sm text-gray-700">
+              {tr("to")}
+              <input
+                type="date"
+                lang="en"
+                value={dateTo}
+                onChange={(event) => {
+                  setDateTo(event.target.value);
+                  if (event.target.value) setMonth("");
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              />
+            </label>
+            <label className="text-sm text-gray-700">
+              {tr("paymentType")}
+              <select
+                value={paymentType}
+                onChange={(event) => setPaymentType(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                {PAYMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {paymentTypeLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-gray-700">
+              {tr("path")}
+              <input
+                value={course}
+                onChange={(event) => setCourse(event.target.value)}
+                placeholder={tr("searchPath")}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              />
+            </label>
+          </div>
         </div>
       </Panel>
 
@@ -837,37 +1380,169 @@ export default function Reports() {
       ) : report ? (
         <>
           <Panel title={tr("filteredPaymentReport")}>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <CalendarRange className="h-4 w-4" />
-            <span>{activePeriodLabel}</span>
-            <span className="rounded-full bg-sky-50 px-2 py-1 font-medium text-sky-700">
-              {paymentTypeLabel(paymentType)}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label={tr("fullyPaidStudents")} value={summary.paid ?? 0} tone="green" />
-            <StatCard label={tr("partiallyPaidStudents")} value={summary.partial ?? 0} tone="amber" />
-            <StatCard label={tr("unpaidStudents")} value={summary.unpaid ?? 0} tone="rose" />
-            <StatCard label={tr("inactiveStudents")} value={summary.dropped ?? 0} tone="slate" />
-          </div>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <StatCard label={tr("totalCollected")} value={`${money(summary.totalCollected)} $`} tone="green" />
-            <StatCard label={tr("remaining")} value={`${money(summary.totalRemaining)} $`} tone="amber" />
-            <StatCard label={tr("payable")} value={`${money(summary.totalPayable)} $`} />
-          </div>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <CalendarRange className="h-4 w-4" />
+              <span>{activePeriodLabel}</span>
+              <span className="rounded-full bg-sky-50 px-2 py-1 font-medium text-sky-700">
+                {paymentTypeLabel(paymentType)}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                label={tr("fullyPaidStudents")}
+                value={summary.paid ?? 0}
+                tone="green"
+              />
+              <StatCard
+                label={tr("partiallyPaidStudents")}
+                value={summary.partial ?? 0}
+                tone="amber"
+              />
+              <StatCard
+                label={tr("unpaidStudents")}
+                value={summary.unpaid ?? 0}
+                tone="rose"
+              />
+              <StatCard
+                label={tr("inactiveStudents")}
+                value={summary.dropped ?? 0}
+                tone="slate"
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <StatCard
+                label={tr("totalCollected")}
+                value={`${money(summary.totalCollected)} $`}
+                tone="green"
+              />
+              <StatCard
+                label={tr("remaining")}
+                value={`${money(summary.totalRemaining)} $`}
+                tone="amber"
+              />
+              <StatCard
+                label={tr("payable")}
+                value={`${money(summary.totalPayable)} $`}
+              />
+            </div>
           </Panel>
           <Panel title={tr("filteredByPath")}>
             <DataTable
-              headers={[tr("path"), tr("payable"), tr("collected"), tr("remaining"), tr("fullyPaidStudents"), tr("partiallyPaidStudents"), tr("unpaidStudents")]}
+              headers={[
+                tr("path"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+                tr("fullyPaidStudents"),
+                tr("partiallyPaidStudents"),
+                tr("unpaidStudents"),
+              ]}
               rows={byCourse.map((row) => ({
                 key: row.course,
-                cells: [row.course, `${money(row.payable)} $`, `${money(row.collected)} $`, `${money(row.remaining)} $`, row.paidStudents, row.partialStudents, row.unpaidStudents],
+                cells: [
+                  row.course,
+                  `${money(row.payable)} $`,
+                  `${money(row.collected)} $`,
+                  `${money(row.remaining)} $`,
+                  row.paidStudents,
+                  row.partialStudents,
+                  row.unpaidStudents,
+                ],
               }))}
               emptyMessage={tr("noReportData")}
             />
           </Panel>
         </>
       ) : null}
+
+      <Panel
+        title={tr("classReportsTitle")}
+        description={tr("classReportsDescription")}
+      >
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-gray-100 p-4">
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-sm text-gray-700">
+              {tr("className")}
+              <select
+                value={classReportId}
+                onChange={(event) => setClassReportId(event.target.value)}
+                disabled={loadingOverview}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 disabled:bg-gray-50"
+              >
+                <option value="">{tr("selectClassReport")}</option>
+                {reportClasses.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {[item.grade, item.name].filter(Boolean).join(" - ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm text-gray-700">
+              {tr("paymentType")}
+              <select
+                value={classReportPaymentType}
+                onChange={(event) =>
+                  setClassReportPaymentType(event.target.value)
+                }
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                {PAYMENT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {paymentTypeLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+        {classReportId ? (
+          classReportLoading ? (
+            <div className="p-8 text-center text-gray-500">
+              <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+              <div className="mt-2">{tr("loadingReport")}</div>
+            </div>
+          ) : classReport ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
+                <StatCard
+                  label={tr("payable")}
+                  value={`${money(classReportSummary.totalPayable)} $`}
+                />
+                <StatCard
+                  label={tr("collected")}
+                  value={`${money(classReportSummary.totalCollected)} $`}
+                  tone="green"
+                />
+                <StatCard
+                  label={tr("remaining")}
+                  value={`${money(classReportSummary.totalRemaining)} $`}
+                  tone="amber"
+                />
+              </div>
+              <DataTable
+                headers={[
+                  tr("student"),
+                  tr("studentCode"),
+                  tr("payable"),
+                  tr("collected"),
+                  tr("remaining"),
+                ]}
+                rows={classReportDetails.map((row) => ({
+                  key: row.studentId,
+                  cells: [
+                    row.name,
+                    row.code,
+                    `${money(row.payable)} $`,
+                    `${money(row.collected)} $`,
+                    `${money(row.remaining)} $`,
+                  ],
+                }))}
+                emptyMessage={tr("noReportData")}
+              />
+            </>
+          ) : null
+        ) : null}
+      </Panel>
     </div>
   );
 }

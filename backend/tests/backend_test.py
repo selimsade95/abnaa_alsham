@@ -365,6 +365,74 @@ def created_student(admin_headers, created_class):
 
 
 class TestAttendance:
+    def test_early_dismissal_requires_and_persists_reason_and_escort(
+        self, admin_headers, created_class, created_student
+    ):
+        today = datetime.utcnow().date().isoformat()
+        roster = requests.get(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            params={"date": today},
+        )
+        assert roster.status_code == 200, roster.text
+
+        def attendance_records(include_details):
+            return [
+                {
+                    "studentId": student["studentId"],
+                    "status": "early_dismissal",
+                    "earlyDismissalReason": (
+                        "Medical appointment" if include_details else None
+                    ),
+                    "earlyDismissalRelation": (
+                        "mother" if include_details else None
+                    ),
+                    "earlyDismissalBy": (
+                        "TEST Mother" if include_details else None
+                    ),
+                }
+                if student["studentId"] == created_student["id"]
+                else {"studentId": student["studentId"], "status": "present"}
+                for student in roster.json()["students"]
+            ]
+
+        missing_details = requests.put(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            json={
+                "attendanceDate": today,
+                "records": attendance_records(False),
+            },
+        )
+        assert missing_details.status_code == 400, missing_details.text
+
+        saved = requests.put(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            json={
+                "attendanceDate": today,
+                "records": attendance_records(True),
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["earlyDismissal"] == 1
+
+        refreshed = requests.get(
+            f"{API}/attendance/classes/{created_class['id']}",
+            headers=admin_headers,
+            params={"date": today},
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        student = next(
+            item
+            for item in refreshed.json()["students"]
+            if item["studentId"] == created_student["id"]
+        )
+        assert student["status"] == "early_dismissal"
+        assert student["earlyDismissalReason"] == "Medical appointment"
+        assert student["earlyDismissalRelation"] == "mother"
+        assert student["earlyDismissalBy"] == "TEST Mother"
+
     def test_daily_attendance_and_repeated_absence_report(
         self, admin_headers, created_class, created_student
     ):
@@ -992,6 +1060,35 @@ class TestStudents:
 # ---------- Payments ----------
 
 class TestPayments:
+    def test_finance_report_shows_class_student_fee_details(
+        self, admin_headers, created_student, created_class
+    ):
+        overview = requests.get(f"{API}/reports/overview", headers=admin_headers)
+        assert overview.status_code == 200, overview.text
+        assert any(
+            item["id"] == created_class["id"]
+            for item in overview.json()["classes"]
+        )
+
+        report = requests.get(
+            f"{API}/reports/finance",
+            headers=admin_headers,
+            params={
+                "classId": created_class["id"],
+                "paymentType": "academic",
+            },
+        )
+        assert report.status_code == 200, report.text
+        student = next(
+            item
+            for item in report.json()["studentDetails"]
+            if item["studentId"] == created_student["id"]
+        )
+        assert student["className"] == created_class["name"]
+        assert student["payable"] == 1000
+        assert student["collected"] == 200
+        assert student["remaining"] == 800
+
     def test_split_payment_allocates_paid_total_to_students(self, admin_headers):
         students = []
         for index in range(2):

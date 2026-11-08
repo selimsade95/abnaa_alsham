@@ -1,16 +1,21 @@
 import { useEffect, useState } from "react";
 import {
   ClipboardList,
+  FileSpreadsheet,
   Filter,
   Loader2,
+  Printer,
   RotateCcw,
   Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { getIntlLocale } from "@/i18n";
+import { downloadXlsx, localDateStamp, printReport } from "@/lib/reportExport";
+import { useTranslation } from "react-i18next";
 
 export default function Homework() {
+  const { t } = useTranslation();
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -48,7 +53,9 @@ export default function Homework() {
         record.studentCode,
         record.teacherName,
       ].some((value) =>
-        String(value || "").toLocaleLowerCase().includes(normalizedSearch),
+        String(value || "")
+          .toLocaleLowerCase()
+          .includes(normalizedSearch),
       );
     return (
       matchesSearch &&
@@ -67,14 +74,95 @@ export default function Homework() {
     setDateFrom("");
     setDateTo("");
   };
+  const reportTitle = t("homeworkPage.reportTitle");
+  const reportRows = filteredRecords.map((record) => [
+    record.homeworkDate
+      ? new Date(`${record.homeworkDate}T00:00:00`).toLocaleDateString(
+          getIntlLocale(),
+        )
+      : "—",
+    record.className || "—",
+    record.subjectName || "—",
+    record.studentName || "—",
+    record.studentCode || "—",
+    record.teacherName || "—",
+    t("homeworkPage.notCompleted"),
+  ]);
+  const reportHeaders = [
+    t("homeworkPage.date"),
+    t("homeworkPage.class"),
+    t("homeworkPage.subject"),
+    t("homeworkPage.student"),
+    t("homeworkPage.studentCode"),
+    t("homeworkPage.teacher"),
+    t("homeworkPage.status"),
+  ];
+  const reportSubtitle =
+    [
+      search.trim() && `${t("homeworkPage.search")}: ${search.trim()}`,
+      classFilter && `${t("homeworkPage.class")}: ${classFilter}`,
+      subjectFilter && `${t("homeworkPage.subject")}: ${subjectFilter}`,
+      dateFrom && `${t("homeworkPage.from")}: ${dateFrom}`,
+      dateTo && `${t("homeworkPage.to")}: ${dateTo}`,
+    ]
+      .filter(Boolean)
+      .join(" · ") || t("homeworkPage.allRecords");
+
+  const exportExcel = async () => {
+    try {
+      await downloadXlsx(`homework-report-${localDateStamp()}.xlsx`, [
+        {
+          name: reportTitle,
+          rows: [reportHeaders, ...reportRows],
+        },
+      ]);
+    } catch {
+      toast.error(t("homeworkPage.exportExcelFailed"));
+    }
+  };
+
+  const exportPdf = () => {
+    try {
+      if (
+        !printReport(reportTitle, reportSubtitle, [
+          { title: reportTitle, headers: reportHeaders, rows: reportRows },
+        ])
+      ) {
+        toast.error(t("homeworkPage.printFailed"));
+      }
+    } catch {
+      toast.error(t("homeworkPage.printFailed"));
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">الواجبات</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          قائمة الطلاب الذين لم يؤدوا واجباتهم.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">الواجبات</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            قائمة الطلاب الذين لم يؤدوا واجباتهم.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={exportPdf}
+            disabled={loading || !filteredRecords.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            <Printer className="h-4 w-4" /> {t("homeworkPage.exportPdf")}
+          </button>
+          <button
+            type="button"
+            onClick={exportExcel}
+            disabled={loading || !filteredRecords.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />{" "}
+            {t("homeworkPage.exportExcel")}
+          </button>
+        </div>
       </div>
       <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -188,7 +276,10 @@ export default function Homework() {
               </tr>
             ) : filteredRecords.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                <td
+                  colSpan={6}
+                  className="px-4 py-12 text-center text-gray-500"
+                >
                   لا توجد واجبات مطابقة للبحث والفلاتر المحددة.
                 </td>
               </tr>

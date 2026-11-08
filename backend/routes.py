@@ -3592,7 +3592,7 @@ async def _repeated_absence_reports(current, class_id=None, date_from=None, date
     by_student = {}
     for session in sessions:
         for record in session.get("records", []):
-            if record.get("status") != "absent":
+            if record.get("status") not in ("absent", "truancy"):
                 continue
             student_id = record.get("studentId")
             if not student_id:
@@ -3610,6 +3610,7 @@ async def _repeated_absence_reports(current, class_id=None, date_from=None, date
                 "classId": session["classId"],
                 "className": session.get("className") or "—",
                 "reason": record.get("absenceReason"),
+                "status": record.get("status"),
             })
 
     reports = [
@@ -3847,6 +3848,9 @@ async def get_class_attendance(
                 "status": saved_records.get(student["id"], {}).get("status"),
                 "absenceReason": saved_records.get(student["id"], {}).get("absenceReason"),
                 "lateMinutes": saved_records.get(student["id"], {}).get("lateMinutes"),
+                "earlyDismissalReason": saved_records.get(student["id"], {}).get("earlyDismissalReason"),
+                "earlyDismissalRelation": saved_records.get(student["id"], {}).get("earlyDismissalRelation"),
+                "earlyDismissalBy": saved_records.get(student["id"], {}).get("earlyDismissalBy"),
             }
             for student in records
         ],
@@ -3879,10 +3883,19 @@ async def save_class_attendance(
     for record in body.records:
         if record.status == "absent" and not record.absenceReason:
             raise HTTPException(400, "يرجى تحديد ما إذا كان الغياب بعذر أو دون عذر")
-        if record.status == "absent" and record.lateMinutes is not None:
-            raise HTTPException(400, "لا يمكن تسجيل مدة تأخر للطالب الغائب")
-        if record.status == "present" and record.absenceReason is not None:
+        if record.status != "present" and record.lateMinutes is not None:
+            raise HTTPException(400, "لا يمكن تسجيل مدة تأخر إلا للطالب الحاضر")
+        if record.status != "absent" and record.absenceReason is not None:
             raise HTTPException(400, "سبب الغياب متاح للطالب الغائب فقط")
+        if record.status == "early_dismissal" and not (
+            (record.earlyDismissalReason or "").strip()
+            and record.earlyDismissalRelation
+            and (record.earlyDismissalBy or "").strip()
+        ):
+            raise HTTPException(
+                400,
+                "يرجى إدخال سبب الانصراف المبكر واسم المستلم وصفته",
+            )
 
     records_by_id = {record.studentId: record for record in body.records}
     timestamp = now_iso()
@@ -3892,8 +3905,29 @@ async def save_class_attendance(
             "studentName": (student.get("student") or {}).get("fullName") or "—",
             "studentCode": student.get("code") or "",
             "status": records_by_id[student_id].status,
-            "absenceReason": records_by_id[student_id].absenceReason,
+            "absenceReason": (
+                records_by_id[student_id].absenceReason
+                if records_by_id[student_id].status == "absent"
+                else None
+            ),
             "lateMinutes": records_by_id[student_id].lateMinutes,
+            "earlyDismissalReason": (
+                records_by_id[student_id].earlyDismissalReason.strip()
+                if records_by_id[student_id].status == "early_dismissal"
+                and records_by_id[student_id].earlyDismissalReason
+                else None
+            ),
+            "earlyDismissalRelation": (
+                records_by_id[student_id].earlyDismissalRelation
+                if records_by_id[student_id].status == "early_dismissal"
+                else None
+            ),
+            "earlyDismissalBy": (
+                records_by_id[student_id].earlyDismissalBy.strip()
+                if records_by_id[student_id].status == "early_dismissal"
+                and records_by_id[student_id].earlyDismissalBy
+                else None
+            ),
         }
         for student_id, student in students_by_id.items()
     ]
@@ -3919,7 +3953,13 @@ async def save_class_attendance(
         "classId": class_id,
         "attendanceDate": date_value,
         "total": len(session_records),
-        "absent": sum(record["status"] == "absent" for record in session_records),
+        "absent": sum(
+            record["status"] in ("absent", "truancy") for record in session_records
+        ),
+        "earlyDismissal": sum(
+            record["status"] == "early_dismissal" for record in session_records
+        ),
+        "truancy": sum(record["status"] == "truancy" for record in session_records),
         "markedAt": timestamp,
     }
 
@@ -4340,8 +4380,21 @@ async def dashboard_stats(
                 target_class_ids.intersection_update(student_class_ids)
             active_classes_filter["id"] = {"$in": list(target_class_ids)}
         active_classes = await db.classes.count_documents(active_classes_filter)
-        present_count = sum(record.get("status") == "present" for record in attendance_counts)
-        absent_count = sum(record.get("status") == "absent" for record in attendance_counts)
+        present_count = sum(
+            record.get("status") in ("present", "early_dismissal")
+            for record in attendance_counts
+        )
+        absent_count = sum(
+            record.get("status") in ("absent", "truancy")
+            for record in attendance_counts
+        )
+        early_dismissal_count = sum(
+            record.get("status") == "early_dismissal"
+            for record in attendance_counts
+        )
+        truancy_count = sum(
+            record.get("status") == "truancy" for record in attendance_counts
+        )
         late_count = sum(
             record.get("status") == "present" and record.get("lateMinutes") is not None
             for record in attendance_counts
@@ -4352,6 +4405,8 @@ async def dashboard_stats(
             "totalClasses": active_classes,
             "present": present_count,
             "absent": absent_count,
+            "earlyDismissal": early_dismissal_count,
+            "truancy": truancy_count,
             "late": late_count,
             "markedStudents": present_count + absent_count,
             "attendanceRate": (
@@ -4401,13 +4456,13 @@ async def reports_overview(current=Depends(require_permission("reports.view"))):
         },
     ).to_list(None)
     student_ids = [student.get("id") for student in students if student.get("id")]
-    class_ids = list(
-        {student.get("currentClassId") for student in students if student.get("currentClassId")}
-    )
+    class_query = {}
+    if allowed is not None:
+        class_query["id"] = {"$in": allowed}
     classes = await db.classes.find(
-        {"id": {"$in": class_ids}} if class_ids else {"id": {"$in": []}},
-        {"_id": 0, "id": 1, "grade": 1, "name": 1},
-    ).to_list(len(class_ids))
+        class_query,
+        {"_id": 0, "id": 1, "grade": 1, "name": 1, "status": 1},
+    ).to_list(None)
     classes_by_id = {item["id"]: item for item in classes}
 
     def grade_for(student):
@@ -4725,6 +4780,14 @@ async def reports_overview(current=Depends(require_permission("reports.view"))):
                 for path, count in sorted(by_path.items(), key=lambda item: item[0])
             ],
         },
+        "classes": sorted(
+            [
+                {"id": class_id, "name": item.get("name") or "", "grade": item.get("grade") or ""}
+                for class_id, item in classes_by_id.items()
+                if item.get("status") != "inactive"
+            ],
+            key=lambda item: (item["grade"], item["name"]),
+        ),
         "financial": {
             "byGrade": sorted(financial_by_grade.values(), key=lambda item: item["grade"]),
             "total": total_financial,
@@ -4806,6 +4869,7 @@ async def financial_reports(
     month: Optional[str] = None,
     payment_type: str = Query(default="all", alias="paymentType"),
     course: Optional[str] = None,
+    class_id: Optional[str] = Query(default=None, alias="classId"),
     current=Depends(require_permission("reports.view")),
 ):
     allowed = await allowed_class_ids(current)
@@ -4829,17 +4893,38 @@ async def financial_reports(
 
     query = {}
     if allowed is not None:
-        query["currentClassId"] = {"$in": allowed}
+        if class_id and class_id not in allowed:
+            raise HTTPException(403, "لا تملك صلاحية الوصول إلى هذا الصف")
+        query["currentClassId"] = {"$in": [class_id] if class_id else allowed}
+    elif class_id:
+        query["currentClassId"] = class_id
     if course:
         query["$or"] = [
             {"student.registrationPath": course},
             {"student.finalRegistrationPath": course},
             {"student.registrationPath": {"$regex": f"^{re.escape(course)}$", "$options": "i"}},
         ]
-    students = await db.students.find(query, {"_id": 0, "id": 1, "student": 1, "fees": 1, "currentClassId": 1}).to_list(None)
+    students = await db.students.find(
+        query,
+        {
+            "_id": 0,
+            "id": 1,
+            "code": 1,
+            "student": 1,
+            "fees": 1,
+            "currentClassId": 1,
+        },
+    ).to_list(None)
 
     student_by_id = {student["id"]: student for student in students}
     student_ids = list(student_by_id.keys())
+    class_names = {}
+    if class_id:
+        class_info = await db.classes.find_one(
+            {"id": class_id}, {"_id": 0, "name": 1}
+        )
+        if class_info:
+            class_names[class_id] = class_info.get("name") or ""
     fee_types = [payment_type] if payment_type != "all" else list(FEE_TYPE_FIELDS.keys())
 
     payment_filter = {}
@@ -4879,6 +4964,7 @@ async def financial_reports(
         "totalRemaining": 0.0,
     }
     by_course = {}
+    student_details = []
 
     for student in students:
         student_data = student.get("student") or {}
@@ -4952,6 +5038,18 @@ async def financial_reports(
 
         course_entry["payable"] += payable_total
         course_entry["remaining"] = max(0, course_entry["payable"] - course_entry["collected"])
+        if class_id:
+            student_details.append(
+                {
+                    "studentId": student_id,
+                    "code": student.get("code") or "",
+                    "name": student_data.get("fullName") or "",
+                    "className": class_names.get(student.get("currentClassId"), ""),
+                    "payable": payable_total,
+                    "collected": collected_for_student,
+                    "remaining": max(0.0, payable_total - collected_for_student),
+                }
+            )
         if payable_total > 0:
             if collected_for_student >= payable_total:
                 course_entry["paidStudents"] += 1
@@ -4976,6 +5074,7 @@ async def financial_reports(
         },
         "summary": summary,
         "byCourse": per_course,
+        "studentDetails": student_details,
     }
 #endregion
 

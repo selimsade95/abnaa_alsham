@@ -1,8 +1,12 @@
-import { Loader2, Save } from "lucide-react";
+import { FileSpreadsheet, Loader2, Printer, Save } from "lucide-react";
+import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { useGrades } from "@/hooks/useGrades";
 import { useAuth } from "@/lib/auth";
+import { downloadXlsx, localDateStamp, printReport } from "@/lib/reportExport";
 
 export default function Grades() {
+  const { t } = useTranslation();
   const { has } = useAuth();
   const {
     classes,
@@ -31,6 +35,73 @@ export default function Grades() {
     highest,
     lowest,
   } = useGrades();
+  const periodLabels = {
+    first: t("gradesPage.periodFirst"),
+    second: t("gradesPage.periodSecond"),
+    final: t("gradesPage.periodFinal"),
+  };
+  const selectedClassInfo = classes.find((item) => item.id === selectedClass);
+  const selectedSubjectInfo = availableSubjects.find(
+    (item) => item.id === selectedSubject,
+  );
+  const reportTitle = t("gradesPage.reportTitle");
+  const reportSubtitle = [
+    selectedClassInfo?.name,
+    selectedClassInfo?.section,
+    selectedSubjectInfo?.name,
+    periodLabels[period],
+    academicYear,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const reportHeaders = [
+    t("gradesPage.student"),
+    t("gradesPage.studentCode"),
+    t("gradesPage.class"),
+    t("gradesPage.subject"),
+    t("gradesPage.period"),
+    t("gradesPage.academicYear"),
+    t("gradesPage.score"),
+  ];
+  const reportRows = filteredOverview.map((grade) => [
+    grade.studentName || "—",
+    grade.studentCode || "—",
+    grade.className || "—",
+    grade.subjectName || "—",
+    periodLabels[grade.period] || grade.period || "—",
+    grade.academicYear || academicYear || "—",
+    grade.score,
+  ]);
+  const reportSections = [
+    {
+      title: reportTitle,
+      headers: reportHeaders,
+      rows: reportRows,
+    },
+  ];
+
+  const exportExcel = async () => {
+    try {
+      await downloadXlsx(`grades-report-${localDateStamp()}.xlsx`, [
+        {
+          name: reportTitle,
+          rows: [reportHeaders, ...reportRows],
+        },
+      ]);
+    } catch {
+      toast.error(t("gradesPage.exportExcelFailed"));
+    }
+  };
+
+  const exportPdf = () => {
+    try {
+      if (!printReport(reportTitle, reportSubtitle, reportSections)) {
+        toast.error(t("gradesPage.printFailed"));
+      }
+    } catch {
+      toast.error(t("gradesPage.printFailed"));
+    }
+  };
 
   if (loading)
     return (
@@ -47,14 +118,33 @@ export default function Grades() {
             إدخال ومراجعة درجات الطلاب حسب الصف والمادة
           </p>
         </div>
-        {has("grades.accept") && (
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={toggleAcceptance}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${accepting ? "bg-emerald-600" : "bg-gray-700"}`}
+            type="button"
+            onClick={exportPdf}
+            disabled={!filteredOverview.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
           >
-            {accepting ? "قبول الدرجات مفتوح" : "فتح قبول الدرجات"}
+            <Printer className="h-4 w-4" /> {t("gradesPage.exportPdf")}
           </button>
-        )}
+          <button
+            type="button"
+            onClick={exportExcel}
+            disabled={!filteredOverview.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="h-4 w-4" />{" "}
+            {t("gradesPage.exportExcel")}
+          </button>
+          {has("grades.accept") && (
+            <button
+              onClick={toggleAcceptance}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold text-white ${accepting ? "bg-emerald-600" : "bg-gray-700"}`}
+            >
+              {accepting ? "قبول الدرجات مفتوح" : "فتح قبول الدرجات"}
+            </button>
+          )}
+        </div>
       </div>
       {!accepting && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
