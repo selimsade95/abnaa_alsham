@@ -150,7 +150,7 @@ export const printReport = (title, subtitle, sections) => {
           table { border-collapse: collapse; width: 100%; font-size: 12px; }
           thead { display: table-header-group; }
           tr { break-inside: avoid; }
-          th, td { border-bottom: 1px solid #d8e2e7; padding: 9px 10px; text-align: start; }
+          th, td { border-bottom: 1px solid #d8e2e7; padding: 9px 10px; text-align: start; white-space: pre-line; }
           th { background: #036a87; color: white; font-weight: 700; }
           tbody tr:nth-child(even) { background: #f1f7f9; }
           @page { size: A4 landscape; margin: 12mm; }

@@ -13,8 +13,24 @@ import {
 } from "lucide-react";
 import { GENDER_LABELS } from "@/lib/studentDefaults";
 import Pagination from "@/components/Pagination";
+import ColumnSelector from "@/components/ColumnSelector";
+import { useSessionStorageState } from "@/hooks/useSessionStorageState";
+
+const TEACHER_LIST_COLUMNS = [
+  { key: "code", label: "الكود" },
+  { key: "name", label: "الاسم" },
+  { key: "gender", label: "الجنس" },
+  { key: "phone", label: "الهاتف" },
+  { key: "department", label: "القسم / الوصف الوظيفي" },
+  { key: "status", label: "الحالة" },
+];
 
 export default function Teachers() {
+  const [selectedColumns, setSelectedColumns] = useSessionStorageState(
+    "teachers-list-columns",
+    TEACHER_LIST_COLUMNS.map(({ key }) => key),
+  );
+  const hasColumn = (key) => selectedColumns.includes(key);
   const {
     has,
     nav,
@@ -173,16 +189,23 @@ export default function Teachers() {
           </div>
         )}
 
+        <div className="flex justify-end border-b border-gray-200 p-3">
+          <ColumnSelector
+            columns={TEACHER_LIST_COLUMNS}
+            selectedColumns={selectedColumns}
+            onChange={setSelectedColumns}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3 font-medium">الكود</th>
-                <th className="px-4 py-3 font-medium">الاسم</th>
-                <th className="px-4 py-3 font-medium">الجنس</th>
-                <th className="px-4 py-3 font-medium">الهاتف</th>
-                <th className="px-4 py-3 font-medium">القسم / الوصف الوظيفي</th>
-                <th className="px-4 py-3 font-medium">الحالة</th>
+                {hasColumn("code") && <th className="px-4 py-3 font-medium">الكود</th>}
+                {hasColumn("name") && <th className="px-4 py-3 font-medium">الاسم</th>}
+                {hasColumn("gender") && <th className="px-4 py-3 font-medium">الجنس</th>}
+                {hasColumn("phone") && <th className="px-4 py-3 font-medium">الهاتف</th>}
+                {hasColumn("department") && <th className="px-4 py-3 font-medium">القسم / الوصف الوظيفي</th>}
+                {hasColumn("status") && <th className="px-4 py-3 font-medium">الحالة</th>}
                 <th className="px-4 py-3 font-medium text-left">إجراءات</th>
               </tr>
             </thead>
@@ -190,7 +213,7 @@ export default function Teachers() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
@@ -200,7 +223,7 @@ export default function Teachers() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     لا توجد نتائج.
@@ -213,27 +236,27 @@ export default function Teachers() {
                     className="border-t border-gray-100 hover:bg-gray-50"
                     data-testid={`teacher-row-${t.id}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                    {hasColumn("code") && <td className="px-4 py-3 font-mono text-xs text-gray-600">
                       {t.code}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    </td>}
+                    {hasColumn("name") && <td className="px-4 py-3 font-medium text-gray-900">
                       <Link
                         to={`/teachers/${t.id}`}
                         className="text-[#036A87] hover:underline"
                       >
                         {t.fullName}
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("gender") && <td className="px-4 py-3 text-gray-600">
                       {GENDER_LABELS[t.gender] || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("phone") && <td className="px-4 py-3 text-gray-600">
                       {t.contactPhone || t.phone || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("department") && <td className="px-4 py-3 text-gray-600">
                       {t.department || t.jobDescription || t.specialization || "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {hasColumn("status") && <td className="px-4 py-3">
                       <span
                         className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${t.employmentStatus === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}
                       >
@@ -248,7 +271,7 @@ export default function Teachers() {
                             سبب التعطيل: {t.deactivationReason}
                           </div>
                         )}
-                    </td>
+                    </td>}
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
                         {has("teachers.update") && (

@@ -22,6 +22,197 @@ import { downloadTemplate } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import { useStudentsList } from "@/hooks/useStudentsList";
 import { t } from "@/i18n";
+import ColumnSelector from "@/components/ColumnSelector";
+import { useSessionStorageState } from "@/hooks/useSessionStorageState";
+
+const STUDENT_LIST_COLUMNS = [
+  { key: "code", label: "الكود" },
+  { key: "name", label: "الاسم الكامل" },
+  { key: "gender", label: "الجنس" },
+  { key: "birthdate", label: "تاريخ الميلاد" },
+  { key: "class", label: "الصف" },
+  { key: "registrationPath", label: "مسار التسجيل" },
+  { key: "status", label: "الوضع" },
+  { key: "orphan", label: "يتيم" },
+  {
+    key: "finalRegistrationPath",
+    label: "مسار التسجيل النهائي",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.finalRegistrationPath,
+  },
+  {
+    key: "newClass",
+    label: "الصف المسجل",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.newClass,
+  },
+  {
+    key: "currentTeacher",
+    label: "المعلم الحالي",
+    permission: "students.fullInformation.view",
+    value: (student) => student.currentTeacher,
+  },
+  {
+    key: "currentAddress",
+    label: "العنوان الحالي",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.currentAddress,
+  },
+  {
+    key: "fatherName",
+    label: "اسم الأب",
+    permission: "students.fullInformation.view",
+    value: (student) => student.father?.name,
+  },
+  {
+    key: "fatherPhone",
+    label: "هاتف الأب",
+    permission: "students.fullInformation.view",
+    value: (student) => student.father?.phone,
+  },
+  {
+    key: "motherName",
+    label: "اسم الأم",
+    permission: "students.fullInformation.view",
+    value: (student) => student.mother?.name,
+  },
+  {
+    key: "motherPhone",
+    label: "هاتف الأم",
+    permission: "students.fullInformation.view",
+    value: (student) => student.mother?.phone,
+  },
+  {
+    key: "orphanOf",
+    label: "اليتيم المعال",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.orphanOf,
+  },
+  {
+    key: "orphanDocType",
+    label: "نوع وثيقة اليتم",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.orphanDocType,
+  },
+  {
+    key: "busNo",
+    label: "رقم الحافلة",
+    permission: "students.fullInformation.view",
+    value: (student) => student.student?.busNumber,
+  },
+  {
+    key: "academicYear",
+    label: "السنة الدراسية للرسوم",
+    permission: "payments.view",
+    value: (student) => student.fees?.academicYear,
+  },
+  {
+    key: "academicPayable",
+    label: "المستحق الدراسي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.academic?.payable,
+  },
+  {
+    key: "academicPaid",
+    label: "المدفوع الدراسي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.academic?.paid,
+  },
+  {
+    key: "academicRemaining",
+    label: "المتبقي الدراسي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.academic?.remaining,
+  },
+  {
+    key: "busPayable",
+    label: "المستحق للحافلة",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.transportation?.payable,
+  },
+  {
+    key: "busPaid",
+    label: "المدفوع للحافلة",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.transportation?.paid,
+  },
+  {
+    key: "busRemaining",
+    label: "المتبقي للحافلة",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.transportation?.remaining,
+  },
+  {
+    key: "booksPayable",
+    label: "المستحق للكتب",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.books?.payable,
+  },
+  {
+    key: "booksPaid",
+    label: "المدفوع للكتب",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.books?.paid,
+  },
+  {
+    key: "booksRemaining",
+    label: "المتبقي للكتب",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.books?.remaining,
+  },
+  {
+    key: "outfitPayable",
+    label: "المستحق للزي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.outfit?.payable,
+  },
+  {
+    key: "outfitPaid",
+    label: "المدفوع للزي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.outfit?.paid,
+  },
+  {
+    key: "outfitRemaining",
+    label: "المتبقي للزي",
+    permission: "payments.view",
+    value: (student) => student.fees?.byType?.outfit?.remaining,
+  },
+  {
+    key: "totalPayable",
+    label: "إجمالي المستحق",
+    permission: "payments.view",
+    value: (student) => student.fees?.overallPayable,
+  },
+  {
+    key: "totalPaid",
+    label: "إجمالي المدفوع",
+    permission: "payments.view",
+    value: (student) => student.fees?.totalPaid,
+  },
+  {
+    key: "totalRemaining",
+    label: "إجمالي المتبقي",
+    permission: "payments.view",
+    value: (student) => student.fees?.remaining,
+  },
+  {
+    key: "discountPercentage",
+    label: "نسبة الخصم",
+    permission: "payments.view",
+    value: (student) => student.fees?.discountPercentage,
+  },
+];
+const DEFAULT_STUDENT_COLUMNS = [
+  "code",
+  "name",
+  "gender",
+  "birthdate",
+  "class",
+  "registrationPath",
+  "status",
+  "orphan",
+];
 
 const MultiSelectFilter = ({
   label,
@@ -125,6 +316,23 @@ export default function StudentsList() {
     studentTemplate,
     activeCount,
   } = useStudentsList();
+  const availableColumns = STUDENT_LIST_COLUMNS.filter(
+    ({ permission }) => !permission || has(permission),
+  );
+  const availableColumnKeys = availableColumns.map(({ key }) => key);
+  const [selectedColumns, setSelectedColumns] = useSessionStorageState(
+    "students-list-columns",
+    DEFAULT_STUDENT_COLUMNS,
+  );
+  const hasColumn = (key) =>
+    availableColumnKeys.includes(key) && selectedColumns.includes(key);
+  const renderExtraColumn = (student, column) => {
+    const value = column.value(student);
+    if (value == null || value === "") return "—";
+    if (typeof value === "boolean") return value ? "نعم" : "لا";
+    if (typeof value === "number") return value.toLocaleString();
+    return value;
+  };
 
   const sortableHeader = (label, field) => (
     <th
@@ -293,7 +501,7 @@ export default function StudentsList() {
             className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${activeCount ? "border-[#04CDF9] text-[#036A87] bg-brand-light" : "border-gray-300 text-gray-700"}`}
           >
             <Filter className="h-4 w-4" /> فلاتر{" "}
-            {activeCount > 0 && (
+            {activeCount > 0 && has("payments.view") && (
               <span className="rounded-full bg-[#04CDF9] text-white text-[10px] px-1.5">
                 {activeCount}
               </span>
@@ -464,18 +672,38 @@ export default function StudentsList() {
           </div>
         )}
 
+        <div className="flex justify-end border-b border-gray-200 p-3">
+          <ColumnSelector
+            columns={availableColumns}
+            selectedColumns={selectedColumns}
+            onChange={setSelectedColumns}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                {sortableHeader("الكود", "code")}
-                {sortableHeader("الاسم الكامل", "name")}
-                {sortableHeader("الجنس", "gender")}
-                {sortableHeader("تاريخ الميلاد", "birthdate")}
-                {sortableHeader("الصف", "class")}
-                {sortableHeader("مسار", "registrationPath")}
-                {sortableHeader("الوضع", "status")}
-                {sortableHeader("يتيم", "orphan")}
+                {hasColumn("code") && sortableHeader("الكود", "code")}
+                {hasColumn("name") && sortableHeader("الاسم الكامل", "name")}
+                {hasColumn("gender") && sortableHeader("الجنس", "gender")}
+                {hasColumn("birthdate") && sortableHeader("تاريخ الميلاد", "birthdate")}
+                {hasColumn("class") && sortableHeader("الصف", "class")}
+                {hasColumn("registrationPath") && sortableHeader("مسار", "registrationPath")}
+                {hasColumn("status") && sortableHeader("الوضع", "status")}
+                {hasColumn("orphan") && sortableHeader("يتيم", "orphan")}
+                {availableColumns
+                  .filter(
+                    ({ key, value }) =>
+                      value && selectedColumns.includes(key),
+                  )
+                  .map((column) => (
+                    <th
+                      key={column.key}
+                      className="whitespace-nowrap px-4 py-3 font-medium"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
                 <th className="px-4 py-3 font-medium text-left">إجراءات</th>
               </tr>
             </thead>
@@ -483,7 +711,7 @@ export default function StudentsList() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
@@ -493,7 +721,7 @@ export default function StudentsList() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                     data-testid="students-empty"
                   >
@@ -513,24 +741,24 @@ export default function StudentsList() {
                     className="border-t border-gray-100 hover:bg-gray-50"
                     data-testid={`student-row-${s.id}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                    {hasColumn("code") && <td className="px-4 py-3 font-mono text-xs text-gray-600">
                       {s.code || "—"}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    </td>}
+                    {hasColumn("name") && <td className="px-4 py-3 font-medium text-gray-900">
                       <Link
                         to={`/students/${s.id}`}
                         className="text-[#036A87] hover:underline"
                       >
                         {s.student?.fullName}
                       </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("gender") && <td className="px-4 py-3 text-gray-600">
                       {GENDER_LABELS[s.student?.gender] || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("birthdate") && <td className="px-4 py-3 text-gray-600">
                       {s.student?.birthdate?.slice(0, 10) || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("class") && <td className="px-4 py-3 text-gray-600">
                       {has("classes.view") && s.currentClassId ? (
                         <Link
                           to={`/classes/${s.currentClassId}`}
@@ -541,8 +769,8 @@ export default function StudentsList() {
                       ) : (
                         s.currentClass?.name || s.student?.newClass || "—"
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("registrationPath") && <td className="px-4 py-3 text-gray-600">
                       <div>{s.student?.registrationPath || "—"}</div>
                       <div className="text-xs text-gray-500">
                         النهائي:{" "}
@@ -550,8 +778,8 @@ export default function StudentsList() {
                           s.student?.registrationPath ||
                           "—"}
                       </div>
-                    </td>
-                    <td
+                    </td>}
+                    {hasColumn("status") && <td
                       className={`px-4 py-3 ${s.student?.status === "inactive" ? "text-red-600" : "text-gray-600"}`}
                     >
                       <div>{STATUS_LABELS[s.student?.status] || "—"}</div>
@@ -564,8 +792,8 @@ export default function StudentsList() {
                             سبب التعطيل: {s.deactivationReason}
                           </div>
                         )}
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {hasColumn("orphan") && <td className="px-4 py-3">
                       {s.student?.orphan ? (
                         <span className="inline-flex text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                           نعم
@@ -575,7 +803,20 @@ export default function StudentsList() {
                           لا
                         </span>
                       )}
-                    </td>
+                    </td>}
+                    {availableColumns
+                      .filter(
+                        ({ key, value }) =>
+                          value && selectedColumns.includes(key),
+                      )
+                      .map((column) => (
+                        <td
+                          key={column.key}
+                          className="whitespace-nowrap px-4 py-3 text-gray-600"
+                        >
+                          {renderExtraColumn(s, column)}
+                        </td>
+                      ))}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-start">
                         <button

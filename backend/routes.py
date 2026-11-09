@@ -59,6 +59,41 @@ AUDIT_IGNORED_PATHS = {
 
 @app.middleware("http")
 async def audit_data_changes(request, call_next):
+    request_label = None
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path not in AUDIT_IGNORED_PATHS
+        and request.headers.get("content-type", "").split(";", 1)[0].lower()
+        == "application/json"
+    ):
+        content_length = request.headers.get("content-length")
+        if (
+            content_length
+            and content_length.isdigit()
+            and int(content_length) <= 1024 * 1024
+        ):
+            original_receive = request._receive
+            body = await request.body()
+            try:
+                request_label = _audit_request_label(json.loads(body))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+
+            body_sent = False
+
+            async def receive_body():
+                nonlocal body_sent
+                if not body_sent:
+                    body_sent = True
+                    return {
+                        "type": "http.request",
+                        "body": body,
+                        "more_body": False,
+                    }
+                return await original_receive()
+
+            request._receive = receive_body
+
     response = await call_next(request)
     if (
         request.method not in {"POST", "PUT", "PATCH", "DELETE"}
@@ -80,6 +115,7 @@ async def audit_data_changes(request, call_next):
         "id": str(uuid.uuid4()),
         "method": request.method,
         "path": request.url.path,
+        "requestLabel": request_label or _audit_route_label(request.url.path),
         "statusCode": response.status_code,
         "userId": claims.get("sub"),
         "username": claims.get("username"),
@@ -95,6 +131,38 @@ async def audit_data_changes(request, call_next):
             request.url.path,
         )
     return response
+
+
+def _audit_request_label(payload):
+    preferred_keys = (
+        "title", "name", "fullName", "studentName", "teacherName",
+        "className", "branchName", "username", "code",
+    )
+    pending = [payload]
+    while pending:
+        value = pending.pop(0)
+        if isinstance(value, dict):
+            for key in preferred_keys:
+                label = value.get(key)
+                if isinstance(label, str) and label.strip():
+                    return label.strip()[:200]
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    return None
+
+
+def _audit_route_label(path):
+    parts = [
+        part for part in path.strip("/").split("/")
+        if part and part.lower() != "api"
+    ]
+    for part in reversed(parts):
+        if re.fullmatch(r"[0-9a-fA-F-]{16,}", part) or part.isdigit():
+            continue
+        return part.replace("-", " ").replace("_", " ").strip().title()
+    return "Request"
+
 
 def now_iso(): return datetime.now(timezone.utc).isoformat()
 def hash_pw(p): return bcrypt.hashpw(p.encode(), bcrypt.gensalt()).decode()
@@ -412,18 +480,85 @@ async def list_permissions(current=Depends(get_current_user)):
 async def list_audit_logs(
     limit: int = Query(default=50, ge=1, le=200),
     skip: int = Query(default=0, ge=0),
+    user: Optional[str] = Query(default=None, max_length=100),
+    status: Optional[str] = Query(default=None, max_length=50),
+    date_from: Optional[date] = Query(default=None, alias="dateFrom"),
+    date_to: Optional[date] = Query(default=None, alias="dateTo"),
+    request_type: Optional[str] = Query(
+        default=None, alias="type", regex="^(POST|PUT|PATCH|DELETE)$"
+    ),
     current=Depends(require_permission("auditLogs.view")),
 ):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(
+            status_code=400, detail="dateFrom must be on or before dateTo"
+        )
+
     if "branches.accessAll" in (current.get("permissions") or []):
-        query = {}
+        scope_query = {}
     else:
-        query = {"branchId": current["branchId"]}
+        scope_query = {"branchId": current["branchId"]}
+    filters = [scope_query] if scope_query else []
+    if user and user.strip():
+        user_pattern = re.escape(user.strip())
+        matching_users = await raw_db.users.find(
+            {
+                "$or": [
+                    {"username": {"$regex": user_pattern, "$options": "i"}},
+                    {"name": {"$regex": user_pattern, "$options": "i"}},
+                ]
+            },
+            {"_id": 0, "id": 1},
+        ).to_list(None)
+        matching_user_ids = [item["id"] for item in matching_users if item.get("id")]
+        filters.append({
+            "$or": [
+                {"username": {"$regex": user_pattern, "$options": "i"}},
+                {"userId": {"$regex": user_pattern, "$options": "i"}},
+                {"userId": {"$in": matching_user_ids}},
+            ]
+        })
+    if status:
+        try:
+            status_codes = sorted({int(value) for value in status.split(",")})
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid status code")
+        if not status_codes or any(code < 100 or code > 599 for code in status_codes):
+            raise HTTPException(status_code=422, detail="Invalid status code")
+        filters.append({"statusCode": {"$in": status_codes}})
+    if request_type:
+        filters.append({"method": request_type})
+    created_at = {}
+    if date_from:
+        created_at["$gte"] = datetime.combine(
+            date_from, datetime.min.time(), timezone.utc
+        ).isoformat()
+    if date_to:
+        created_at["$lt"] = datetime.combine(
+            date_to + timedelta(days=1), datetime.min.time(), timezone.utc
+        ).isoformat()
+    if created_at:
+        filters.append({"createdAt": created_at})
+
+    query = {"$and": filters} if filters else {}
     collection = raw_db.audit_logs
     total = await collection.count_documents(query)
     items = await collection.find(query, {"_id": 0}).sort(
         "createdAt", -1
     ).skip(skip).limit(limit).to_list(limit)
-    return {"items": items, "total": total}
+    status_options = await collection.distinct("statusCode", scope_query)
+    user_ids = list({item.get("userId") for item in items if item.get("userId")})
+    users = await raw_db.users.find(
+        {"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(len(user_ids)) if user_ids else []
+    user_names = {user["id"]: user.get("name") for user in users}
+    for item in items:
+        item["fullName"] = user_names.get(item.get("userId")) or item.get("username")
+    return {
+        "items": items,
+        "total": total,
+        "statusOptions": sorted(status_options),
+    }
 #endregion
 
 #region Branches
@@ -1687,6 +1822,9 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
                         page: int = 1, limit: int = 20,
                         current=Depends(require_permission("students.view"))):
     # Inactive records are retained for history but stay out of normal lists.
+    permissions = set(current.get("permissions") or [])
+    if paymentStatus and "payments.view" not in permissions:
+        raise HTTPException(403, "لا تملك صلاحية عرض بيانات المدفوعات")
     statuses = _split_filter_values(status)
     q = {}
     if gender: q["student.gender"] = gender
@@ -1807,6 +1945,28 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
         current,
         {doc["id"]: totals_by_student[doc["id"]] for doc in docs},
     )
+    if "students.fullInformation.view" not in permissions:
+        allowed_student_fields = {
+            "fullName",
+            "gender",
+            "birthdate",
+            "registrationPath",
+            "finalRegistrationPath",
+            "status",
+            "orphan",
+        }
+        for doc in docs:
+            doc["student"] = {
+                key: value
+                for key, value in (doc.get("student") or {}).items()
+                if key in allowed_student_fields
+            }
+            doc.pop("father", None)
+            doc.pop("mother", None)
+            doc.pop("general", None)
+    if "payments.view" not in permissions:
+        for doc in docs:
+            doc.pop("fees", None)
     summary = {
         "totalPayable": sum(
             _overall_student_payable(d.get("fees") or {})
@@ -1833,6 +1993,8 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
         ),
     }
     summary["totalRemaining"] = max(0, summary["totalPayable"] - summary["totalPaid"])
+    if "payments.view" not in permissions:
+        summary = {}
     return {"data": docs, "summary": summary,
             "pagination": {"page": page, "limit": limit, "total": total,
                             "totalPages": (total + limit - 1) // limit}}
@@ -3210,6 +3372,7 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
 @api.get("/payments/summary")
 async def payment_summary(search: Optional[str] = None, academicYear: Optional[str] = None,
                           include_dropped: bool = Query(default=False, alias="includeDropped"),
+                          exclude_dropped: bool = Query(default=False, alias="excludeDropped"),
                           current=Depends(require_permission("payments.view"))):
     student_query = {}
     if academicYear:
@@ -3235,8 +3398,16 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
         fee_type: {"payable": 0, "paid": 0, "remaining": 0}
         for fee_type in FEE_TYPE_FIELDS
     }
+    dropped_totals = {"payable": 0, "paid": 0, "remaining": 0}
+    dropped_student_ids = set()
     for student in students:
-        if include_dropped or (student.get("student") or {}).get("status") != "inactive":
+        is_dropped = (student.get("student") or {}).get("status") == "inactive"
+        if is_dropped:
+            dropped_student_ids.add(student["id"])
+            dropped_totals["payable"] += sum(
+                _fee_payables(student.get("fees") or {}).values()
+            )
+        if not is_dropped or include_dropped:
             for fee_type, payable in _fee_payables(student.get("fees") or {}).items():
                 categories[fee_type]["payable"] += payable
     if student_ids:
@@ -3254,10 +3425,17 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
                 continue
             fee_type = payment.get("feeType") or "academic"
             if fee_type in categories:
-                categories[fee_type]["paid"] += float(payment.get("amount") or 0)
+                amount = float(payment.get("amount") or 0)
+                if payment.get("student") in dropped_student_ids:
+                    dropped_totals["paid"] += amount
+                if not exclude_dropped or payment.get("student") not in dropped_student_ids:
+                    categories[fee_type]["paid"] += amount
     for values in categories.values():
         values["remaining"] = max(0, values["payable"] - values["paid"])
-    return {"feeTypes": categories}
+    dropped_totals["remaining"] = max(
+        0, dropped_totals["payable"] - dropped_totals["paid"]
+    )
+    return {"feeTypes": categories, "dropped": dropped_totals}
 
 @api.get("/payments/{pid}")
 async def get_payment(pid: str, current=Depends(require_permission("payments.view"))):
@@ -4533,6 +4711,7 @@ async def reports_overview(current=Depends(require_permission("reports.view"))):
     required_installments_by_grade = {}
     discount_rows = []
     annual_amounts = []
+    student_financial_rows = []
     withdrawn_rows = []
     installment_students = []
     sponsorship_rows = []
@@ -4575,6 +4754,27 @@ async def reports_overview(current=Depends(require_permission("reports.view"))):
         if not is_inactive:
             academic_collected = paid.get("academic", 0.0)
             bus_collected = paid.get("transportation", 0.0)
+            bus_applicable = bool(
+                fees.get("busRegistered", bus_payable > 0)
+            )
+            total_student_payable = academic_payable + bus_payable
+            total_student_collected = academic_collected + bus_collected
+            student_financial_rows.append({
+                "studentId": student_id,
+                "name": student_info.get("fullName") or student.get("code") or "",
+                "grade": grade,
+                "payable": total_student_payable,
+                "paid": total_student_collected,
+                "remaining": max(0.0, academic_payable - academic_collected)
+                + max(0.0, bus_payable - bus_collected),
+                "academicPayable": academic_payable,
+                "academicPaid": academic_collected,
+                "academicRemaining": max(0.0, academic_payable - academic_collected),
+                "busPayable": bus_payable,
+                "busPaid": bus_collected,
+                "busRemaining": max(0.0, bus_payable - bus_collected),
+                "busApplicable": bus_applicable,
+            })
             total_payable = sum(fee_payables.values())
             total_collected_for_student = sum(
                 paid.get(fee_type, 0.0)
@@ -4791,6 +4991,10 @@ async def reports_overview(current=Depends(require_permission("reports.view"))):
         "financial": {
             "byGrade": sorted(financial_by_grade.values(), key=lambda item: item["grade"]),
             "total": total_financial,
+            "studentSummary": sorted(
+                student_financial_rows,
+                key=lambda item: (item["grade"], item["name"]),
+            ),
             "transportation": transport_financial,
             "monthly": sorted(monthly.values(), key=lambda item: item["month"]),
             "sponsorshipAvailable": True,

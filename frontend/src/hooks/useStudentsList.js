@@ -89,35 +89,144 @@ const studentColumns = [
   {
     label: "finalRegistrationPath",
     value: (s) => s.student?.finalRegistrationPath,
+    permission: "students.fullInformation.view",
   },
   {
     label: "newClass",
     value: (s) => s.student?.newClass || s.currentClass?.name,
+    permission: "students.fullInformation.view",
   },
-  { label: "currentAddress", value: (s) => s.student?.currentAddress },
+  {
+    label: "currentAddress",
+    value: (s) => s.student?.currentAddress,
+    permission: "students.fullInformation.view",
+  },
   { label: "orphan", value: (s) => Boolean(s.student?.orphan) },
-  { label: "orphanOf", value: (s) => s.student?.orphanOf },
-  { label: "orphanDocType", value: (s) => s.student?.orphanDocType },
-  { label: "fatherName", value: (s) => s.father?.name },
-  { label: "fatherDeceased", value: (s) => s.father?.alive === false },
-  { label: "motherName", value: (s) => s.mother?.name },
-  { label: "motherPhone", value: (s) => s.mother?.phone },
-  { label: "academicYear", value: (s) => s.fees?.academicYear },
-  { label: "academicFee", value: (s) => s.fees?.totalPayable },
-  { label: "academicPaid", value: (s) => s.fees?.byType?.academic?.paid },
+  {
+    label: "orphanOf",
+    value: (s) => s.student?.orphanOf,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "orphanDocType",
+    value: (s) => s.student?.orphanDocType,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "fatherName",
+    value: (s) => s.father?.name,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "fatherDeceased",
+    value: (s) => s.father?.alive === false,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "motherName",
+    value: (s) => s.mother?.name,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "motherPhone",
+    value: (s) => s.mother?.phone,
+    permission: "students.fullInformation.view",
+  },
+  {
+    label: "academicYear",
+    value: (s) => s.fees?.academicYear,
+    permission: "payments.view",
+  },
+  {
+    label: "academicFee",
+    value: (s) => s.fees?.byType?.academic?.payable,
+    permission: "payments.view",
+  },
+  {
+    label: "academicPaid",
+    value: (s) => s.fees?.byType?.academic?.paid,
+    permission: "payments.view",
+  },
+  {
+    label: "academicRemaining",
+    value: (s) => s.fees?.byType?.academic?.remaining,
+    permission: "payments.view",
+  },
   {
     label: "generalDiscountPercentage",
     value: (s) => s.fees?.generalDiscountPercentage,
+    permission: "payments.view",
   },
   {
     label: "siblingsStaffDiscountPercentage",
     value: (s) => s.fees?.siblingsStaffDiscountPercentage,
+    permission: "payments.view",
   },
-  { label: "booksFee", value: (s) => s.fees?.booksFee },
-  { label: "booksPaid", value: (s) => s.fees?.byType?.books?.paid },
-  { label: "busFee", value: (s) => s.fees?.busFee },
-  { label: "busPaid", value: (s) => s.fees?.byType?.transportation?.paid },
-  { label: "busNo", value: (s) => s.student?.busNumber },
+  {
+    label: "booksFee",
+    value: (s) => s.fees?.byType?.books?.payable,
+    permission: "payments.view",
+  },
+  {
+    label: "booksPaid",
+    value: (s) => s.fees?.byType?.books?.paid,
+    permission: "payments.view",
+  },
+  {
+    label: "booksRemaining",
+    value: (s) => s.fees?.byType?.books?.remaining,
+    permission: "payments.view",
+  },
+  {
+    label: "busFee",
+    value: (s) => s.fees?.byType?.transportation?.payable,
+    permission: "payments.view",
+  },
+  {
+    label: "busPaid",
+    value: (s) => s.fees?.byType?.transportation?.paid,
+    permission: "payments.view",
+  },
+  {
+    label: "busRemaining",
+    value: (s) => s.fees?.byType?.transportation?.remaining,
+    permission: "payments.view",
+  },
+  {
+    label: "outfitFee",
+    value: (s) => s.fees?.byType?.outfit?.payable,
+    permission: "payments.view",
+  },
+  {
+    label: "outfitPaid",
+    value: (s) => s.fees?.byType?.outfit?.paid,
+    permission: "payments.view",
+  },
+  {
+    label: "outfitRemaining",
+    value: (s) => s.fees?.byType?.outfit?.remaining,
+    permission: "payments.view",
+  },
+  {
+    label: "totalPayable",
+    value: (s) => s.fees?.overallPayable,
+    permission: "payments.view",
+  },
+  {
+    label: "totalPaid",
+    value: (s) => s.fees?.totalPaid,
+    permission: "payments.view",
+  },
+  {
+    label: "totalRemaining",
+    value: (s) => s.fees?.remaining,
+    permission: "payments.view",
+  },
+  {
+    label: "busNo",
+    value: (s) => s.student?.busNumber,
+    permission: "students.fullInformation.view",
+  },
   { label: "dropped", value: (s) => s.student?.status === "inactive" },
 ];
 
@@ -327,7 +436,13 @@ export function useStudentsList() {
         ...serializeFilters(normalizeFilters(filters)),
       };
       const response = await api.get("/students", { params });
-      downloadCsv("students.csv", studentColumns, response.data.data);
+      downloadCsv(
+        "students.csv",
+        studentColumns.filter(
+          ({ permission }) => !permission || has(permission),
+        ),
+        response.data.data,
+      );
     } catch {
       toast.error("تعذر تصدير الطلاب");
     }

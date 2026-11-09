@@ -21,6 +21,28 @@ import {
 import { downloadCsv } from "@/lib/csv";
 import { useSessionStorageState } from "@/hooks/useSessionStorageState";
 import Pagination from "@/components/Pagination";
+import ColumnSelector from "@/components/ColumnSelector";
+
+const PAYMENT_LIST_COLUMNS = [
+  { key: "student", label: "الطالب" },
+  { key: "academicYear", label: "السنة الدراسية" },
+  { key: "semester", label: "الفصل" },
+  { key: "feeType", label: "نوع الرسوم" },
+  { key: "amount", label: "المبلغ" },
+  { key: "totalPayable", label: "إجمالي المستحق" },
+  { key: "totalRemaining", label: "المتبقي" },
+  { key: "paymentDate", label: "تاريخ الدفع" },
+  { key: "createdBy", label: "سُجّل بواسطة" },
+];
+
+const PAYMENT_SUMMARY_CARDS = [
+  ...FEE_TYPE_ORDER.map((feeType) => ({
+    key: feeType,
+    label: FEE_TYPE_LABELS[feeType],
+  })),
+  { key: "dropped", label: "الطلاب المنسحبون" },
+];
+const DEFAULT_PAYMENT_SUMMARY_CARDS = FEE_TYPE_ORDER;
 
 const PaymentBadge = ({ semester }) => {
   const styles = {
@@ -64,6 +86,16 @@ const splitAmount = (amount, count) => {
 
 export default function Payments() {
   const { has } = useAuth();
+  const [selectedColumns, setSelectedColumns] = useSessionStorageState(
+    "payments-list-columns",
+    PAYMENT_LIST_COLUMNS.map(({ key }) => key),
+  );
+  const hasColumn = (key) => selectedColumns.includes(key);
+  const [selectedSummaryCards, setSelectedSummaryCards] =
+    useSessionStorageState(
+      "payments-summary-cards",
+      DEFAULT_PAYMENT_SUMMARY_CARDS,
+    );
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useSessionStorageState("payments-list-search", "");
@@ -98,7 +130,6 @@ export default function Payments() {
   const [students, setStudents] = useState([]);
   const [confirmId, setConfirmId] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [includeDropped, setIncludeDropped] = useState(false);
   const [refund, setRefund] = useState(null);
   const [refundPaid, setRefundPaid] = useState(0);
   const [refundLoading, setRefundLoading] = useState(false);
@@ -195,7 +226,7 @@ export default function Payments() {
         params: {
           search: debouncedQ,
           academicYear: year,
-          ...(includeDropped ? { includeDropped: true } : {}),
+          excludeDropped: true,
         },
       })
       .then((response) => {
@@ -207,7 +238,7 @@ export default function Payments() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQ, includeDropped, year, summaryVersion]);
+  }, [debouncedQ, year, summaryVersion]);
 
   const changePageSize = (size) => {
     setPageSize(size);
@@ -423,28 +454,33 @@ export default function Payments() {
         </div>
       </div>
 
-      <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={includeDropped}
-          onChange={(event) => setIncludeDropped(event.target.checked)}
-          data-testid="payments-include-dropped"
-          className="rounded border-gray-300 text-[#036A87] focus:ring-[#04CDF9]"
+      <div className="flex justify-end">
+        <ColumnSelector
+          columns={PAYMENT_SUMMARY_CARDS}
+          selectedColumns={selectedSummaryCards}
+          onChange={setSelectedSummaryCards}
+          maxSelections={4}
+          labelKey="payments.chooseSummaryCards"
+          selectAllLabelKey="payments.selectUpToFourCards"
         />
-        تضمين الطلاب المنسحبين في إجمالي المستحق
-      </label>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {FEE_TYPE_ORDER.map((feeType) => {
-          const totals = summary?.feeTypes?.[feeType];
+        {PAYMENT_SUMMARY_CARDS.filter(({ key }) =>
+          selectedSummaryCards.includes(key),
+        ).map(({ key, label }) => {
+          const totals =
+            key === "dropped"
+              ? summary?.dropped
+              : summary?.feeTypes?.[key];
           return (
             <div
-              key={feeType}
+              key={key}
               className="bg-white rounded-lg border border-gray-200 p-4"
-              data-testid={`payments-fee-${feeType}`}
+              data-testid={`payments-summary-${key}`}
             >
               <h2 className="text-sm font-semibold text-gray-900 mb-3">
-                {FEE_TYPE_LABELS[feeType]}
+                {label}
               </h2>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-2">
@@ -550,19 +586,26 @@ export default function Payments() {
             data-testid="payments-max-amount-filter"
           />
         </div>
+        <div className="flex justify-end border-b border-gray-200 p-3">
+          <ColumnSelector
+            columns={PAYMENT_LIST_COLUMNS}
+            selectedColumns={selectedColumns}
+            onChange={setSelectedColumns}
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
-                <th className="px-4 py-3 font-medium">الطالب</th>
-                <th className="px-4 py-3 font-medium">السنة الدراسية</th>
-                <th className="px-4 py-3 font-medium">الفصل</th>
-                <th className="px-4 py-3 font-medium">نوع الرسوم</th>
-                <th className="px-4 py-3 font-medium">المبلغ</th>
-                <th className="px-4 py-3 font-medium">إجمالي المستحق</th>
-                <th className="px-4 py-3 font-medium">المتبقي</th>
-                <th className="px-4 py-3 font-medium">تاريخ الدفع</th>
-                <th className="px-4 py-3 font-medium">سُجّل بواسطة</th>
+                {hasColumn("student") && <th className="px-4 py-3 font-medium">الطالب</th>}
+                {hasColumn("academicYear") && <th className="px-4 py-3 font-medium">السنة الدراسية</th>}
+                {hasColumn("semester") && <th className="px-4 py-3 font-medium">الفصل</th>}
+                {hasColumn("feeType") && <th className="px-4 py-3 font-medium">نوع الرسوم</th>}
+                {hasColumn("amount") && <th className="px-4 py-3 font-medium">المبلغ</th>}
+                {hasColumn("totalPayable") && <th className="px-4 py-3 font-medium">إجمالي المستحق</th>}
+                {hasColumn("totalRemaining") && <th className="px-4 py-3 font-medium">المتبقي</th>}
+                {hasColumn("paymentDate") && <th className="px-4 py-3 font-medium">تاريخ الدفع</th>}
+                {hasColumn("createdBy") && <th className="px-4 py-3 font-medium">سُجّل بواسطة</th>}
                 <th className="px-4 py-3 font-medium text-left">إجراءات</th>
               </tr>
             </thead>
@@ -570,7 +613,7 @@ export default function Payments() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
@@ -580,7 +623,7 @@ export default function Payments() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={selectedColumns.length + 1}
                     className="px-4 py-10 text-center text-gray-500"
                   >
                     لا توجد مدفوعات.
@@ -593,7 +636,7 @@ export default function Payments() {
                     className="border-t border-gray-100 hover:bg-gray-50"
                     data-testid={`payment-row-${p.id}`}
                   >
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    {hasColumn("student") && <td className="px-4 py-3 font-medium text-gray-900">
                       {has("students.view") ? (
                         <Link
                           to={`/students/${p.student}`}
@@ -604,17 +647,17 @@ export default function Payments() {
                       ) : (
                         p.studentName
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("academicYear") && <td className="px-4 py-3 text-gray-600">
                       {p.academicYear || "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {hasColumn("semester") && <td className="px-4 py-3">
                       <PaymentBadge semester={p.semester} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-700">
+                    </td>}
+                    {hasColumn("feeType") && <td className="px-4 py-3 text-gray-700">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
-                    </td>
-                    <td
+                    </td>}
+                    {hasColumn("amount") && <td
                       className={`px-4 py-3 font-semibold tabular-nums ${
                         p.type === "refund" || Number(p.amount) < 0
                           ? "text-red-600"
@@ -622,19 +665,19 @@ export default function Payments() {
                       }`}
                     >
                       {p.amount}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
+                    </td>}
+                    {hasColumn("totalPayable") && <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
                       {p.totalPayable ?? 0}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-amber-700 tabular-nums">
+                    </td>}
+                    {hasColumn("totalRemaining") && <td className="px-4 py-3 font-semibold text-amber-700 tabular-nums">
                       {p.totalRemaining ?? 0}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("paymentDate") && <td className="px-4 py-3 text-gray-600">
                       {(p.paymentDate || "").slice(0, 10)}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    </td>}
+                    {hasColumn("createdBy") && <td className="px-4 py-3 text-gray-600">
                       {p.createdByName}
-                    </td>
+                    </td>}
                     <td className="px-4 py-3 text-left">
                       <div className="inline-flex gap-1">
                         {has("payments.update") && (

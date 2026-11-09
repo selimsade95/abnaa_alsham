@@ -127,10 +127,40 @@ class TestAuthAndCatalog:
         )
         assert logs.status_code == 200, logs.text
         assert logs.json()["total"] >= 1
-        assert any(
-            item["method"] == "PUT"
-            and item["path"] == "/api/settings/discount-options"
-            for item in logs.json()["items"]
+        target = next(
+            (
+                item for item in logs.json()["items"]
+                if item["method"] == "PUT"
+                and item["path"] == "/api/settings/discount-options"
+            ),
+            None,
+        )
+        assert target
+        assert target["fullName"]
+        assert target["requestLabel"]
+        assert target["statusCode"] in logs.json()["statusOptions"]
+
+        filtered = requests.get(
+            f"{API}/audit-logs",
+            headers=admin_headers,
+            params={
+                "user": target["fullName"],
+                "status": f'{target["statusCode"]},599',
+                "dateFrom": target["createdAt"][:10],
+                "dateTo": target["createdAt"][:10],
+                "type": target["method"],
+            },
+        )
+        assert filtered.status_code == 200, filtered.text
+        assert target["id"] in {
+            item["id"] for item in filtered.json()["items"]
+        }
+        assert all(
+            item["username"] == target["username"]
+            and item["statusCode"] in {target["statusCode"], 599}
+            and item["method"] == target["method"]
+            and item["createdAt"][:10] == target["createdAt"][:10]
+            for item in filtered.json()["items"]
         )
 
     def test_roles_seeded(self, admin_headers):
@@ -1065,6 +1095,18 @@ class TestPayments:
     ):
         overview = requests.get(f"{API}/reports/overview", headers=admin_headers)
         assert overview.status_code == 200, overview.text
+        summary_row = next(
+            item
+            for item in overview.json()["financial"]["studentSummary"]
+            if item["studentId"] == created_student["id"]
+        )
+        assert summary_row["payable"] == (
+            summary_row["academicPayable"] + summary_row["busPayable"]
+        )
+        assert summary_row["paid"] == (
+            summary_row["academicPaid"] + summary_row["busPaid"]
+        )
+        assert summary_row["remaining"] >= 0
         assert any(
             item["id"] == created_class["id"]
             for item in overview.json()["classes"]
@@ -1350,6 +1392,25 @@ class TestPayments:
         assert fee_types["academic"]["paid"] == 50
         assert fee_types["transportation"]["payable"] == 0
         assert fee_types["transportation"]["paid"] == 20
+        payment_summary_excluding_dropped = requests.get(
+            f"{API}/payments/summary",
+            headers=admin_headers,
+            params={"search": student_name, "excludeDropped": "true"},
+        )
+        assert payment_summary_excluding_dropped.status_code == 200
+        active_fee_types = payment_summary_excluding_dropped.json()["feeTypes"]
+        assert active_fee_types["academic"] == {
+            "payable": 0,
+            "paid": 0,
+            "remaining": 0,
+        }
+        assert active_fee_types["transportation"] == {
+            "payable": 0,
+            "paid": 0,
+            "remaining": 0,
+        }
+        dropped_totals = payment_summary_excluding_dropped.json()["dropped"]
+        assert dropped_totals == {"payable": 140, "paid": 70, "remaining": 70}
         payment_summary_with_dropped = requests.get(
             f"{API}/payments/summary",
             headers=admin_headers,

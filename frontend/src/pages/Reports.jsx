@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { isValidElement, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import {
   CalendarRange,
@@ -44,6 +44,9 @@ function DataTableContent({ headers, rows, emptyMessage }) {
   const sortedRows = useMemo(() => {
     const parseNumeric = (value) => {
       if (typeof value === "number") return value;
+      if (isValidElement(value) && value.props["data-sort-value"] != null) {
+        return Number(value.props["data-sort-value"]);
+      }
       if (typeof value !== "string") return Number.NaN;
       const cleaned = westernDigits(value).replace(/[,$%\s]/g, "");
       if (!cleaned) return Number.NaN;
@@ -120,7 +123,10 @@ function DataTableContent({ headers, rows, emptyMessage }) {
                   {index + 1}
                 </td>
                 {row.cells.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-4 py-3 align-top">
+                  <td
+                    key={cellIndex}
+                    className="px-4 py-3 align-top text-start"
+                  >
                     {typeof cell === "string" || typeof cell === "number"
                       ? westernDigits(cell)
                       : (cell ?? "—")}
@@ -144,8 +150,9 @@ function DataTableContent({ headers, rows, emptyMessage }) {
   );
 }
 
-const Panel = ({ title, description, children }) => {
+const Panel = ({ title, description, visible = true, children }) => {
   const [open, setOpen] = useState(true);
+  if (!visible) return null;
   return (
     <details
       open={open}
@@ -406,6 +413,38 @@ export default function Reports() {
             financial.total?.remaining,
           ],
         ],
+      },
+      {
+        id: "studentFinancialSummary",
+        title: tr("studentFinancialSummary"),
+        headers: [
+          tr("student"),
+          tr("grade"),
+          tr("payable"),
+          tr("collected"),
+          tr("remaining"),
+        ],
+        rows: (financial.studentSummary || []).map((row) => {
+          const amountWithBreakdown = (total, academic, bus) =>
+            row.busApplicable
+              ? `${money(total)} $\n(${money(academic)} + ${money(bus)})`
+              : `${money(total)} $`;
+          return [
+            row.name,
+            row.grade,
+            amountWithBreakdown(
+              row.payable,
+              row.academicPayable,
+              row.busPayable,
+            ),
+            amountWithBreakdown(row.paid, row.academicPaid, row.busPaid),
+            amountWithBreakdown(
+              row.remaining,
+              row.academicRemaining,
+              row.busRemaining,
+            ),
+          ];
+        }),
       },
       {
         id: "monthlyCollections",
@@ -696,6 +735,8 @@ export default function Reports() {
   const selectedSections = availableSections.filter(
     ({ id }) => selectedSectionIds === null || selectedSectionIds.includes(id),
   );
+  const isSectionSelected = (id) =>
+    selectedSectionIds === null || selectedSectionIds.includes(id);
   const toggleSection = (sectionId) => {
     setSelectedSectionIds((currentSelection) => {
       const currentIds =
@@ -790,7 +831,7 @@ export default function Reports() {
       {availableSections.length > 0 && (
         <Panel
           title={tr("selectExportSections")}
-          description={tr("selectExportSectionsHelp")}
+          description={tr("selectReportSectionsHelp")}
         >
           <div className="space-y-4 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -852,7 +893,10 @@ export default function Reports() {
         </div>
       ) : overview ? (
         <>
-          <Panel title={tr("studentCounts")}>
+          <Panel
+            title={tr("studentCounts")}
+            visible={isSectionSelected("studentCounts")}
+          >
             <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
               <StatCard
                 label={tr("numberOfStudents")}
@@ -877,7 +921,10 @@ export default function Reports() {
           </Panel>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <Panel title={tr("distributionByGrade")}>
+            <Panel
+              title={tr("distributionByGrade")}
+              visible={isSectionSelected("distributionByGrade")}
+            >
               <DataTable
                 headers={[tr("grade"), tr("students")]}
                 rows={distributionRows(
@@ -889,7 +936,10 @@ export default function Reports() {
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
-            <Panel title={tr("distributionByGender")}>
+            <Panel
+              title={tr("distributionByGender")}
+              visible={isSectionSelected("distributionByGender")}
+            >
               <DataTable
                 headers={[tr("gender"), tr("students")]}
                 rows={distributionRows(
@@ -905,7 +955,10 @@ export default function Reports() {
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
-            <Panel title={tr("distributionByPath")}>
+            <Panel
+              title={tr("distributionByPath")}
+              visible={isSectionSelected("distributionByPath")}
+            >
               <DataTable
                 headers={[tr("path"), tr("students")]}
                 rows={distributionRows(distributions.byPath, "path", (value) =>
@@ -916,7 +969,10 @@ export default function Reports() {
             </Panel>
           </div>
 
-          <Panel title={tr("financialByGrade")}>
+          <Panel
+            title={tr("financialByGrade")}
+            visible={isSectionSelected("financialByGrade")}
+          >
             <DataTable
               headers={[
                 tr("grade"),
@@ -939,7 +995,10 @@ export default function Reports() {
             />
           </Panel>
 
-          <Panel title={tr("totalFinancialReport")}>
+          <Panel
+            title={tr("totalFinancialReport")}
+            visible={isSectionSelected("totalFinancialReport")}
+          >
             <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
               <StatCard
                 label={tr("payable")}
@@ -958,8 +1017,62 @@ export default function Reports() {
             </div>
           </Panel>
 
+          <Panel
+            title={tr("studentFinancialSummary")}
+            visible={isSectionSelected("studentFinancialSummary")}
+          >
+            <DataTable
+              headers={[
+                tr("student"),
+                tr("grade"),
+                tr("payable"),
+                tr("collected"),
+                tr("remaining"),
+              ]}
+              rows={(financial.studentSummary || []).map((row) => {
+                const amountCell = (total, academic, bus) => (
+                  <span
+                    data-sort-value={total}
+                    className="block whitespace-nowrap text-start"
+                  >
+                    <span>{money(total)} $</span>
+                    {row.busApplicable && (
+                      <span className="mt-0.5 block text-xs font-normal text-gray-500">
+                        ({money(academic)} + {money(bus)})
+                      </span>
+                    )}
+                  </span>
+                );
+                return {
+                  key: row.studentId,
+                  cells: [
+                    row.name,
+                    row.grade === "__unspecified__"
+                      ? tr("unspecified")
+                      : row.grade,
+                    amountCell(
+                      row.payable,
+                      row.academicPayable,
+                      row.busPayable,
+                    ),
+                    amountCell(row.paid, row.academicPaid, row.busPaid),
+                    amountCell(
+                      row.remaining,
+                      row.academicRemaining,
+                      row.busRemaining,
+                    ),
+                  ],
+                };
+              })}
+              emptyMessage={tr("noReportData")}
+            />
+          </Panel>
+
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Panel title={tr("monthlyCollections")}>
+            <Panel
+              title={tr("monthlyCollections")}
+              visible={isSectionSelected("monthlyCollections")}
+            >
               <DataTable
                 headers={[tr("monthColumn"), tr("collected")]}
                 rows={(financial.monthly || []).map((row) => ({
@@ -974,7 +1087,10 @@ export default function Reports() {
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
-            <Panel title={tr("transportationStatement")}>
+            <Panel
+              title={tr("transportationStatement")}
+              visible={isSectionSelected("transportationStatement")}
+            >
               <div className="grid grid-cols-3 gap-2 p-4">
                 <StatCard
                   label={tr("payable")}
@@ -1012,136 +1128,154 @@ export default function Reports() {
           <Panel
             title={tr("sponsorObligations")}
             description={tr("sponsorAssignmentHelp")}
+            visible={
+              isSectionSelected("sponsorObligations") ||
+              isSectionSelected("orphanFinancialByClass")
+            }
           >
-            <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
-              <StatCard
-                label={tr("orphanPathTotalPayable")}
-                value={`${money(orphanSummary.payable)} $`}
-              />
-              <StatCard
-                label={tr("collected")}
-                value={`${money(orphanSummary.collected)} $`}
-                tone="green"
-              />
-              <StatCard
-                label={tr("remaining")}
-                value={`${money(orphanSummary.remaining)} $`}
-                tone="amber"
-              />
-            </div>
-            <form
-              onSubmit={saveSponsorship}
-              className="grid grid-cols-1 gap-3 border-b border-gray-100 p-4 md:grid-cols-[2fr_2fr_auto] md:items-end"
-            >
-              <label className="text-sm text-gray-700">
-                {tr("orphanStudent")}
-                <select
-                  required
-                  value={sponsorshipForm.studentId}
-                  onChange={(event) =>
-                    selectSponsorshipStudent(event.target.value)
-                  }
-                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            {isSectionSelected("sponsorObligations") && (
+              <>
+                <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3">
+                  <StatCard
+                    label={tr("orphanPathTotalPayable")}
+                    value={`${money(orphanSummary.payable)} $`}
+                  />
+                  <StatCard
+                    label={tr("collected")}
+                    value={`${money(orphanSummary.collected)} $`}
+                    tone="green"
+                  />
+                  <StatCard
+                    label={tr("remaining")}
+                    value={`${money(orphanSummary.remaining)} $`}
+                    tone="amber"
+                  />
+                </div>
+                <form
+                  onSubmit={saveSponsorship}
+                  className="grid grid-cols-1 gap-3 border-b border-gray-100 p-4 md:grid-cols-[2fr_2fr_auto] md:items-end"
                 >
-                  <option value="">{tr("selectOrphanStudent")}</option>
-                  {(financial.orphanStudents || []).map((student) => (
-                    <option key={student.studentId} value={student.studentId}>
-                      {westernDigits(student.name)} —{" "}
-                      {westernDigits(student.className)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-sm text-gray-700">
-                {tr("donorName")}
-                <input
-                  required
-                  maxLength={160}
-                  value={sponsorshipForm.donorName}
-                  onChange={(event) =>
-                    setSponsorshipForm((current) => ({
-                      ...current,
-                      donorName: event.target.value,
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  <label className="text-sm text-gray-700">
+                    {tr("orphanStudent")}
+                    <select
+                      required
+                      value={sponsorshipForm.studentId}
+                      onChange={(event) =>
+                        selectSponsorshipStudent(event.target.value)
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    >
+                      <option value="">{tr("selectOrphanStudent")}</option>
+                      {(financial.orphanStudents || []).map((student) => (
+                        <option
+                          key={student.studentId}
+                          value={student.studentId}
+                        >
+                          {westernDigits(student.name)} —{" "}
+                          {westernDigits(student.className)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-gray-700">
+                    {tr("donorName")}
+                    <input
+                      required
+                      maxLength={160}
+                      value={sponsorshipForm.donorName}
+                      onChange={(event) =>
+                        setSponsorshipForm((current) => ({
+                          ...current,
+                          donorName: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={
+                      savingSponsorship || !financial.orphanStudents?.length
+                    }
+                    className="rounded-lg bg-[#036A87] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {savingSponsorship
+                      ? tr("savingAssignment")
+                      : tr("saveDonorAssignment")}
+                  </button>
+                </form>
+                <DataTable
+                  headers={[
+                    tr("student"),
+                    tr("className"),
+                    tr("sponsor"),
+                    tr("payable"),
+                    tr("collected"),
+                    tr("remaining"),
+                  ]}
+                  rows={(financial.sponsorship || []).map((row) => ({
+                    key: row.id || row.studentId,
+                    cells: [
+                      row.studentName,
+                      row.className,
+                      row.donorName || tr("unassigned"),
+                      `${money(row.payable)} $`,
+                      `${money(row.collected)} $`,
+                      `${money(row.remaining)} $`,
+                    ],
+                  }))}
+                  emptyMessage={tr("noOrphanStudents")}
                 />
-              </label>
-              <button
-                type="submit"
-                disabled={
-                  savingSponsorship || !financial.orphanStudents?.length
-                }
-                className="rounded-lg bg-[#036A87] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {savingSponsorship
-                  ? tr("savingAssignment")
-                  : tr("saveDonorAssignment")}
-              </button>
-            </form>
-            <DataTable
-              headers={[
-                tr("student"),
-                tr("className"),
-                tr("sponsor"),
-                tr("payable"),
-                tr("collected"),
-                tr("remaining"),
-              ]}
-              rows={(financial.sponsorship || []).map((row) => ({
-                key: row.id || row.studentId,
-                cells: [
-                  row.studentName,
-                  row.className,
-                  row.donorName || tr("unassigned"),
-                  `${money(row.payable)} $`,
-                  `${money(row.collected)} $`,
-                  `${money(row.remaining)} $`,
-                ],
-              }))}
-              emptyMessage={tr("noOrphanStudents")}
-            />
-            <div className="border-t border-gray-100 px-5 py-3 text-sm font-semibold text-gray-700">
-              {tr("orphanFinancialByClass")}
-            </div>
-            <DataTable
-              headers={[
-                tr("className"),
-                tr("grade"),
-                tr("students"),
-                tr("payable"),
-                tr("collected"),
-                tr("remaining"),
-              ]}
-              rows={[
-                ...orphanClassTotals.map((row) => ({
-                  key: row.classId || row.className,
-                  cells: [
-                    row.className,
-                    row.grade,
-                    row.students,
-                    `${money(row.payable)} $`,
-                    `${money(row.collected)} $`,
-                    `${money(row.remaining)} $`,
-                  ],
-                })),
-                {
-                  key: "orphan-total",
-                  cells: [
-                    tr("orphanPathTotal"),
-                    "—",
-                    orphanSummary.students,
-                    `${money(orphanSummary.payable)} $`,
-                    `${money(orphanSummary.collected)} $`,
-                    `${money(orphanSummary.remaining)} $`,
-                  ],
-                },
-              ]}
-              emptyMessage={tr("noOrphanStudents")}
-            />
+              </>
+            )}
+            {isSectionSelected("orphanFinancialByClass") && (
+              <>
+                <div className="border-t border-gray-100 px-5 py-3 text-sm font-semibold text-gray-700">
+                  {tr("orphanFinancialByClass")}
+                </div>
+                <DataTable
+                  headers={[
+                    tr("className"),
+                    tr("grade"),
+                    tr("students"),
+                    tr("payable"),
+                    tr("collected"),
+                    tr("remaining"),
+                  ]}
+                  rows={[
+                    ...orphanClassTotals.map((row) => ({
+                      key: row.classId || row.className,
+                      cells: [
+                        row.className,
+                        row.grade,
+                        row.students,
+                        `${money(row.payable)} $`,
+                        `${money(row.collected)} $`,
+                        `${money(row.remaining)} $`,
+                      ],
+                    })),
+                    {
+                      key: "orphan-total",
+                      cells: [
+                        tr("orphanPathTotal"),
+                        "—",
+                        orphanSummary.students,
+                        `${money(orphanSummary.payable)} $`,
+                        `${money(orphanSummary.collected)} $`,
+                        `${money(orphanSummary.remaining)} $`,
+                      ],
+                    },
+                  ]}
+                  emptyMessage={tr("noOrphanStudents")}
+                />
+              </>
+            )}
           </Panel>
 
-          <Panel title={tr("withdrawnFinancialStatus")}>
+          <Panel
+            title={tr("withdrawnFinancialStatus")}
+            visible={isSectionSelected("withdrawnFinancialStatus")}
+          >
             <DataTable
               headers={[
                 tr("student"),
@@ -1166,7 +1300,10 @@ export default function Reports() {
             />
           </Panel>
 
-          <Panel title={tr("withdrawnWithReasons")}>
+          <Panel
+            title={tr("withdrawnWithReasons")}
+            visible={isSectionSelected("withdrawnWithReasons")}
+          >
             <DataTable
               headers={[tr("student"), tr("grade"), tr("withdrawalReason")]}
               rows={(financial.withdrawnStudents || []).map((row) => ({
@@ -1185,46 +1322,55 @@ export default function Reports() {
 
           <Panel
             title={tr("remainingInstallments")}
+            visible={
+              isSectionSelected("remainingInstallments") ||
+              isSectionSelected("installmentNotes")
+            }
             description={
               financial.installmentScheduleAvailable
                 ? ""
                 : tr("installmentScheduleUnavailable")
             }
           >
-            <DataTable
-              headers={[
-                tr("student"),
-                tr("grade"),
-                tr("annualAmount"),
-                tr("firstSemesterAmount"),
-                tr("firstSemesterPaid"),
-                tr("firstSemesterRemaining"),
-                tr("secondSemesterAmount"),
-                tr("secondSemesterPaid"),
-                tr("secondSemesterRemaining"),
-              ]}
-              rows={(financial.installmentStudents || []).map((row) => ({
-                key: row.studentId,
-                cells: [
-                  row.name,
-                  row.grade === "__unspecified__"
-                    ? tr("unspecified")
-                    : row.grade,
-                  `${money(row.annualAmount)} $`,
-                  `${money(row.firstSemesterAmount)} $`,
-                  `${money(row.firstSemesterPaid)} $`,
-                  `${money(row.firstSemesterRemaining)} $`,
-                  `${money(row.secondSemesterAmount)} $`,
-                  `${money(row.secondSemesterPaid)} $`,
-                  `${money(row.secondSemesterRemaining)} $`,
-                ],
-              }))}
-              emptyMessage={tr("noReportData")}
-            />
+            {isSectionSelected("remainingInstallments") && (
+              <DataTable
+                headers={[
+                  tr("student"),
+                  tr("grade"),
+                  tr("annualAmount"),
+                  tr("firstSemesterAmount"),
+                  tr("firstSemesterPaid"),
+                  tr("firstSemesterRemaining"),
+                  tr("secondSemesterAmount"),
+                  tr("secondSemesterPaid"),
+                  tr("secondSemesterRemaining"),
+                ]}
+                rows={(financial.installmentStudents || []).map((row) => ({
+                  key: row.studentId,
+                  cells: [
+                    row.name,
+                    row.grade === "__unspecified__"
+                      ? tr("unspecified")
+                      : row.grade,
+                    `${money(row.annualAmount)} $`,
+                    `${money(row.firstSemesterAmount)} $`,
+                    `${money(row.firstSemesterPaid)} $`,
+                    `${money(row.firstSemesterRemaining)} $`,
+                    `${money(row.secondSemesterAmount)} $`,
+                    `${money(row.secondSemesterPaid)} $`,
+                    `${money(row.secondSemesterRemaining)} $`,
+                  ],
+                }))}
+                emptyMessage={tr("noReportData")}
+              />
+            )}
           </Panel>
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Panel title={tr("installmentsPerGrade")}>
+            <Panel
+              title={tr("installmentsPerGrade")}
+              visible={isSectionSelected("installmentsPerGrade")}
+            >
               <DataTable
                 headers={[tr("grade"), tr("studentsRequiredToPay")]}
                 rows={(financial.requiredInstallmentsByGrade || []).map(
@@ -1241,7 +1387,10 @@ export default function Reports() {
                 emptyMessage={tr("noReportData")}
               />
             </Panel>
-            <Panel title={tr("annualAmountPerStudent")}>
+            <Panel
+              title={tr("annualAmountPerStudent")}
+              visible={isSectionSelected("annualAmountPerStudent")}
+            >
               <DataTable
                 headers={[tr("student"), tr("grade"), tr("annualAmount")]}
                 rows={(financial.annualAmounts || []).map((row) => ({
@@ -1259,7 +1408,10 @@ export default function Reports() {
             </Panel>
           </div>
 
-          <Panel title={tr("discountsGranted")}>
+          <Panel
+            title={tr("discountsGranted")}
+            visible={isSectionSelected("discountsGranted")}
+          >
             <DataTable
               headers={[
                 tr("student"),
@@ -1379,7 +1531,10 @@ export default function Reports() {
         </div>
       ) : report ? (
         <>
-          <Panel title={tr("filteredPaymentReport")}>
+          <Panel
+            title={tr("filteredPaymentReport")}
+            visible={isSectionSelected("filteredPaymentReport")}
+          >
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <CalendarRange className="h-4 w-4" />
               <span>{activePeriodLabel}</span>
@@ -1426,7 +1581,10 @@ export default function Reports() {
               />
             </div>
           </Panel>
-          <Panel title={tr("filteredByPath")}>
+          <Panel
+            title={tr("filteredByPath")}
+            visible={isSectionSelected("filteredByPath")}
+          >
             <DataTable
               headers={[
                 tr("path"),
@@ -1458,6 +1616,10 @@ export default function Reports() {
       <Panel
         title={tr("classReportsTitle")}
         description={tr("classReportsDescription")}
+        visible={
+          isSectionSelected("classReportSummary") ||
+          isSectionSelected("classStudentFinancialDetails")
+        }
       >
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-gray-100 p-4">
           <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1504,41 +1666,47 @@ export default function Reports() {
           ) : classReport ? (
             <>
               <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-3">
-                <StatCard
-                  label={tr("payable")}
-                  value={`${money(classReportSummary.totalPayable)} $`}
-                />
-                <StatCard
-                  label={tr("collected")}
-                  value={`${money(classReportSummary.totalCollected)} $`}
-                  tone="green"
-                />
-                <StatCard
-                  label={tr("remaining")}
-                  value={`${money(classReportSummary.totalRemaining)} $`}
-                  tone="amber"
-                />
+                {isSectionSelected("classReportSummary") && (
+                  <>
+                    <StatCard
+                      label={tr("payable")}
+                      value={`${money(classReportSummary.totalPayable)} $`}
+                    />
+                    <StatCard
+                      label={tr("collected")}
+                      value={`${money(classReportSummary.totalCollected)} $`}
+                      tone="green"
+                    />
+                    <StatCard
+                      label={tr("remaining")}
+                      value={`${money(classReportSummary.totalRemaining)} $`}
+                      tone="amber"
+                    />
+                  </>
+                )}
               </div>
-              <DataTable
-                headers={[
-                  tr("student"),
-                  tr("studentCode"),
-                  tr("payable"),
-                  tr("collected"),
-                  tr("remaining"),
-                ]}
-                rows={classReportDetails.map((row) => ({
-                  key: row.studentId,
-                  cells: [
-                    row.name,
-                    row.code,
-                    `${money(row.payable)} $`,
-                    `${money(row.collected)} $`,
-                    `${money(row.remaining)} $`,
-                  ],
-                }))}
-                emptyMessage={tr("noReportData")}
-              />
+              {isSectionSelected("classStudentFinancialDetails") && (
+                <DataTable
+                  headers={[
+                    tr("student"),
+                    tr("studentCode"),
+                    tr("payable"),
+                    tr("collected"),
+                    tr("remaining"),
+                  ]}
+                  rows={classReportDetails.map((row) => ({
+                    key: row.studentId,
+                    cells: [
+                      row.name,
+                      row.code,
+                      `${money(row.payable)} $`,
+                      `${money(row.collected)} $`,
+                      `${money(row.remaining)} $`,
+                    ],
+                  }))}
+                  emptyMessage={tr("noReportData")}
+                />
+              )}
             </>
           ) : null
         ) : null}
