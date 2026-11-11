@@ -32,27 +32,12 @@ async def audit_data_changes(request, call_next):
             and content_length.isdigit()
             and int(content_length) <= 1024 * 1024
         ):
-            original_receive = request._receive
+            # Starlette makes the cached body available to the route.
             body = await request.body()
             try:
                 request_label = _audit_request_label(json.loads(body))
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
-
-            body_sent = False
-
-            async def receive_body():
-                nonlocal body_sent
-                if not body_sent:
-                    body_sent = True
-                    return {
-                        "type": "http.request",
-                        "body": body,
-                        "more_body": False,
-                    }
-                return await original_receive()
-
-            request._receive = receive_body
 
     response = await call_next(request)
     if (

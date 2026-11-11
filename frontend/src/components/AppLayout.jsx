@@ -20,18 +20,29 @@ import {
   MessageSquareText,
   BarChart3,
   Building2,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { getLanguage } from "@/i18n";
 import { useTranslation } from "react-i18next";
+import { API_MUTATION_EVENT } from "@/lib/api";
 
 export default function AppLayout() {
   const { user, logout, selectBranch, has, hasAny } = useAuth();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [pendingMutations, setPendingMutations] = useState(0);
   const isRtl = getLanguage() === "ar";
+
+  useEffect(() => {
+    const trackMutation = (event) => {
+      setPendingMutations((pending) => Math.max(0, pending + event.detail));
+    };
+    window.addEventListener(API_MUTATION_EVENT, trackMutation);
+    return () => window.removeEventListener(API_MUTATION_EVENT, trackMutation);
+  }, []);
 
   useEffect(() => {
     const handleShortcut = (event) => {
@@ -288,6 +299,16 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      {pendingMutations > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-lg"
+        >
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {t("general.processingChanges")}
+        </div>
+      )}
       <aside
         className={`hidden lg:flex fixed inset-y-0 ${isRtl ? "right-0 border-l" : "left-0 border-r"} w-64 border-gray-200`}
       >
