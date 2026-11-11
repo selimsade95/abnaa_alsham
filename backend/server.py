@@ -1,11 +1,5 @@
-"""Application entry point.
+"""Uvicorn entry point for the school API."""
 
-The API implementation lives in routes.py; request models live in models.py;
-shared authentication, access-control, and code-generation logic lives in
-services.py. This module stays intentionally small so the existing command
-`uvicorn server:app` continues to work.
-"""
-
-from routes import app
+from school.app import app
 
 __all__ = ["app"]

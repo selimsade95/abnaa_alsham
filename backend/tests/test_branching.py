@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
-from branching import (
+from school.core.branching import (
     BranchScopedDatabase,
     _grade_number,
     set_access_context,

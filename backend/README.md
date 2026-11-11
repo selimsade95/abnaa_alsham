@@ -1,19 +1,14 @@
 # Backend structure
 
-- `server.py`: application entry point. Keep this file limited to bootstrapping.
-- `routes.py`: current FastAPI registration module and startup registration.
-- `models.py`: shared Pydantic request models.
-- `services.py`: shared authentication, permission checks, access scopes, and code generation.
-- `studentModel.py` / `studentService.py` / `studentRoute.py`: student domain boundary.
-- `teacherModel.py` / `teacherService.py` / `teacherRoute.py`: teacher domain boundary.
-- `classModel.py` / `classService.py` / `classRoute.py`: class domain boundary.
-- `paymentModel.py` / `paymentService.py` / `paymentRoute.py`: payment domain boundary.
-- `authModel.py` / `authService.py` / `authRoute.py`: auth, roles, and users boundary.
-- `branchModel.py` / `branchRoute.py`: branch management and branch selection.
-
-The `*Route.py` modules currently export the tested handlers from `routes.py`.
-This keeps the API stable while allowing each domain to be migrated out of the
-legacy registration module independently without a risky all-at-once rewrite.
+- `server.py` is the Uvicorn entry point.
+- `school/app.py` wires up feature routers, audit middleware, and lifecycle hooks.
+- Feature folders under `school/` own their route handlers and request schemas. For
+  example, student records and documents live in `school/students/`, while payment
+  routes and fee calculations live in `school/payments/`.
+- `school/core/` holds the database connection, branch scoping, shared services,
+  upload helpers, and startup work. The backend root still holds `.env` and the
+  default uploads directory.
+- `tests/` holds backend tests.
 
 The homework workflow uses `GET /api/classes/{classId}/homework-options` and
 `POST /api/homework` for recording undone work, and `GET /api/homework` for

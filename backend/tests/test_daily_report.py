@@ -1,7 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from models import AttendanceRecordIn, DailyReportAbsenceIn
+from school.attendance.schemas import AttendanceRecordIn
+from school.daily_reports.schemas import DailyReportAbsenceIn
 
 
 def test_attendance_records_support_early_dismissal_and_truancy():
