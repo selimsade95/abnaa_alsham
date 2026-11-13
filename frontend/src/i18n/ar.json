@@ -549,12 +549,15 @@
     "score": "الدرجة"
   },
   "attendance": {
+    "markAllPresent": "تسجيل حضور الجميع",
+    "markAllPresentConfirm": "سيؤدي ذلك إلى مسح الغياب والتأخير وحالات الحضور الأخرى في هذه المسودة. هل تريد المتابعة؟",
     "classList": "قائمة الصف",
     "chooseClass": "اختر الصف",
     "chooseDate": "اختر التاريخ",
     "chooseClassPrompt": "اختر صفاً لعرض الطلاب.",
     "emptyClass": "لا يوجد طلاب نشطون في هذا الصف.",
     "excused": "بعذر",
+    "unexcused": "دون عذر",
     "early_dismissal": "انصراف مبكر بعذر",
     "truancy": "تخطي الحصة / تهرب",
     "chooseStatus": "اختر حالة الحضور",

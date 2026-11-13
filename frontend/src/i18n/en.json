@@ -549,12 +549,15 @@
     "score": "Score"
   },
   "attendance": {
+    "markAllPresent": "Mark all present",
+    "markAllPresentConfirm": "This will clear absences, late arrivals, and other attendance exceptions in this draft. Continue?",
     "classList": "Class list",
     "chooseClass": "Choose a class",
     "chooseDate": "Choose a date",
     "chooseClassPrompt": "Choose a class to view students.",
     "emptyClass": "There are no active students in this class.",
     "excused": "Excused",
+    "unexcused": "Unexcused",
     "early_dismissal": "Excused early dismissal",
     "truancy": "Skipped class / truancy",
     "chooseStatus": "Choose attendance status",

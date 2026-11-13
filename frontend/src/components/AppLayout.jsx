@@ -335,17 +335,17 @@ export default function AppLayout() {
             </div>
           </div>
         </div>
-        <div className="mb-3 flex justify-end gap-2">
-          <ThemeSwitcher />
-          <LanguageSwitcher />
-        </div>
+        <div className="mb-3 flex justify-center gap-1">
         <button
           onClick={handleLogout}
           data-testid="logout-btn"
-          className="w-full flex items-center gap-2 justify-center rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          className="rounded-lg border border-border px-3 py-2 text-foreground hover:bg-red-900"
         >
-          <LogOut className="h-4 w-4" /> تسجيل الخروج
+          <LogOut className="h-4 w-4" />
         </button>
+          <ThemeSwitcher />
+          <LanguageSwitcher />
+        </div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarCheck,
+  CheckCheck,
   Loader2,
   Printer,
   Save,
@@ -13,6 +14,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useSearchParams } from "react-router-dom";
 import { getIntlLocale } from "@/i18n";
+import ConfirmAction from "@/components/ConfirmAction";
 
 function localDateValue(date = new Date()) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -46,6 +48,8 @@ export default function Attendance() {
   const [markedAt, setMarkedAt] = useState(null);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadedRoster, setLoadedRoster] = useState(null);
+  const [confirmAllPresent, setConfirmAllPresent] = useState(false);
   const [reports, setReports] = useState([]);
   const [threshold, setThreshold] = useState(3);
   const [dateFrom, setDateFrom] = useState("");
@@ -70,6 +74,7 @@ export default function Attendance() {
 
   const loadAttendance = useCallback(async () => {
     const requestId = ++attendanceRequest.current;
+    setLoadedRoster(null);
     if (!classId || !attendanceDate) {
       setStudents([]);
       setClassName("");
@@ -86,6 +91,7 @@ export default function Attendance() {
       setStudents(response.data.students || []);
       setClassName(response.data.className || "");
       setMarkedAt(response.data.markedAt || null);
+      setLoadedRoster({ classId, attendanceDate });
     } catch (error) {
       if (requestId === attendanceRequest.current)
         toast.error(error?.response?.data?.detail || "تعذر تحميل سجل الحضور");
@@ -164,6 +170,22 @@ export default function Attendance() {
           (Number.isInteger(Number(student.lateMinutes)) &&
             Number(student.lateMinutes) > 0)),
     );
+  const rosterReady = !attendanceLoading &&
+    loadedRoster?.classId === classId && loadedRoster?.attendanceDate === attendanceDate;
+  const canMarkAll = canManage && rosterReady && !saving && students.length > 0;
+
+  const markAllPresent = () => {
+    if (!canMarkAll) return;
+    setStudents((previous) => previous.map((student) => ({
+      ...student,
+      status: "present",
+      absenceReason: null,
+      lateMinutes: null,
+      earlyDismissalReason: "",
+      earlyDismissalRelation: "",
+      earlyDismissalBy: "",
+    })));
+  };
 
   const markStudent = (studentId, status) =>
     setStudents((previous) =>
@@ -195,7 +217,7 @@ export default function Attendance() {
 
   const saveAttendance = async (event) => {
     event.preventDefault();
-    if (!allMarked) return;
+    if (!canManage || !rosterReady || saving || !allMarked) return;
     setSaving(true);
     try {
       await api.put(`/attendance/classes/${classId}`, {
@@ -326,6 +348,19 @@ export default function Attendance() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-sm">
+                {canManage && (
+                  <button type="button" disabled={!canMarkAll}
+                    className="inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-2 font-semibold text-accent-foreground hover:bg-accent disabled:opacity-50"
+                    onClick={() => {
+                      if (students.some((student) =>
+                        (student.status && student.status !== "present") || Number(student.lateMinutes) > 0
+                      )) setConfirmAllPresent(true);
+                      else markAllPresent();
+                    }}>
+                    <CheckCheck className="h-4 w-4" aria-hidden="true" />
+                    {at("markAllPresent")}
+                  </button>
+                )}
                 <span className="rounded-lg bg-green-50 px-3 py-2 text-green-800">
                   {at("presentCount", { 0: presentCount })}
                 </span>
@@ -343,6 +378,15 @@ export default function Attendance() {
                 </span>
               </div>
             </div>
+            <ConfirmAction
+              action={confirmAllPresent ? {
+                title: at("markAllPresent"),
+                description: at("markAllPresentConfirm"),
+                label: at("markAllPresent"),
+                run: markAllPresent,
+              } : null}
+              onClose={() => setConfirmAllPresent(false)}
+            />
             <div className="overflow-x-auto">
               <table className="min-w-full text-right text-sm">
                 <thead className="bg-muted text-xs text-muted-foreground">
@@ -612,7 +656,7 @@ export default function Attendance() {
                 </p>
                 <button
                   type="submit"
-                  disabled={saving || attendanceLoading || !allMarked}
+                  disabled={saving || !rosterReady || !allMarked}
                   className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
