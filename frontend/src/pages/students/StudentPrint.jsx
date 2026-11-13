@@ -12,16 +12,16 @@ import {
 import { getIntlLocale, getLanguage } from "@/i18n";
 
 const Section = ({ title, children }) => (
-  <div className="print-card border border-gray-300 rounded-md p-3 mb-3">
-    <div className="text-[11px] uppercase font-bold text-gray-700 border-b border-gray-300 pb-1 mb-2">
+  <div className="print-card border border-input rounded-md p-3 mb-3">
+    <div className="text-[11px] uppercase font-bold text-foreground border-b border-input pb-1 mb-2">
       {title}
     </div>
-    <div className="text-[12px] text-gray-900">{children}</div>
+    <div className="text-[12px] text-foreground">{children}</div>
   </div>
 );
 const Row = ({ label, value }) => (
   <div className="flex gap-2 py-0.5">
-    <div className="text-gray-600 min-w-[140px]">{label}:</div>
+    <div className="text-muted-foreground min-w-[140px]">{label}:</div>
     <div className="font-medium flex-1 break-words">{value || "—"}</div>
   </div>
 );
@@ -38,7 +38,7 @@ export default function StudentPrint() {
   }, [data]);
 
   if (!data)
-    return <div className="p-6 text-gray-500">جاري التحضير للطباعة...</div>;
+    return <div className="p-6 text-muted-foreground">جاري التحضير للطباعة...</div>;
 
   const s = data.student || {};
   const f = data.father || {};
@@ -47,23 +47,23 @@ export default function StudentPrint() {
 
   return (
     <div
-      className="bg-white min-h-screen"
+      className="bg-card min-h-screen"
       dir={getLanguage() === "ar" ? "rtl" : "ltr"}
     >
       <div className="max-w-[210mm] mx-auto p-8 print-area">
-        <div className="flex items-center gap-4 border-b-2 border-[#04CDF9] pb-3 mb-4">
+        <div className="flex items-center gap-4 border-b-2 border-ring pb-3 mb-4">
           <img
             src="/assets/logo.png"
             alt="IQRA"
             className="h-16 w-16 object-contain"
           />
           <div className="flex-1">
-            <div className="text-xl font-extrabold text-gray-900">
+            <div className="text-xl font-extrabold text-foreground">
               مدرسة أبناء الشام
             </div>
-            <div className="text-sm text-gray-600">استمارة تسجيل طالب</div>
+            <div className="text-sm text-muted-foreground">استمارة تسجيل طالب</div>
           </div>
-          <div className="text-xs text-gray-600">
+          <div className="text-xs text-muted-foreground">
             تاريخ الطباعة: {new Date().toLocaleDateString(getIntlLocale())}
           </div>
         </div>
@@ -71,13 +71,13 @@ export default function StudentPrint() {
         <div className="no-print flex items-center justify-end gap-2 mb-3">
           <button
             onClick={() => window.print()}
-            className="rounded-lg bg-[#04CDF9] text-white px-4 py-2 text-sm"
+            className="rounded-lg bg-primary text-white px-4 py-2 text-sm"
           >
             طباعة
           </button>
           <button
             onClick={() => window.close()}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm"
+            className="rounded-lg border border-input bg-card px-4 py-2 text-sm"
           >
             إغلاق
           </button>
@@ -136,14 +136,14 @@ export default function StudentPrint() {
         <Section title="رسوم التسجيل">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
-              <div className="text-gray-600 text-[11px]">السنة الدراسية</div>
+              <div className="text-muted-foreground text-[11px]">السنة الدراسية</div>
               <div className="font-semibold">{fees.academicYear || "—"}</div>
             </div>
             {FEE_TYPE_ORDER.map((feeType) => {
               const totals = fees.byType?.[feeType] || {};
               return (
                 <div key={feeType}>
-                  <div className="text-gray-600 text-[11px]">
+                  <div className="text-muted-foreground text-[11px]">
                     {FEE_TYPE_LABELS[feeType]}
                   </div>
                   <div className="font-semibold">
@@ -152,7 +152,7 @@ export default function StudentPrint() {
                   <div>المدفوع: {totals.paid || 0}</div>
                   <div>المتبقي: {totals.remaining || 0}</div>
                   {feeType === "academic" && fees.discountEnabled && (
-                    <div className="text-gray-500">
+                    <div className="text-muted-foreground">
                       الخصم العام: {fees.generalDiscountPercentage || 0}% |
                       خصم الإخوة/أبناء الكادر:{" "}
                       {fees.siblingsStaffDiscountPercentage || 0}% | الإجمالي:{" "}
@@ -160,29 +160,29 @@ export default function StudentPrint() {
                     </div>
                   )}
                   {feeType === "transportation" && !fees.busRegistered && (
-                    <div className="text-gray-500">غير مسجل بالحافلة</div>
+                    <div className="text-muted-foreground">غير مسجل بالحافلة</div>
                   )}
                 </div>
               );
             })}
           </div>
           {payments.length > 0 && (
-            <table className="w-full text-[11px] border border-gray-300 mt-3">
-              <thead className="bg-gray-100">
+            <table className="w-full text-[11px] border border-input mt-3">
+              <thead className="bg-secondary">
                 <tr>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     التاريخ
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     السنة
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الفصل
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     نوع الرسوم
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     المبلغ
                   </th>
                 </tr>
@@ -190,20 +190,20 @@ export default function StudentPrint() {
               <tbody>
                 {payments.map((p, i) => (
                   <tr key={i}>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {(p.paymentDate || "").slice(0, 10)}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {p.academicYear}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {SEMESTER_LABELS[p.semester]}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
                     <td
-                      className={`border border-gray-300 px-2 py-1 ${
+                      className={`border border-input px-2 py-1 ${
                         p.type === "refund" || Number(p.amount) < 0
                           ? "text-red-600"
                           : ""
@@ -220,19 +220,19 @@ export default function StudentPrint() {
 
         {data.siblings?.length > 0 && (
           <Section title="الإخوة">
-            <table className="w-full text-[12px] border border-gray-300">
-              <thead className="bg-gray-100">
+            <table className="w-full text-[12px] border border-input">
+              <thead className="bg-secondary">
                 <tr>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     #
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الاسم
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الجنس
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الصف
                   </th>
                 </tr>
@@ -240,16 +240,16 @@ export default function StudentPrint() {
               <tbody>
                 {data.siblings.map((sib, i) => (
                   <tr key={i}>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {sib.order}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {sib.fullName}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {GENDER_LABELS[sib.gender]}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {sib.class}
                     </td>
                   </tr>
@@ -299,22 +299,22 @@ export default function StudentPrint() {
 
         {data.previousEducation?.length > 0 && (
           <Section title="التعليم السابق">
-            <table className="w-full text-[12px] border border-gray-300">
-              <thead className="bg-gray-100">
+            <table className="w-full text-[12px] border border-input">
+              <thead className="bg-secondary">
                 <tr>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الصفوف
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     المدرسة
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     البدء
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     الانتهاء
                   </th>
-                  <th className="border border-gray-300 px-2 py-1 text-right">
+                  <th className="border border-input px-2 py-1 text-right">
                     النتائج
                   </th>
                 </tr>
@@ -322,19 +322,19 @@ export default function StudentPrint() {
               <tbody>
                 {data.previousEducation.map((e, i) => (
                   <tr key={i}>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {e.classes}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {e.schoolName}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {e.startingDate}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {e.endingDate}
                     </td>
-                    <td className="border border-gray-300 px-2 py-1">
+                    <td className="border border-input px-2 py-1">
                       {e.results}
                     </td>
                   </tr>
@@ -366,8 +366,8 @@ export default function StudentPrint() {
           />
         </Section>
 
-        <div className="print-card border border-gray-300 rounded-md p-4 mt-3">
-          <div className="text-[11px] uppercase font-bold text-gray-700 border-b border-gray-300 pb-1 mb-2">
+        <div className="print-card border border-input rounded-md p-4 mt-3">
+          <div className="text-[11px] uppercase font-bold text-foreground border-b border-input pb-1 mb-2">
             التوقيع
           </div>
           <p className="text-[12px] leading-relaxed mb-2">
@@ -384,12 +384,12 @@ export default function StudentPrint() {
             <Row label="صلة القرابة" value={data.signing?.relationToStudent} />
           </div>
           <div className="mt-6">
-            <div className="text-[12px] text-gray-600 mb-8">التوقيع:</div>
+            <div className="text-[12px] text-muted-foreground mb-8">التوقيع:</div>
             <div className="border-b border-gray-500 h-14"></div>
           </div>
         </div>
 
-        <div className="text-center text-[10px] text-gray-500 mt-4">
+        <div className="text-center text-[10px] text-muted-foreground mt-4">
           مدرسة أبناء الشام — نظام إدارة المدرسة
         </div>
       </div>

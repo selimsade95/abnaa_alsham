@@ -1,3 +1,5 @@
+import { useListScrollPosition } from "@/hooks/useListScrollPosition";
+import WhatsAppPhone from "@/components/WhatsAppPhone";
 import { Link } from "react-router-dom";
 import { useTeachersList } from "@/hooks/useTeachersList";
 import {
@@ -58,20 +60,21 @@ export default function Teachers() {
     hasActiveFilters,
     load,
   } = useTeachersList();
+  useListScrollPosition(loading);
 
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">المعلمون</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة سجلات المعلمين</p>
+          <h1 className="text-3xl font-bold text-foreground">المعلمون</h1>
+          <p className="text-sm text-muted-foreground mt-1">إدارة سجلات المعلمين</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {has("teachers.create") && (
             <button
               onClick={() => nav("/teachers/new")}
               data-testid="add-teacher-btn"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
             >
               <Plus className="h-4 w-4" /> إضافة معلم
             </button>
@@ -79,7 +82,7 @@ export default function Teachers() {
           {has("teachers.view") && (
             <button
               onClick={exportTeachers}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <Download className="h-4 w-4" /> تصدير
             </button>
@@ -88,13 +91,13 @@ export default function Teachers() {
             <>
               <button
                 onClick={downloadTeacherTemplate}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
               >
                 <Download className="h-4 w-4" /> قالب الاستيراد
               </button>
               <button
                 onClick={() => importRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-3 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
               >
                 <Upload className="h-4 w-4" /> استيراد
               </button>
@@ -110,25 +113,25 @@ export default function Teachers() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-3 items-center">
+      <div className="bg-card rounded-xl border border-border shadow-sm">
+        <div className="p-4 border-b border-border flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               data-testid="teachers-search-input"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث بالاسم / الهاتف / القسم / الكود..."
-              className="w-full rounded-lg border border-gray-300 pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-[#04CDF9]"
+              className="w-full rounded-lg border border-input pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-ring"
             />
           </div>
           <button
             onClick={() => setShowFilters((s) => !s)}
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${hasActiveFilters ? "border-[#04CDF9] text-[#036A87] bg-brand-light" : "border-gray-300 text-gray-700"}`}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${hasActiveFilters ? "border-ring text-accent-foreground bg-brand-light" : "border-input text-foreground"}`}
           >
             <Filter className="h-4 w-4" /> فلاتر{" "}
             {hasActiveFilters && (
-              <span className="rounded-full bg-[#04CDF9] text-white text-[10px] px-1.5">
+              <span className="rounded-full bg-primary text-white text-[10px] px-1.5">
                 {Object.values(filters).filter(Boolean).length}
               </span>
             )}
@@ -136,15 +139,15 @@ export default function Teachers() {
         </div>
 
         {showFilters && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-4 border-b border-border bg-muted grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">الجنس</label>
+              <label className="text-xs text-muted-foreground mb-1 block">الجنس</label>
               <select
                 value={filters.gender}
                 onChange={(e) =>
                   setFilters({ ...filters, gender: e.target.value })
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-input px-3 py-2 text-sm"
               >
                 <option value="">الكل</option>
                 <option value="male">ذكر</option>
@@ -152,7 +155,7 @@ export default function Teachers() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-muted-foreground mb-1 block">
                 الحالة الوظيفية
               </label>
               <select
@@ -160,7 +163,7 @@ export default function Teachers() {
                 onChange={(e) =>
                   setFilters({ ...filters, employmentStatus: e.target.value })
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-input px-3 py-2 text-sm"
               >
                 <option value="">النشطون فقط</option>
                 <option value="active">نشط</option>
@@ -169,19 +172,19 @@ export default function Teachers() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">التخصص</label>
+              <label className="text-xs text-muted-foreground mb-1 block">التخصص</label>
               <input
                 value={filters.specialization}
                 onChange={(e) =>
                   setFilters({ ...filters, specialization: e.target.value })
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-input px-3 py-2 text-sm"
               />
             </div>
             <div className="md:col-span-3">
               <button
                 onClick={clearFilters}
-                className="text-sm text-[#036A87] hover:underline"
+                className="text-sm text-accent-foreground hover:underline"
               >
                 مسح الفلاتر
               </button>
@@ -189,7 +192,7 @@ export default function Teachers() {
           </div>
         )}
 
-        <div className="flex justify-end border-b border-gray-200 p-3">
+        <div className="flex justify-end border-b border-border p-3">
           <ColumnSelector
             columns={TEACHER_LIST_COLUMNS}
             selectedColumns={selectedColumns}
@@ -198,7 +201,7 @@ export default function Teachers() {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="bg-muted text-xs uppercase text-muted-foreground">
               <tr>
                 {hasColumn("code") && <th className="px-4 py-3 font-medium">الكود</th>}
                 {hasColumn("name") && <th className="px-4 py-3 font-medium">الاسم</th>}
@@ -214,7 +217,7 @@ export default function Teachers() {
                 <tr>
                   <td
                     colSpan={selectedColumns.length + 1}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
                     جاري التحميل...
@@ -224,7 +227,7 @@ export default function Teachers() {
                 <tr>
                   <td
                     colSpan={selectedColumns.length + 1}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     لا توجد نتائج.
                   </td>
@@ -233,32 +236,32 @@ export default function Teachers() {
                 items.map((t) => (
                   <tr
                     key={t.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="border-t border-border hover:bg-muted"
                     data-testid={`teacher-row-${t.id}`}
                   >
-                    {hasColumn("code") && <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                    {hasColumn("code") && <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {t.code}
                     </td>}
-                    {hasColumn("name") && <td className="px-4 py-3 font-medium text-gray-900">
+                    {hasColumn("name") && <td className="px-4 py-3 font-medium text-foreground">
                       <Link
                         to={`/teachers/${t.id}`}
-                        className="text-[#036A87] hover:underline"
+                        className="text-accent-foreground hover:underline"
                       >
                         {t.fullName}
                       </Link>
                     </td>}
-                    {hasColumn("gender") && <td className="px-4 py-3 text-gray-600">
+                    {hasColumn("gender") && <td className="px-4 py-3 text-muted-foreground">
                       {GENDER_LABELS[t.gender] || "—"}
                     </td>}
-                    {hasColumn("phone") && <td className="px-4 py-3 text-gray-600">
-                      {t.contactPhone || t.phone || "—"}
+                    {hasColumn("phone") && <td className="px-4 py-3 text-muted-foreground">
+                      <WhatsAppPhone phone={t.contactPhone || t.phone} />
                     </td>}
-                    {hasColumn("department") && <td className="px-4 py-3 text-gray-600">
+                    {hasColumn("department") && <td className="px-4 py-3 text-muted-foreground">
                       {t.department || t.jobDescription || t.specialization || "—"}
                     </td>}
                     {hasColumn("status") && <td className="px-4 py-3">
                       <span
-                        className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${t.employmentStatus === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}
+                        className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${t.employmentStatus === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground border-border"}`}
                       >
                         {t.employmentStatus === "active" ? "نشط" : "غير نشط"}
                       </span>
@@ -278,7 +281,7 @@ export default function Teachers() {
                           <button
                             onClick={() => nav(`/teachers/${t.id}/edit`)}
                             data-testid={`edit-teacher-${t.id}`}
-                            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -325,15 +328,15 @@ export default function Teachers() {
       </div>
 
       {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-2">
               تأكيد التعطيل
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               سيبقى المعلم وبياناته محفوظين، لكنه لن يظهر في القوائم العادية.
             </p>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               سبب التعطيل <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -343,7 +346,7 @@ export default function Teachers() {
               rows={3}
               data-testid="deactivation-reason-input"
               placeholder="اكتب سبب تعطيل المعلم"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-6"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm mb-6"
             />
             <div className="flex items-center justify-end gap-2">
               <button
@@ -351,7 +354,7 @@ export default function Teachers() {
                   setConfirmId(null);
                   setDeactivationReason("");
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>

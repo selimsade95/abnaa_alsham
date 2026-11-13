@@ -1,4 +1,5 @@
 import axios from "axios";
+import { t } from "@/i18n";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -39,6 +40,13 @@ api.interceptors.response.use(
   },
   (error) => {
     finishMutation(error.config);
+    const payload = error.response?.data;
+    if (typeof payload?.detail === "string") {
+      const permission = payload.detail.match(/^لا تملك صلاحية: (.+)$/)?.[1];
+      payload.detail = permission
+        ? t("apiErrors.permissionRequired", { permission })
+        : t(payload.detail);
+    }
     if (error?.response?.status === 401) {
       const path = window.location.pathname;
       if (path !== "/login") {

@@ -55,9 +55,15 @@ function isTranslatableUiString(path, filename) {
 
   if (parent.isObjectProperty()) {
     const key = parent.node.key.name || parent.node.key.value;
-    if (["message", "loading", "success", "error", "description"].includes(key)) {
+    if (["message", "loading", "success", "error", "description", "title"].includes(key)) {
       return true;
     }
+  }
+
+  const array = path.findParent((candidate) => candidate.isArrayExpression());
+  if (array?.parentPath.isJSXExpressionContainer() &&
+      array.parentPath.parentPath.node.name?.name === "headers") {
+    return true;
   }
 
   const call = path.findParent((candidate) => candidate.isCallExpression());

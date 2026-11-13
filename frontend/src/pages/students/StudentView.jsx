@@ -1,5 +1,7 @@
+import WhatsAppPhone from "@/components/WhatsAppPhone";
+import { t as translate } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api, { API } from "@/lib/api";
 import { toast } from "sonner";
 import {
@@ -28,11 +30,12 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useStudent } from "@/hooks/useStudent";
 import { getIntlLocale } from "@/i18n";
+import ConfirmAction from "@/components/ConfirmAction";
 
 const Section = ({ title, children, actions }) => (
-  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+  <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+    <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
+      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
       {actions}
     </div>
     <div>{children}</div>
@@ -41,9 +44,9 @@ const Section = ({ title, children, actions }) => (
 
 const Row = ({ label, value }) => (
   <div className="flex flex-wrap gap-2 py-1.5">
-    <div className="text-sm text-gray-500 w-40">{label}</div>
-    <div className="text-sm text-gray-900 font-medium flex-1 min-w-0 break-words">
-      {value || <span className="text-gray-400">—</span>}
+    <div className="text-sm text-muted-foreground w-40">{translate(label)}</div>
+    <div className="text-sm text-foreground font-medium flex-1 min-w-0 break-words">
+      {value || <span className="text-muted-foreground">—</span>}
     </div>
   </div>
 );
@@ -71,8 +74,8 @@ function StudentNotesSection({
   onSave,
   onDelete,
 }) {
-  console.log(`notes`, notes);
   const [draft, setDraft] = useState("");
+  const [shareWithParent, setShareWithParent] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
 
@@ -80,10 +83,11 @@ function StudentNotesSection({
     event.preventDefault();
     if (!draft.trim()) return;
     setSaving(true);
-    const saved = await onSave(category, editingId, draft);
+    const saved = await onSave(category, editingId, draft, shareWithParent);
     setSaving(false);
     if (saved) {
       setDraft("");
+      setShareWithParent(false);
       setEditingId(null);
     }
   };
@@ -91,11 +95,12 @@ function StudentNotesSection({
   const edit = (note) => {
     setEditingId(note.id);
     setDraft(note.content);
+    setShareWithParent(note.shareWithParent === true);
   };
 
   return (
     <Section title={title}>
-      {canCreate && (
+      {(editingId ? canUpdate : canCreate) && (
         <form onSubmit={submit} className="mb-4 space-y-2">
           <textarea
             rows={3}
@@ -103,14 +108,19 @@ function StudentNotesSection({
             onChange={(event) => setDraft(event.target.value)}
             maxLength={4000}
             placeholder="اكتب ملاحظة"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#04CDF9]"
+            className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             data-testid={`student-note-input-${category}`}
           />
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" checked={shareWithParent}
+              onChange={(event) => setShareWithParent(event.target.checked)} />
+            مشاركة مع ولي الأمر
+          </label>
           <div className="flex items-center gap-2">
             <button
               type="submit"
               disabled={saving || !draft.trim()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#036A87] px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
             >
               <Save className="h-3.5 w-3.5" />
               {editingId ? "حفظ التعديل" : "إضافة ملاحظة"}
@@ -121,8 +131,9 @@ function StudentNotesSection({
                 onClick={() => {
                   setEditingId(null);
                   setDraft("");
+                  setShareWithParent(false);
                 }}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-700"
+                className="rounded-lg border border-input px-3 py-2 text-xs text-foreground"
               >
                 إلغاء
               </button>
@@ -131,15 +142,15 @@ function StudentNotesSection({
         </form>
       )}
       {notes.length === 0 ? (
-        <p className="text-sm text-gray-500">لا توجد ملاحظات.</p>
+        <p className="text-sm text-muted-foreground">لا توجد ملاحظات.</p>
       ) : (
         <div className="space-y-3">
           {notes.map((note) => {
             const ownsNote = canManageAll || note.authorId === currentUserId;
             return (
-              <article key={note.id} className="border-t border-gray-100 pt-3">
+              <article key={note.id} className="border-t border-border pt-3">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="whitespace-pre-wrap break-words text-sm text-gray-800">
+                  <p className="whitespace-pre-wrap break-words text-sm text-foreground">
                     {note.content}
                   </p>
                   <div className="flex shrink-0 items-center gap-1">
@@ -148,7 +159,7 @@ function StudentNotesSection({
                         type="button"
                         onClick={() => edit(note)}
                         title="تعديل الملاحظة"
-                        className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -165,9 +176,10 @@ function StudentNotesSection({
                     )}
                   </div>
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {note.authorName} ·{" "}
                   {new Date(note.createdAt).toLocaleString()}
+                  {note.shareWithParent && " · تمت المشاركة مع ولي الأمر"}
                 </div>
               </article>
             );
@@ -181,6 +193,7 @@ function StudentNotesSection({
 export default function StudentView() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { state } = useLocation();
   const { has, user } = useAuth();
   const {
     student: data,
@@ -190,6 +203,7 @@ export default function StudentView() {
   } = useStudent(id, {
     payments: has("payments.view"),
   });
+  const [pendingAction, setPendingAction] = useState(null);
   const [confirm, setConfirm] = useState(false);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [payModal, setPayModal] = useState(null);
@@ -222,13 +236,14 @@ export default function StudentView() {
     setStudentNotes(response.data);
   };
 
-  const saveStudentNote = async (category, noteId, content) => {
+  const saveStudentNote = async (category, noteId, content, shareWithParent) => {
     try {
       if (noteId)
         await api.put(`/students/${id}/notes/${category}/${noteId}`, {
           content,
+          shareWithParent,
         });
-      else await api.post(`/students/${id}/notes/${category}`, { content });
+      else await api.post(`/students/${id}/notes/${category}`, { content, shareWithParent });
       await refreshStudentNotes();
       toast.success("تم حفظ الملاحظة");
       return true;
@@ -239,7 +254,6 @@ export default function StudentView() {
   };
 
   const deleteStudentNote = async (category, noteId) => {
-    if (!window.confirm("هل تريد حذف هذه الملاحظة؟")) return;
     try {
       await api.delete(`/students/${id}/notes/${category}/${noteId}`);
       await refreshStudentNotes();
@@ -299,7 +313,6 @@ export default function StudentView() {
   };
 
   const deletePayment = async (pid) => {
-    if (!window.confirm("هل تريد حذف هذه الدفعة؟")) return;
     try {
       await api.delete(`/payments/${pid}`);
       toast.success("تم الحذف");
@@ -318,7 +331,6 @@ export default function StudentView() {
       toast.error("يرجى تعبئة الحقول");
       return;
     }
-    // if existing doc, backend replaces it. We ask here only if there was a previous file (already handled by prompt below)
     const fd = new FormData();
     fd.append("type", type);
     fd.append("description", description);
@@ -337,7 +349,8 @@ export default function StudentView() {
 
   const openUpload = () => {
     if (data?.orphanDocument) {
-      if (!window.confirm("توجد وثيقة سابقة. هل تريد استبدالها؟")) return;
+      setPendingAction({ title: "استبدال الوثيقة", description: "توجد وثيقة سابقة. هل تريد استبدالها؟", run: () => setUploadModal(true) });
+      return;
     }
     setUploadModal(true);
   };
@@ -370,11 +383,10 @@ export default function StudentView() {
   };
 
   const openStudentDocumentUpload = (type) => {
-    if (
-      data?.documents?.[type] &&
-      !window.confirm("توجد وثيقة سابقة. هل تريد استبدالها؟")
-    )
+    if (data?.documents?.[type]) {
+      setPendingAction({ title: "استبدال الوثيقة", description: "توجد وثيقة سابقة. هل تريد استبدالها؟", run: () => setStudentDocumentType(type) });
       return;
+    }
     setStudentDocumentType(type);
   };
 
@@ -458,7 +470,7 @@ export default function StudentView() {
 
   if (loading) {
     return (
-      <div className="text-center text-gray-500 py-16">
+      <div className="text-center text-muted-foreground py-16">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
@@ -466,7 +478,6 @@ export default function StudentView() {
   if (!data) return null;
 
   const s = data.student || {};
-  console.log(`student`, s);
   const f = data.father || {};
   const m = data.mother || {};
   const fees = data.fees || {};
@@ -484,16 +495,17 @@ export default function StudentView() {
           <span className="underline">{data.deactivatedAt?.slice(0, 10)}</span>
         </div>
       )}
+      <ConfirmAction action={pendingAction} onClose={() => setPendingAction(null)} />
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <button
-            onClick={() => nav("/students")}
-            className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"
+            onClick={() => state?.fromStudentList ? nav(-1) : nav("/students")}
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2"
           >
             <ArrowRight className="h-4 w-4" /> رجوع
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">{s.fullName}</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">{s.fullName}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             كود: <span className="font-mono">{data.code || "—"}</span> •{" "}
             {GENDER_LABELS[s.gender]} • {STATUS_LABELS[s.status]} • المسار
             الأولي: {s.registrationPath || "—"} • النهائي:{" "}
@@ -505,7 +517,7 @@ export default function StudentView() {
             <button
               onClick={() => nav(`/students/${id}/full-information`)}
               data-testid="view-fullinfo-btn"
-              className="inline-flex items-center gap-2 rounded-lg border border-[#04CDF9] bg-brand-light text-[#036A87] px-3 py-2 text-sm hover:bg-brand-light/70"
+              className="inline-flex items-center gap-2 rounded-lg border border-ring bg-brand-light text-accent-foreground px-3 py-2 text-sm hover:bg-brand-light/70"
             >
               المعلومات الكاملة
             </button>
@@ -514,7 +526,7 @@ export default function StudentView() {
             <button
               onClick={() => window.open(`/students/${id}/print`, "_blank")}
               data-testid="view-print-btn"
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <Printer className="h-4 w-4" /> طباعة
             </button>
@@ -523,7 +535,7 @@ export default function StudentView() {
             <button
               onClick={() => window.open(`/students/${id}/card`, "_blank")}
               data-testid="view-card-btn"
-              className="inline-flex items-center gap-2 rounded-lg border border-[#04CDF9] bg-brand-light text-[#036A87] px-3 py-2 text-sm hover:bg-brand-light/70"
+              className="inline-flex items-center gap-2 rounded-lg border border-ring bg-brand-light text-accent-foreground px-3 py-2 text-sm hover:bg-brand-light/70"
             >
               بطاقة الطالب
             </button>
@@ -532,7 +544,7 @@ export default function StudentView() {
             <button
               onClick={() => nav(`/students/${id}/edit`)}
               data-testid="view-edit-btn"
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <Pencil className="h-4 w-4" /> تعديل
             </button>
@@ -582,7 +594,7 @@ export default function StudentView() {
               data.currentClassId && s.newClass && has("classes.view") ? (
                 <Link
                   to={`/classes/${data.currentClassId}`}
-                  className="text-[#036A87] hover:underline"
+                  className="text-accent-foreground hover:underline"
                 >
                   {s.newClass}
                 </Link>
@@ -622,7 +634,7 @@ export default function StudentView() {
                 <button
                   onClick={openUpload}
                   data-testid="orphan-upload-btn"
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-1.5 text-xs text-foreground hover:bg-muted"
                 >
                   <Upload className="h-3.5 w-3.5" />{" "}
                   {data.orphanDocument ? "استبدال" : "رفع"}
@@ -641,17 +653,17 @@ export default function StudentView() {
           }
         >
           {data.orphanDocument ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-brand-light text-[#036A87] flex items-center justify-center">
+                <div className="h-10 w-10 rounded-lg bg-brand-light text-accent-foreground flex items-center justify-center">
                   <FileText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">
+                  <div className="text-sm font-medium text-foreground truncate">
                     {data.orphanDocument.originalName ||
                       data.orphanDocument.fileName}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {data.orphanDocument.type} •{" "}
                     {Math.round((data.orphanDocument.size || 0) / 1024)}{" "}
                     كيلوبايت
@@ -662,33 +674,33 @@ export default function StudentView() {
                 <button
                   onClick={downloadDoc}
                   data-testid="orphan-download-btn"
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-1.5 text-xs text-foreground hover:bg-muted"
                 >
                   <Download className="h-3.5 w-3.5" /> تنزيل
                 </button>
               )}
             </div>
           ) : (
-            <p className="text-sm text-gray-500">لم تُرفع وثيقة بعد.</p>
+            <p className="text-sm text-muted-foreground">لم تُرفع وثيقة بعد.</p>
           )}
         </Section>
       )}
 
       <Section title="وثائق الطالب">
-        <p className="mb-4 text-sm text-gray-500">
+        <p className="mb-4 text-sm text-muted-foreground">
           الصيغ المدعومة: PDF أو JPG أو PNG، وبحد أقصى 10 ميغابايت لكل ملف.
         </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {STUDENT_DOCUMENT_TYPES.map(({ key, label }) => {
             const document = data.documents?.[key];
             return (
-              <div key={key} className="rounded-lg border border-gray-200 p-3">
-                <div className="mb-2 text-sm font-medium text-gray-900">
-                  {label}
+              <div key={key} className="rounded-lg border border-border p-3">
+                <div className="mb-2 text-sm font-medium text-foreground">
+                  {translate(label)}
                 </div>
                 {document ? (
                   <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 text-xs text-gray-500">
+                    <div className="min-w-0 text-xs text-muted-foreground">
                       <div className="truncate">
                         {document.originalName || document.fileName}
                       </div>
@@ -702,7 +714,7 @@ export default function StudentView() {
                           onClick={() => viewStudentDocument(key, document)}
                           data-testid={`student-document-view-${key}`}
                           title="عرض"
-                          className="rounded-md p-1.5 text-[#036A87] hover:bg-brand-light"
+                          className="rounded-md p-1.5 text-accent-foreground hover:bg-brand-light"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -712,7 +724,7 @@ export default function StudentView() {
                           onClick={() => downloadStudentDocument(key, document)}
                           data-testid={`student-document-download-${key}`}
                           title="تنزيل"
-                          className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100"
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
                         >
                           <Download className="h-4 w-4" />
                         </button>
@@ -730,13 +742,13 @@ export default function StudentView() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">لم تُرفع بعد.</p>
+                  <p className="text-xs text-muted-foreground">لم تُرفع بعد.</p>
                 )}
                 {has("students.documents.upload") && (
                   <button
                     onClick={() => openStudentDocumentUpload(key)}
                     data-testid={`student-document-upload-${key}`}
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-[#036A87] hover:underline"
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent-foreground hover:underline"
                   >
                     <Upload className="h-3.5 w-3.5" />{" "}
                     {document ? "استبدال" : "رفع"}
@@ -758,7 +770,7 @@ export default function StudentView() {
                   onClick={() =>
                     window.open(`/students/${id}/payments/print`, "_blank")
                   }
-                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-1.5 text-xs text-foreground hover:bg-muted"
                 >
                   <Printer className="h-3.5 w-3.5" /> طباعة السجل
                 </button>
@@ -766,7 +778,7 @@ export default function StudentView() {
             </div>
           }
         >
-          <div className="mb-3 text-xs text-gray-500">
+          <div className="mb-3 text-xs text-muted-foreground">
             السنة الدراسية: {fees.academicYear || "—"}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
@@ -779,33 +791,33 @@ export default function StudentView() {
               return (
                 <div
                   key={feeType}
-                  className="rounded-lg border border-gray-200 p-3"
+                  className="rounded-lg border border-border p-3"
                 >
-                  <div className="text-sm font-semibold text-gray-900 mb-2">
+                  <div className="text-sm font-semibold text-foreground mb-2">
                     {FEE_TYPE_LABELS[feeType]}
                   </div>
                   <dl className="space-y-1.5 text-xs">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">المستحق</dt>
+                      <dt className="text-muted-foreground">المستحق</dt>
                       <dd className="font-medium tabular-nums">
                         {Number(totals.payable || 0)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">المدفوع</dt>
+                      <dt className="text-muted-foreground">المدفوع</dt>
                       <dd className="font-medium text-emerald-700 tabular-nums">
                         {Number(totals.paid || 0)}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-500">المتبقي</dt>
+                      <dt className="text-muted-foreground">المتبقي</dt>
                       <dd className="font-medium text-amber-700 tabular-nums">
                         {Number(totals.remaining || 0)}
                       </dd>
                     </div>
                   </dl>
                   {feeType === "academic" && fees.discountEnabled && (
-                    <div className="mt-2 border-t border-gray-100 pt-2 text-xs text-gray-500">
+                    <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
                       {fees.generalDiscountPercentage > 0 && (
                         <div>
                           الخصم العام ({fees.generalDiscountName}):{" "}
@@ -828,7 +840,7 @@ export default function StudentView() {
                     </div>
                   )}
                   {feeType === "transportation" && !fees.busRegistered && (
-                    <div className="mt-2 text-xs text-gray-500">
+                    <div className="mt-2 text-xs text-muted-foreground">
                       غير مسجل في الحافلة
                     </div>
                   )}
@@ -838,12 +850,12 @@ export default function StudentView() {
           </div>
 
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-medium text-gray-700">سجل المدفوعات</h4>
+            <h4 className="text-sm font-medium text-foreground">سجل المدفوعات</h4>
             {has("payments.create") && (
               <button
                 onClick={openAddPayment}
                 data-testid="student-add-payment-btn"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#03A9D1]"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-hover"
               >
                 <Plus className="h-3.5 w-3.5" /> إضافة دفعة
               </button>
@@ -851,7 +863,7 @@ export default function StudentView() {
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <thead className="bg-muted text-xs text-muted-foreground uppercase">
                 <tr>
                   <th className="px-3 py-2 text-right">التاريخ</th>
                   <th className="px-3 py-2 text-right">السنة</th>
@@ -867,32 +879,32 @@ export default function StudentView() {
                   <tr>
                     <td
                       colSpan={7}
-                      className="px-3 py-4 text-center text-gray-500"
+                      className="px-3 py-4 text-center text-muted-foreground"
                     >
                       لا توجد مدفوعات مسجلة.
                     </td>
                   </tr>
                 )}
                 {payments.map((p) => (
-                  <tr key={p.id} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-600">
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {(p.paymentDate || "").slice(0, 10)}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {p.academicYear}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {SEMESTER_LABELS[p.semester]}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>
                     <td
-                      className={`px-3 py-2 font-semibold tabular-nums ${p.type === "refund" || Number(p.amount) < 0 ? "text-red-600" : "text-gray-900"}`}
+                      className={`px-3 py-2 font-semibold tabular-nums ${p.type === "refund" || Number(p.amount) < 0 ? "text-red-600" : "text-foreground"}`}
                     >
                       {p.amount}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {p.createdByName}
                     </td>
                     <td className="px-3 py-2 text-left">
@@ -901,7 +913,7 @@ export default function StudentView() {
                           <button
                             onClick={() => openEditPayment(p)}
                             data-testid={`edit-payment-${p.id}`}
-                            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -912,14 +924,14 @@ export default function StudentView() {
                               window.open(`/payments/${p.id}/print`, "_blank")
                             }
                             title="طباعة الإيصال"
-                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                            className="p-1.5 rounded-md text-accent-foreground hover:bg-brand-light"
                           >
                             <Printer className="h-4 w-4" />
                           </button>
                         )}
                         {has("payments.delete") && (
                           <button
-                            onClick={() => deletePayment(p.id)}
+                            onClick={() => setPendingAction({ title: "حذف الدفعة", label: "حذف", run: () => deletePayment(p.id) })}
                             data-testid={`delete-payment-${p.id}`}
                             className="p-1.5 rounded-md text-red-500 hover:bg-red-50"
                           >
@@ -940,7 +952,7 @@ export default function StudentView() {
         {data.siblings?.length ? (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <thead className="bg-muted text-xs text-muted-foreground uppercase">
                 <tr>
                   <th className="px-3 py-2 text-right">#</th>
                   <th className="px-3 py-2 text-right">الاسم الكامل</th>
@@ -950,13 +962,13 @@ export default function StudentView() {
               </thead>
               <tbody>
                 {data.siblings.map((sib, i) => (
-                  <tr key={i} className="border-t border-gray-100">
-                    <td className="px-3 py-2 text-gray-600">{sib.order}</td>
-                    <td className="px-3 py-2 text-gray-900">
+                  <tr key={i} className="border-t border-border">
+                    <td className="px-3 py-2 text-muted-foreground">{sib.order}</td>
+                    <td className="px-3 py-2 text-foreground">
                       {sib.studentId ? (
                         <Link
                           to={`/students/${sib.studentId}`}
-                          className="text-[#036A87] hover:underline"
+                          className="text-accent-foreground hover:underline"
                         >
                           {sib.fullName}
                         </Link>
@@ -964,17 +976,17 @@ export default function StudentView() {
                         sib.fullName
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {GENDER_LABELS[sib.gender]}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{sib.class}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{sib.class}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">لا يوجد إخوة مسجلون.</p>
+          <p className="text-sm text-muted-foreground">لا يوجد إخوة مسجلون.</p>
         )}
       </Section>
 
@@ -982,34 +994,34 @@ export default function StudentView() {
         <Section title="الأب">
           <Row label="الاسم" value={f.name} />
           <Row label="الحالة" value={f.alive ? "على قيد الحياة" : "متوفى"} />
-          <Row label="الهاتف" value={f.phone} />
+          <Row label="الهاتف" value={<WhatsAppPhone phone={f.phone} />} />
           <Row label="العنوان" value={f.address} />
           <Row label="المهنة" value={f.profession} />
-          <Row label="واتساب" value={f.whatsapp} />
+          <Row label="واتساب" value={<WhatsAppPhone phone={f.whatsapp} />} />
           <Row label="تلغرام" value={f.telegram} />
         </Section>
         <Section title="الأم">
           <Row label="الاسم" value={m.name} />
           <Row label="الحالة" value={m.alive ? "على قيد الحياة" : "متوفى"} />
-          <Row label="الهاتف" value={m.phone} />
+          <Row label="الهاتف" value={<WhatsAppPhone phone={m.phone} />} />
           <Row label="العنوان" value={m.address} />
           <Row label="المهنة" value={m.profession} />
-          <Row label="واتساب" value={m.whatsapp} />
+          <Row label="واتساب" value={<WhatsAppPhone phone={m.whatsapp} />} />
           <Row label="تلغرام" value={m.telegram} />
         </Section>
       </div>
 
       <Section title="معلومات عامة">
-        <Row label="واتساب المدرسة" value={data.general?.whatsappGroupPhone} />
+        <Row label="واتساب المدرسة" value={<WhatsAppPhone phone={data.general?.whatsappGroupPhone} />} />
         <Row
           label="جهة الطوارئ"
-          value={[
-            data.general?.emergencyContact?.name,
-            data.general?.emergencyContact?.relation,
-            data.general?.emergencyContact?.phone,
-          ]
-            .filter(Boolean)
-            .join(" • ")}
+          value={
+            <>
+              {[data.general?.emergencyContact?.name, data.general?.emergencyContact?.relation]
+                .filter(Boolean).map((part, index) => <span key={index}>{part} · </span>)}
+              <WhatsAppPhone phone={data.general?.emergencyContact?.phone} />
+            </>
+          }
         />
       </Section>
 
@@ -1017,7 +1029,7 @@ export default function StudentView() {
         <Section title="التعليم السابق">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+              <thead className="bg-muted text-xs text-muted-foreground uppercase">
                 <tr>
                   <th className="px-3 py-2 text-right">الصفوف</th>
                   <th className="px-3 py-2 text-right">اسم المدرسة</th>
@@ -1028,7 +1040,7 @@ export default function StudentView() {
               </thead>
               <tbody>
                 {data.previousEducation.map((e, i) => (
-                  <tr key={i} className="border-t border-gray-100">
+                  <tr key={i} className="border-t border-border">
                     <td className="px-3 py-2">{e.classes}</td>
                     <td className="px-3 py-2">{e.schoolName}</td>
                     <td className="px-3 py-2">{e.startingDate}</td>
@@ -1044,14 +1056,14 @@ export default function StudentView() {
 
       {data.islamicLegalEducation && (
         <Section title="التعليم الشرعي">
-          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+          <p className="text-sm text-foreground whitespace-pre-wrap">
             {data.islamicLegalEducation}
           </p>
         </Section>
       )}
       {data.bestAchievement && (
         <Section title="أفضل إنجاز">
-          <p className="text-sm text-gray-800 whitespace-pre-wrap">
+          <p className="text-sm text-foreground whitespace-pre-wrap">
             {data.bestAchievement}
           </p>
         </Section>
@@ -1088,7 +1100,7 @@ export default function StudentView() {
             canManageAll={!user?.teacherId}
             currentUserId={user?.id}
             onSave={saveStudentNote}
-            onDelete={deleteStudentNote}
+            onDelete={(category, noteId) => setPendingAction({ title: "حذف الملاحظة", label: "حذف", run: () => deleteStudentNote(category, noteId) })}
           />
           <StudentNotesSection
             title="ملاحظات غير صفية"
@@ -1100,7 +1112,7 @@ export default function StudentView() {
             canManageAll={!user?.teacherId}
             currentUserId={user?.id}
             onSave={saveStudentNote}
-            onDelete={deleteStudentNote}
+            onDelete={(category, noteId) => setPendingAction({ title: "حذف الملاحظة", label: "حذف", run: () => deleteStudentNote(category, noteId) })}
           />
         </>
       )}
@@ -1112,15 +1124,15 @@ export default function StudentView() {
 
       {/* Delete student modal */}
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-2">
               تأكيد التعطيل
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               سيبقى الطالب وبياناته محفوظين، لكنه لن يظهر في القوائم العادية.
             </p>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               سبب التعطيل <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -1130,7 +1142,7 @@ export default function StudentView() {
               rows={3}
               data-testid="view-deactivation-reason-input"
               placeholder="اكتب سبب تعطيل الطالب"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-6"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm mb-6"
             />
             <div className="flex items-center justify-end gap-2">
               <button
@@ -1138,7 +1150,7 @@ export default function StudentView() {
                   setConfirm(false);
                   setDeactivationReason("");
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -1157,22 +1169,22 @@ export default function StudentView() {
 
       {/* Payment modal */}
       {payModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">
+              <h3 className="text-lg font-bold text-foreground">
                 {payModal.id ? "تعديل دفعة" : "إضافة دفعة"}
               </h3>
               <button
                 onClick={() => setPayModal(null)}
-                className="text-gray-500 hover:text-gray-900"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <form onSubmit={savePayment} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   نوع الرسوم
                 </label>
                 <select
@@ -1181,7 +1193,7 @@ export default function StudentView() {
                   onChange={(e) =>
                     setPayModal({ ...payModal, feeType: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   data-testid="stu-pay-fee-type"
                 >
                   {FEE_TYPE_ORDER.filter(
@@ -1196,7 +1208,7 @@ export default function StudentView() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   السنة الدراسية
                 </label>
                 <input
@@ -1206,12 +1218,12 @@ export default function StudentView() {
                     setPayModal({ ...payModal, academicYear: e.target.value })
                   }
                   placeholder="2026-2027"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   data-testid="stu-pay-year"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   الفصل
                 </label>
                 <select
@@ -1219,7 +1231,7 @@ export default function StudentView() {
                   onChange={(e) =>
                     setPayModal({ ...payModal, semester: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   data-testid="stu-pay-semester"
                 >
                   <option value="first">الفصل الأول</option>
@@ -1229,7 +1241,7 @@ export default function StudentView() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     المبلغ
                   </label>
                   <input
@@ -1241,12 +1253,12 @@ export default function StudentView() {
                     onChange={(e) =>
                       setPayModal({ ...payModal, amount: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                    className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                     data-testid="stu-pay-amount"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     التاريخ
                   </label>
                   <input
@@ -1256,12 +1268,12 @@ export default function StudentView() {
                     onChange={(e) =>
                       setPayModal({ ...payModal, paymentDate: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                    className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   ملاحظات
                 </label>
                 <textarea
@@ -1270,21 +1282,21 @@ export default function StudentView() {
                   onChange={(e) =>
                     setPayModal({ ...payModal, notes: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setPayModal(null)}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   data-testid="stu-pay-submit"
-                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
                 >
                   حفظ
                 </button>
@@ -1295,12 +1307,12 @@ export default function StudentView() {
       )}
 
       {studentDocumentType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-bold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+            <h3 className="mb-2 text-lg font-bold text-foreground">
               رفع وثيقة الطالب
             </h3>
-            <p className="mb-4 text-sm text-gray-600">
+            <p className="mb-4 text-sm text-muted-foreground">
               {
                 STUDENT_DOCUMENT_TYPES.find(
                   (item) => item.key === studentDocumentType,
@@ -1309,7 +1321,7 @@ export default function StudentView() {
             </p>
             <form onSubmit={uploadStudentDocument} className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   الملف (PDF/JPG/PNG - أقل من 10MB)
                 </label>
                 <input
@@ -1325,14 +1337,14 @@ export default function StudentView() {
                 <button
                   type="button"
                   onClick={() => setStudentDocumentType(null)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-input px-4 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   data-testid="student-document-submit"
-                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
                 >
                   رفع
                 </button>
@@ -1343,18 +1355,18 @@ export default function StudentView() {
       )}
 
       {studentDocumentConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-bold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+            <h3 className="mb-2 text-lg font-bold text-foreground">
               حذف الوثيقة
             </h3>
-            <p className="mb-6 text-sm text-gray-600">
+            <p className="mb-6 text-sm text-muted-foreground">
               هل تريد حذف هذه الوثيقة؟
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setStudentDocumentConfirm(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -1371,26 +1383,26 @@ export default function StudentView() {
       )}
 
       {studentDocumentPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 p-4">
-              <h3 className="truncate text-lg font-bold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-4">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-card shadow-xl">
+            <div className="flex items-center justify-between border-b border-border p-4">
+              <h3 className="truncate text-lg font-bold text-foreground">
                 {studentDocumentPreview.name}
               </h3>
               <button
                 onClick={closeStudentDocumentPreview}
                 title="إغلاق"
-                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-gray-100 p-4">
+            <div className="min-h-0 flex-1 overflow-auto bg-secondary p-4">
               {studentDocumentPreview.isPdf ? (
                 <iframe
                   src={studentDocumentPreview.url}
                   title={studentDocumentPreview.name}
-                  className="h-[70vh] min-h-[420px] w-full rounded-lg border border-gray-200 bg-white"
+                  className="h-[70vh] min-h-[420px] w-full rounded-lg border border-border bg-card"
                 />
               ) : (
                 <img
@@ -1406,42 +1418,42 @@ export default function StudentView() {
 
       {/* Upload doc modal */}
       {uploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-4">
               رفع وثيقة اليتم
             </h3>
             <form onSubmit={uploadDoc} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   النوع
                 </label>
                 <select
                   name="type"
                   required
                   defaultValue={s.orphanDocType || ""}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   data-testid="orphan-doc-type"
                 >
                   <option value="">— اختر —</option>
                   {ORPHAN_DOC_TYPES.map((t) => (
                     <option key={t} value={t}>
-                      {t}
+                      {translate(t)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   الوصف (اختياري)
                 </label>
                 <input
                   name="description"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   الملف (PDF/JPG/PNG - أقل من 10MB)
                 </label>
                 <input
@@ -1457,14 +1469,14 @@ export default function StudentView() {
                 <button
                   type="button"
                   onClick={() => setUploadModal(false)}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   data-testid="orphan-doc-submit"
-                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
                 >
                   رفع
                 </button>
@@ -1475,18 +1487,18 @@ export default function StudentView() {
       )}
 
       {docConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-2">
               حذف الوثيقة
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               هل تريد حذف وثيقة اليتم؟
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={() => setDocConfirm(false)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>

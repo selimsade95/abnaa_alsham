@@ -1,3 +1,4 @@
+import re
 import math
 import uuid
 from typing import Optional
@@ -240,8 +241,8 @@ async def list_payments(search: Optional[str] = None, academicYear: Optional[str
     if amount_query:
         q["amount"] = amount_query
     if search:
-        matching = await db.students.find({"$or": [{"student.fullName": {"$regex": search, "$options": "i"}},
-                                                    {"code": {"$regex": search, "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
+        matching = await db.students.find({"$or": [{"student.fullName": {"$regex": re.escape(search), "$options": "i"}},
+                                                    {"code": {"$regex": re.escape(search), "$options": "i"}}]}, {"id": 1, "_id": 0}).to_list(500)
         search_student_ids = [m["id"] for m in matching]
         q["student"] = {"$in": search_student_ids}
     allowed = await allowed_class_ids(current)
@@ -287,8 +288,8 @@ async def payment_summary(search: Optional[str] = None, academicYear: Optional[s
         student_query["fees.academicYear"] = academicYear
     if search:
         student_query["$or"] = [
-            {"student.fullName": {"$regex": search, "$options": "i"}},
-            {"code": {"$regex": search, "$options": "i"}},
+            {"student.fullName": {"$regex": re.escape(search), "$options": "i"}},
+            {"code": {"$regex": re.escape(search), "$options": "i"}},
         ]
     allowed = await allowed_class_ids(current)
     if allowed is not None:

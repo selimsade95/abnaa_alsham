@@ -90,7 +90,7 @@ export default function PaymentPrint({ studentHistory = false }) {
   if (!ready || (!student && payments.length === 0))
     return (
       <div
-        className="p-8 text-gray-500"
+        className="p-8 text-muted-foreground"
         dir={getLanguage() === "ar" ? "rtl" : "ltr"}
       >
         جاري تجهيز سجل المدفوعات...
@@ -144,14 +144,14 @@ export default function PaymentPrint({ studentHistory = false }) {
 
   return (
     <div
-      className="min-h-screen bg-white p-6"
+      className="min-h-screen bg-card p-6"
       dir={getLanguage() === "ar" ? "rtl" : "ltr"}
     >
       {/* Print button */}
       <div className="no-print mx-auto mb-5 flex max-w-3xl justify-end">
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
         >
           <Printer className="h-4 w-4" />
           طباعة
@@ -161,7 +161,7 @@ export default function PaymentPrint({ studentHistory = false }) {
       {/* Printable document */}
       <main className="mx-auto flex min-h-[calc(100vh-100px)] max-w-3xl flex-col">
         {/* Header */}
-        <header className="flex items-center gap-4 border-b-2 border-[#04CDF9] pb-4">
+        <header className="flex items-center gap-4 border-b-2 border-ring pb-4">
           {/* Left Logo */}
           <img
             src="/assets/school_logo.png"
@@ -171,10 +171,10 @@ export default function PaymentPrint({ studentHistory = false }) {
 
           {/* Center */}
           <div className="flex-1 text-center">
-            <h1 className="text-2xl font-extrabold text-gray-900">
+            <h1 className="text-2xl font-extrabold text-foreground">
               مدرسة أبناء الشام
             </h1>
-            <p className="text-sm text-gray-600">إيصال سجل المدفوعات</p>
+            <p className="text-sm text-muted-foreground">إيصال سجل المدفوعات</p>
           </div>
 
           {/* Right Logo */}
@@ -187,28 +187,28 @@ export default function PaymentPrint({ studentHistory = false }) {
 
         {/* Student Information */}
         {!multipleStudents && (
-          <section className="mt-5 grid grid-cols-2 gap-x-8 gap-y-2 rounded-lg border border-gray-200 p-4 text-sm">
+          <section className="mt-5 grid grid-cols-2 gap-x-8 gap-y-2 rounded-lg border border-border p-4 text-sm">
             <div>
-              <span className="text-gray-500">الطالب:</span>{" "}
+              <span className="text-muted-foreground">الطالب:</span>{" "}
               <strong>
                 {profile.fullName || records[0]?.studentName || "—"}
               </strong>
             </div>
 
             <div>
-              <span className="text-gray-500">الكود:</span>{" "}
+              <span className="text-muted-foreground">الكود:</span>{" "}
               <strong>{student?.code || records[0]?.studentCode || "—"}</strong>
             </div>
 
             <div>
-              <span className="text-gray-500">الصف:</span>{" "}
+              <span className="text-muted-foreground">الصف:</span>{" "}
               <strong>
                 {student?.currentClass?.name || profile.newClass || "—"}
               </strong>
             </div>
 
             <div>
-              <span className="text-gray-500">الحالة:</span>{" "}
+              <span className="text-muted-foreground">الحالة:</span>{" "}
               <strong>{STATUS_LABELS[profile.status] || "—"}</strong>
             </div>
           </section>
@@ -220,14 +220,14 @@ export default function PaymentPrint({ studentHistory = false }) {
             {FEE_TYPE_ORDER.map((feeType) => (
               <div
                 key={feeType}
-                className="rounded-lg border border-gray-200 p-3"
+                className="rounded-lg border border-border p-3"
               >
-                <div className="text-xs font-semibold text-gray-700 mb-2">
+                <div className="text-xs font-semibold text-foreground mb-2">
                   {FEE_TYPE_LABELS[feeType]}
                 </div>
-                <div className="text-xs text-gray-500">مستحق</div>
+                <div className="text-xs text-muted-foreground">مستحق</div>
                 <strong>{printedFeeTotals[feeType].payable || 0}</strong>
-                <div className="text-xs text-gray-500 mt-1">مدفوع / متبقٍ</div>
+                <div className="text-xs text-muted-foreground mt-1">مدفوع / متبقٍ</div>
                 <strong>{printedFeeTotals[feeType].paid || 0}</strong>
                 <span> / </span>
                 <strong>{printedFeeTotals[feeType].remaining || 0}</strong>
@@ -239,15 +239,15 @@ export default function PaymentPrint({ studentHistory = false }) {
         {/* Selected Payment Summary */}
         {selectedPayment && (
           <section className="mt-5 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs text-muted-foreground">
                 مستحق {FEE_TYPE_LABELS[selectedPayment.feeType || "academic"]}
               </div>
               <strong>{selectedPayment.totalPayable || 0}</strong>
             </div>
 
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="text-xs text-gray-500">
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs text-muted-foreground">
                 المدفوع حتى هذه الدفعة
               </div>
               <strong>
@@ -269,28 +269,28 @@ export default function PaymentPrint({ studentHistory = false }) {
         )}
 
         {/* Payments Table */}
-        <table className="mt-5 w-full border-collapse border border-gray-300 text-sm">
-          <thead className="bg-gray-100">
+        <table className="mt-5 w-full border-collapse border border-input text-sm">
+          <thead className="bg-secondary">
             <tr>
               {multipleStudents && (
-                <th className="border border-gray-300 p-2 text-right">
+                <th className="border border-input p-2 text-right">
                   الطالب
                 </th>
               )}
-              <th className="border border-gray-300 p-2 text-right">التاريخ</th>
-              <th className="border border-gray-300 p-2 text-right">السنة</th>
-              <th className="border border-gray-300 p-2 text-right">الفصل</th>
-              <th className="border border-gray-300 p-2 text-right">
+              <th className="border border-input p-2 text-right">التاريخ</th>
+              <th className="border border-input p-2 text-right">السنة</th>
+              <th className="border border-input p-2 text-right">الفصل</th>
+              <th className="border border-input p-2 text-right">
                 نوع الرسوم
               </th>
-              <th className="border border-gray-300 p-2 text-right">المبلغ</th>
-              <th className="border border-gray-300 p-2 text-right">
+              <th className="border border-input p-2 text-right">المبلغ</th>
+              <th className="border border-input p-2 text-right">
                 المدفوع حتى الدفعة
               </th>
-              <th className="border border-gray-300 p-2 text-right">
+              <th className="border border-input p-2 text-right">
                 المتبقي بعدها
               </th>
-              <th className="border border-gray-300 p-2 text-right">ملاحظات</th>
+              <th className="border border-input p-2 text-right">ملاحظات</th>
             </tr>
           </thead>
 
@@ -298,28 +298,28 @@ export default function PaymentPrint({ studentHistory = false }) {
             {records.map((payment) => (
               <tr key={payment.id}>
                 {multipleStudents && (
-                  <td className="border border-gray-300 p-2">
+                  <td className="border border-input p-2">
                     {payment.studentName || "—"}
                   </td>
                 )}
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {(payment.paymentDate || "").slice(0, 10)}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {payment.academicYear || "—"}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {SEMESTER_LABELS[payment.semester] || payment.semester}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {FEE_TYPE_LABELS[payment.feeType || "academic"]}
                 </td>
 
                 <td
-                  className={`border border-gray-300 p-2 font-semibold ${
+                  className={`border border-input p-2 font-semibold ${
                     payment.type === "refund" || Number(payment.amount) < 0
                       ? "text-red-600"
                       : ""
@@ -328,17 +328,17 @@ export default function PaymentPrint({ studentHistory = false }) {
                   {payment.amount}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {payment.totalPaidAtPayment ?? payment.totalPaid ?? "—"}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {payment.totalRemainingAtPayment ??
                     payment.totalRemaining ??
                     "—"}
                 </td>
 
-                <td className="border border-gray-300 p-2">
+                <td className="border border-input p-2">
                   {payment.notes || "—"}
                 </td>
               </tr>
@@ -347,7 +347,7 @@ export default function PaymentPrint({ studentHistory = false }) {
         </table>
 
         {/* Document note */}
-        <p className="mt-6 text-xs text-gray-500">
+        <p className="mt-6 text-xs text-muted-foreground">
           هذا المستند يوضح سجل المدفوعات المسجل لدى مدرسة أبناء الشام.
         </p>
 
@@ -355,7 +355,7 @@ export default function PaymentPrint({ studentHistory = false }) {
         <div className="flex-1" />
 
         {/* Print Footer */}
-        <footer className="mt-6 border-t border-gray-200 pt-3 text-center text-xs text-gray-500">
+        <footer className="mt-6 border-t border-border pt-3 text-center text-xs text-muted-foreground">
           تاريخ الطباعة: {new Date().toLocaleDateString(getIntlLocale())}
         </footer>
       </main>

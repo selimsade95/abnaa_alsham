@@ -67,7 +67,7 @@ async def list_students(search: Optional[str] = None, gender: Optional[str] = No
         cls = await db.classes.find({"$or": [{"teacherIds": teacherId}, {"teacherId": teacherId}]}, {"id": 1, "_id": 0}).to_list(500)
         q["currentClassId"] = {"$in": [c["id"] for c in cls]}
     if search:
-        rx = {"$regex": search, "$options": "i"}
+        rx = {"$regex": re.escape(search), "$options": "i"}
         q["$or"] = [{"student.fullName": rx}, {"code": rx},
                     {"father.name": rx}, {"mother.name": rx},
                     {"father.phone": rx}, {"mother.phone": rx},
@@ -236,8 +236,8 @@ async def student_options(
     if search and search.strip():
         value = re.escape(search.strip())
         query["$or"] = [
-            {"student.fullName": {"$regex": value, "$options": "i"}},
-            {"code": {"$regex": value, "$options": "i"}},
+            {"student.fullName": {"$regex": re.escape(value), "$options": "i"}},
+            {"code": {"$regex": re.escape(value), "$options": "i"}},
         ]
     allowed = await allowed_class_ids(current)
     if allowed is not None:
@@ -554,15 +554,6 @@ async def validate_student(sid: str):
             {"id": d["currentClassId"]},
             {"_id": 0, "name": 1, "section": 1, "academicYear": 1},
         )
-    grades = await raw_db.grades.find(
-        {"studentId": sid},
-        {"_id": 0, "academicYear": 1, "period": 1, "score": 1, "subjectId": 1},
-    ).sort([("academicYear", -1), ("period", 1)]).to_list(10000)
-    for grade in grades:
-        subject = await raw_db.subjects.find_one(
-            {"id": grade.pop("subjectId", None)}, {"_id": 0, "name": 1}
-        )
-        grade["subjectName"] = subject.get("name") if subject else "—"
     return {
         "code": d.get("code"),
         "fullName": student.get("fullName"),
@@ -571,6 +562,4 @@ async def validate_student(sid: str):
         "className": current_class.get("name") if current_class else student.get("newClass"),
         "section": current_class.get("section") if current_class else None,
         "academicYear": (current_class or {}).get("academicYear") or (d.get("fees") or {}).get("academicYear"),
-        "hasPersonalPhoto": bool(((d.get("documents") or {}).get("personal_photo") or {}).get("filePath")),
-        "grades": grades,
     }

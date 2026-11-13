@@ -69,6 +69,18 @@ async def _augment_student(
     teacher: Optional[dict] = None,
     class_lookup_complete: bool = False,
 ) -> dict:
+    permissions = set((current or {}).get("permissions") or [])
+    for field, permission in (
+        ("documents", "students.documents.view"),
+        ("orphanDocument", "students.orphanDocument.view"),
+    ):
+        if permission not in permissions:
+            doc.pop(field, None)
+    for metadata in (doc.get("documents") or {}).values():
+        metadata.pop("filePath", None)
+    if doc.get("orphanDocument"):
+        doc["orphanDocument"].pop("filePath", None)
+
     student = doc.setdefault("student", {})
     student.setdefault("finalRegistrationPath", student.get("registrationPath") or "")
     fees = doc.get("fees") or {}

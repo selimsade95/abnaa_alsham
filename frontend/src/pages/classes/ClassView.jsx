@@ -42,7 +42,7 @@ export default function ClassView() {
 
   if (!classItem)
     return (
-      <div className="py-16 text-center text-gray-500">
+      <div className="py-16 text-center text-muted-foreground">
         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
         جاري التحميل...
       </div>
@@ -54,13 +54,13 @@ export default function ClassView() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+          className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4" /> رجوع
         </button>
-        <h1 className="text-3xl font-bold text-gray-900">{classItem.name}</h1>
+        <h1 className="text-3xl font-bold text-foreground">{classItem.name}</h1>
       </div>
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {[
             ["code", "الكود"],
@@ -74,8 +74,8 @@ export default function ClassView() {
             ["notes", "ملاحظات"],
           ].map(([key, label]) => (
             <div key={key}>
-              <dt className="text-sm text-gray-500">{label}</dt>
-              <dd className="mt-1 whitespace-pre-wrap text-sm font-medium text-gray-900">
+              <dt className="text-sm text-muted-foreground">{label}</dt>
+              <dd className="mt-1 whitespace-pre-wrap text-sm font-medium text-foreground">
                 {key === "status"
                   ? classItem[key] === "active"
                     ? "نشط"
@@ -91,14 +91,14 @@ export default function ClassView() {
           ))}
         </dl>
         {canViewTeachers && (classItem.teacherIds || []).length > 0 && (
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <h2 className="mb-2 text-sm font-medium text-gray-700">المعلمون</h2>
+          <div className="mt-4 border-t border-border pt-4">
+            <h2 className="mb-2 text-sm font-medium text-foreground">المعلمون</h2>
             <div className="flex flex-wrap gap-3">
               {(classItem.teacherNames || []).map((name, index) => (
                 <Link
                   key={classItem.teacherIds[index] || name}
                   to={`/teachers/${classItem.teacherIds[index]}`}
-                  className="text-sm text-[#036A87] hover:underline"
+                  className="text-sm text-accent-foreground hover:underline"
                 >
                   {name}
                 </Link>
@@ -108,13 +108,13 @@ export default function ClassView() {
         )}
       </section>
       {canViewStudents && (
-        <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <h2 className="border-b border-gray-100 px-5 py-4 text-lg font-semibold text-gray-900">
+        <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <h2 className="border-b border-border px-5 py-4 text-lg font-semibold text-foreground">
             الطلاب ({students.length})
           </h2>
           <div className="overflow-x-auto">
             <table className="min-w-full text-right text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500">
+              <thead className="bg-muted text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">الكود</th>
                   <th className="px-4 py-3">الاسم</th>
@@ -123,19 +123,19 @@ export default function ClassView() {
               </thead>
               <tbody>
                 {students.map((student) => (
-                  <tr key={student.id} className="border-t border-gray-100">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                  <tr key={student.id} className="border-t border-border">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {student.code || "—"}
                     </td>
                     <td className="px-4 py-3">
                       <Link
                         to={`/students/${student.id}`}
-                        className="font-medium text-[#036A87] hover:underline"
+                        className="font-medium text-accent-foreground hover:underline"
                       >
                         {student.student?.fullName || "—"}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {student.student?.status === "inactive"
                         ? "غير نشط"
                         : "نشط"}
@@ -146,7 +146,7 @@ export default function ClassView() {
                   <tr>
                     <td
                       colSpan={3}
-                      className="px-4 py-8 text-center text-gray-500"
+                      className="px-4 py-8 text-center text-muted-foreground"
                     >
                       لا يوجد طلاب في هذا الصف.
                     </td>

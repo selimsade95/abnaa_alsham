@@ -1,3 +1,5 @@
+import WhatsAppPhone from "@/components/WhatsAppPhone";
+import { t } from "@/i18n";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -42,9 +44,9 @@ const workFields = [
 ];
 
 const InfoSection = ({ title, icon: Icon, fields, teacher }) => (
-  <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-    <h2 className="mb-4 flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-semibold text-gray-900">
-      <Icon className="h-4 w-4 text-[#036A87]" />
+  <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+    <h2 className="mb-4 flex items-center gap-2 border-b border-border pb-3 text-base font-semibold text-foreground">
+      <Icon className="h-4 w-4 text-accent-foreground" />
       {title}
     </h2>
     <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
@@ -70,8 +72,8 @@ const InfoSection = ({ title, icon: Icon, fields, teacher }) => (
                   : teacher[key];
         return (
           <div key={key}>
-            <dt className="text-xs font-medium text-gray-500">{label}</dt>
-            <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-gray-900">
+            <dt className="text-xs font-medium text-muted-foreground">{t(label)}</dt>
+            <dd className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-foreground">
               {value || "—"}
             </dd>
           </div>
@@ -132,7 +134,7 @@ export default function TeacherView() {
 
   if (loading)
     return (
-      <div className="py-16 text-center text-gray-500">
+      <div className="py-16 text-center text-muted-foreground">
         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
         جاري التحميل...
       </div>
@@ -140,12 +142,12 @@ export default function TeacherView() {
 
   if (loadError || !teacher)
     return (
-      <div className="space-y-4 py-16 text-center text-gray-500">
+      <div className="space-y-4 py-16 text-center text-muted-foreground">
         <p>تعذر عرض بيانات المعلم.</p>
         <button
           type="button"
           onClick={() => navigate("/teachers")}
-          className="text-sm font-medium text-[#036A87] hover:underline"
+          className="text-sm font-medium text-accent-foreground hover:underline"
         >
           العودة إلى قائمة المعلمين
         </button>
@@ -179,19 +181,19 @@ export default function TeacherView() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800"
+            className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowRight className="h-4 w-4" /> رجوع
           </button>
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-[#036A87]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
               <UserRound className="h-7 w-7" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-3xl font-bold text-foreground">
                 {teacher.fullName}
               </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span className="font-mono">{teacher.code || "—"}</span>
                 <span aria-hidden="true">·</span>
                 <span>{GENDER_LABELS[teacher.gender] || "—"}</span>
@@ -203,7 +205,7 @@ export default function TeacherView() {
           <span
             className={`rounded-full border px-3 py-1 text-xs font-medium ${
               teacher.employmentStatus === "inactive"
-                ? "border-gray-200 bg-gray-50 text-gray-600"
+                ? "border-border bg-muted text-muted-foreground"
                 : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}
           >
@@ -212,7 +214,7 @@ export default function TeacherView() {
           {has("teachers.update") && (
             <Link
               to={`/teachers/${id}/edit`}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
             >
               <Pencil className="h-4 w-4" /> تعديل
             </Link>
@@ -221,29 +223,29 @@ export default function TeacherView() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <Phone className="h-5 w-5 text-[#036A87]" />
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <Phone className="h-5 w-5 text-accent-foreground" />
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">الهاتف</p>
-            <p className="truncate text-sm font-semibold text-gray-900">
-              {phone || "—"}
+            <p className="text-xs text-muted-foreground">الهاتف</p>
+            <p className="truncate text-sm font-semibold text-foreground">
+              <WhatsAppPhone phone={phone} />
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <MapPin className="h-5 w-5 text-[#036A87]" />
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <MapPin className="h-5 w-5 text-accent-foreground" />
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">العنوان</p>
-            <p className="truncate text-sm font-semibold text-gray-900">
+            <p className="text-xs text-muted-foreground">العنوان</p>
+            <p className="truncate text-sm font-semibold text-foreground">
               {teacher.address || "—"}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <BriefcaseBusiness className="h-5 w-5 text-[#036A87]" />
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
+          <BriefcaseBusiness className="h-5 w-5 text-accent-foreground" />
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">القسم / الوصف الوظيفي</p>
-            <p className="truncate text-sm font-semibold text-gray-900">
+            <p className="text-xs text-muted-foreground">القسم / الوصف الوظيفي</p>
+            <p className="truncate text-sm font-semibold text-foreground">
               {teacher.department ||
                 teacher.jobDescription ||
                 teacher.specialization ||
@@ -269,19 +271,19 @@ export default function TeacherView() {
       </div>
 
       {teacher.certificateFile && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
           <div>
-            <p className="text-sm font-semibold text-gray-900">
+            <p className="text-sm font-semibold text-foreground">
               الشهادة المرفقة
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               {teacher.certificateFile.originalName}
             </p>
           </div>
           <button
             type="button"
             onClick={downloadCertificate}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm text-foreground hover:bg-muted"
           >
             <Download className="h-4 w-4" /> تنزيل الشهادة
           </button>
@@ -289,32 +291,32 @@ export default function TeacherView() {
       )}
 
       {teacher.notes && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-2 text-base font-semibold text-gray-900">ملاحظات</h2>
-          <p className="whitespace-pre-wrap text-sm text-gray-700">
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="mb-2 text-base font-semibold text-foreground">ملاحظات</h2>
+          <p className="whitespace-pre-wrap text-sm text-foreground">
             {teacher.notes}
           </p>
         </section>
       )}
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between border-b border-gray-100 pb-3">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
-            <GraduationCap className="h-5 w-5 text-[#036A87]" />
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <GraduationCap className="h-5 w-5 text-accent-foreground" />
             الصفوف المسندة
           </h2>
           {canViewClasses && (
-            <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600">
+            <span className="rounded-full bg-secondary px-2.5 py-1 text-xs text-muted-foreground">
               {classes.length}
             </span>
           )}
         </div>
         {!canViewClasses ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             لا تتوفر صلاحية عرض الصفوف.
           </p>
         ) : classes.length === 0 ? (
-          <p className="py-4 text-center text-sm text-gray-500">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             لا توجد صفوف مسندة لهذا المعلم.
           </p>
         ) : (
@@ -323,10 +325,10 @@ export default function TeacherView() {
               <Link
                 key={classItem.id}
                 to={`/classes/${classItem.id}`}
-                className="rounded-lg border border-gray-200 p-4 transition-colors hover:border-[#04CDF9] hover:bg-cyan-50/40"
+                className="rounded-lg border border-border p-4 transition-colors hover:border-ring hover:bg-cyan-50/40"
               >
-                <p className="font-semibold text-gray-900">{classItem.name}</p>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="font-semibold text-foreground">{classItem.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   {[classItem.grade, classItem.section, classItem.academicYear]
                     .filter(Boolean)
                     .join(" · ") || "لا توجد تفاصيل إضافية"}

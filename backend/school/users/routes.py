@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 
 from school.core.database import db, raw_db
-from school.core.services import hash_pw, now_iso, require_permission
+from school.core.services import compute_user_permissions, hash_pw, now_iso, require_permission
 from school.users.schemas import UserCreate, UserUpdate
 
 
@@ -31,42 +31,36 @@ async def _validated_user_roles(role_ids, current):
     ).to_list(100)
     if len(roles) != len(requested):
         raise HTTPException(400, "أحد الأدوار المحددة غير موجود")
-    if "branches.accessAll" not in (current.get("permissions") or []):
-        granted_permissions = {
-            permission
-            for role in roles
-            for permission in role.get("permissions") or []
-        }
-        caller_permissions = set(current.get("permissions") or [])
-        if "branches.accessAll" in granted_permissions:
-            raise HTTPException(403, "لا تملك صلاحية منح الوصول إلى جميع الفروع")
-        gender_permissions = {
-            "students.gender.male.view",
-            "students.gender.female.view",
-        }
-        if not (granted_permissions & gender_permissions).issubset(
-            caller_permissions & gender_permissions
-        ):
-            raise HTTPException(
-                403, "لا تملك صلاحية منح صلاحيات عرض جنس آخر من الطلاب"
-            )
-        grade_scope_permissions = {
-            "students.scope.lowerGrades.view",
-            "students.scope.upperGrades.male.view",
-            "students.scope.upperGrades.female.view",
-        }
-        if not (granted_permissions & grade_scope_permissions).issubset(
-            caller_permissions & grade_scope_permissions
-        ):
-            raise HTTPException(
-                403, "لا تملك صلاحية منح نطاق صفوف غير مسموح به"
-            )
+    granted = {permission for role in roles for permission in role.get("permissions") or []}
+    _require_delegable_permissions(granted, current)
     return requested
+
+
+def _require_delegable_permissions(granted, current):
+    caller = set(current.get("permissions") or [])
+    # Scope permissions restrict access. Dropping the last restriction can widen it.
+    gender = {permission for permission in caller if permission.startswith("students.gender.")}
+    grades = {permission for permission in caller if permission.startswith("students.scope.")}
+    drops_gender = len(gender) == 1 and not gender.intersection(granted)
+    drops_grades = 0 < len(grades) < 3 and not grades.intersection(granted)
+    if not granted.issubset(caller) or drops_gender or drops_grades:
+        raise HTTPException(403, "لا تملك صلاحية إدارة هذا المستوى من الوصول")
+
+
+async def _manageable_user(uid, current):
+    target = await db.users.find_one({"id": uid})
+    if not target:
+        raise HTTPException(404, "غير موجود")
+    _require_delegable_permissions(set(await compute_user_permissions(target)), current)
+    await _validated_user_branch_ids(target.get("branchIds") or [current["branchId"]], current)
+    if current.get("teacherId") and target.get("teacherId") != current["teacherId"]:
+        raise HTTPException(403, "لا تملك صلاحية إدارة هذا المستخدم")
+    return target
 
 
 @router.get("/users")
 async def list_users(current=Depends(require_permission("users.view"))):
-    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("createdAt", -1).to_list(500)
+    users = await db.users.find({}, {"_id": 0, "password": 0, "authVersion": 0}).sort("createdAt", -1).to_list(500)
     for user in users:
         user.setdefault("branchIds", [current["branchId"]])
     return users
@@ -75,7 +69,7 @@ async def list_users(current=Depends(require_permission("users.view"))):
 @router.get("/users/{uid}")
 async def get_user(uid: str, current=Depends(require_permission("users.view"))):
     user = await db.users.find_one(
-        {"id": uid}, {"_id": 0, "password": 0}
+        {"id": uid}, {"_id": 0, "password": 0, "authVersion": 0}
     )
     if not user:
         raise HTTPException(404, "المستخدم غير موجود")
@@ -103,6 +97,8 @@ async def create_user(body: UserCreate, current=Depends(require_permission("user
     if not body.name.strip() or not body.username.strip() or len(body.password) < 4:
         raise HTTPException(400, "بيانات غير صالحة")
     if await raw_db.users.find_one({"username": body.username}): raise HTTPException(400, "اسم المستخدم مستخدم")
+    if current.get("teacherId") and body.teacherId != current["teacherId"]:
+        raise HTTPException(403, "لا تملك صلاحية إنشاء مستخدم خارج نطاقك")
     if body.teacherId:
         if not await db.teachers.find_one({"id": body.teacherId}): raise HTTPException(400, "المعلم غير موجود")
         if await raw_db.users.find_one({"teacherId": body.teacherId}): raise HTTPException(400, "المعلم مرتبط بحساب آخر")
@@ -120,10 +116,14 @@ async def create_user(body: UserCreate, current=Depends(require_permission("user
 
 @router.put("/users/{uid}")
 async def update_user(uid: str, body: UserUpdate, current=Depends(require_permission("users.update"))):
-    if not await db.users.find_one({"id": uid}): raise HTTPException(404, "غير موجود")
+    target = await _manageable_user(uid, current)
+    if current.get("teacherId") and "teacherId" in body.model_fields_set and body.teacherId != target.get("teacherId"):
+        raise HTTPException(403, "لا تملك صلاحية تغيير نطاق المستخدم")
     upd = {"updatedAt": now_iso()}
     if body.name is not None: upd["name"] = body.name.strip()
-    if body.password: upd["password"] = hash_pw(body.password)
+    if body.password:
+        upd["password"] = hash_pw(body.password)
+        upd["authVersion"] = uuid.uuid4().hex
     if body.roles is not None:
         upd["roles"] = await _validated_user_roles(body.roles, current)
     if "branchIds" in body.model_fields_set:
@@ -136,12 +136,13 @@ async def update_user(uid: str, body: UserUpdate, current=Depends(require_permis
             raise HTTPException(400, "المعلم مرتبط بحساب آخر")
         upd["teacherId"] = body.teacherId
     await db.users.update_one({"id": uid}, {"$set": upd})
-    return await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password": 0, "authVersion": 0})
 
 
 @router.delete("/users/{uid}")
 async def delete_user(uid: str, current=Depends(require_permission("users.delete"))):
     if uid == current["id"]: raise HTTPException(400, "لا يمكنك حذف حسابك الحالي")
+    await _manageable_user(uid, current)
     r = await db.users.delete_one({"id": uid})
     if r.deleted_count == 0: raise HTTPException(404, "غير موجود")
     return {"ok": True}

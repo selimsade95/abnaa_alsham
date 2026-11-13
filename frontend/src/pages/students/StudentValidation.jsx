@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import api, { API } from "@/lib/api";
+import { Link, useParams } from "react-router-dom";
+import api from "@/lib/api";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -24,50 +24,51 @@ const EMPTY_MESSAGE = {
   content: "",
 };
 
-const PERIOD_LABELS = {
-  first: "الفصل الأول",
-  second: "الفصل الثاني",
-  final: "النهائي",
-};
-
 export default function StudentValidation() {
   const { id } = useParams();
   const [data, setData] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [message, setMessage] = useState(EMPTY_MESSAGE);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setData(null);
+    setError(null);
     api
-      .get(`/public/students/${id}/validation`)
+      .get(`/public/students/${id}/validation`, { signal: controller.signal })
       .then((response) => setData(response.data))
-      .catch(() => setError(true));
+      .catch((requestError) => {
+        if (!controller.signal.aborted) {
+          setError(requestError.response?.status === 404 ? "missing" : "unavailable");
+        }
+      });
+    return () => controller.abort();
   }, [id]);
-
   if (!data && !error)
     return (
       <div
-        className="min-h-screen flex items-center justify-center text-gray-500"
+        className="min-h-screen flex items-center justify-center text-muted-foreground"
       >
         <Loader2 className="h-5 w-5 animate-spin ms-2" /> جاري التحقق...
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 sm:p-8">
-      <main className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-[#BDEFFA] bg-white shadow-lg">
-        <header className="bg-[#E0F9FF] px-6 py-5 flex items-center gap-3 border-b-2 border-[#04CDF9]">
+    <div className="min-h-screen bg-background p-4 sm:p-8">
+      <main className="mx-auto max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+        <header className="bg-accent px-6 py-5 flex items-center gap-3 border-b-2 border-ring">
           <img
             src="/assets/logo.png"
             alt="مدرسة أبناء الشام"
             className="h-14 w-14 object-contain"
           />
           <div>
-            <div className="text-xl font-extrabold text-gray-900">
+            <div className="text-xl font-extrabold text-foreground">
               مدرسة أبناء الشام
             </div>
-            <div className="text-xs text-[#036A87]">
+            <div className="text-xs text-accent-foreground">
               التحقق من بيانات الطالب
             </div>
           </div>
@@ -75,11 +76,13 @@ export default function StudentValidation() {
         {error ? (
           <div className="p-10 text-center">
             <ShieldAlert className="mx-auto h-12 w-12 text-red-500" />
-            <h1 className="mt-4 text-xl font-bold text-gray-900">
+            <h1 className="mt-4 text-xl font-bold text-foreground">
               تعذر التحقق
             </h1>
-            <p className="mt-2 text-sm text-gray-500">
-              بيانات الطالب غير موجودة أو لم تعد متاحة.
+            <p className="mt-2 text-sm text-muted-foreground">
+              {error === "missing"
+                ? "بيانات الطالب غير موجودة أو لم تعد متاحة."
+                : "تعذر تحميل نتيجة التحقق. أعد المحاولة بعد قليل."}
             </p>
           </div>
         ) : (
@@ -109,79 +112,39 @@ export default function StudentValidation() {
                 ? "بيانات الطالب صالحة والطالب نشط"
                 : "الطالب غير نشط"}
             </div>
-            <h1 className="mt-3 text-2xl font-extrabold text-gray-900">
+            <h1 className="mt-3 text-2xl font-extrabold text-foreground">
               {data.fullName}
             </h1>
-            {data.hasPersonalPhoto && (
-              <img
-                src={`${API}/public/students/${id}/validation/personal-photo`}
-                alt="صورة الطالب"
-                className="mx-auto mt-3 h-24 w-20 rounded-lg border border-gray-200 object-cover"
-              />
-            )}
-            <div className="mt-1 font-mono text-sm text-[#036A87]">
+            <div className="mt-1 font-mono text-sm text-accent-foreground">
               {data.code}
             </div>
             <div className="mt-6 grid grid-cols-2 gap-3 text-right">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-500">الصف</div>
+              <div className="rounded-lg bg-muted p-3">
+                <div className="text-xs text-muted-foreground">الصف</div>
                 <div className="mt-1 text-sm font-semibold">
                   {data.className || "—"}
                 </div>
               </div>
-              <div className="rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-500">الشعبة</div>
+              <div className="rounded-lg bg-muted p-3">
+                <div className="text-xs text-muted-foreground">الشعبة</div>
                 <div className="mt-1 text-sm font-semibold">
                   {data.section || "—"}
                 </div>
               </div>
-              <div className="col-span-2 rounded-lg bg-gray-50 p-3">
-                <div className="text-xs text-gray-500">السنة الدراسية</div>
+              <div className="col-span-2 rounded-lg bg-muted p-3">
+                <div className="text-xs text-muted-foreground">السنة الدراسية</div>
                 <div className="mt-1 text-sm font-semibold">
                   {data.academicYear || "—"}
                 </div>
               </div>
             </div>
-            {data.grades?.length > 0 && (
-              <section className="mt-6 text-right">
-                <h2 className="mb-3 text-lg font-bold text-gray-900">
-                  درجات الطالب
-                </h2>
-                <div className="overflow-x-auto rounded-lg border border-gray-200">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-600">
-                      <tr>
-                        <th className="px-3 py-2">المادة</th>
-                        <th className="px-3 py-2">الدرجة</th>
-                        <th className="px-3 py-2">الفترة</th>
-                        <th className="px-3 py-2">السنة الدراسية</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.grades.map((grade, index) => (
-                        <tr
-                          key={`${grade.academicYear}-${grade.period}-${grade.subjectName}-${index}`}
-                          className="border-t border-gray-100"
-                        >
-                          <td className="px-3 py-2">{grade.subjectName}</td>
-                          <td className="px-3 py-2 font-semibold">
-                            {grade.score}
-                          </td>
-                          <td className="px-3 py-2">
-                            {PERIOD_LABELS[grade.period] || grade.period}
-                          </td>
-                          <td className="px-3 py-2">{grade.academicYear}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
+            <Link to="/parent-access" className="mt-6 block text-sm font-semibold text-accent-foreground underline">
+              بوابة ولي الأمر
+            </Link>
             <button
               type="button"
               onClick={() => setMessageOpen(true)}
-              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-hover"
             >
               <MessageSquareText className="h-4 w-4" />
               إرسال رسالة أو شكوى
@@ -216,7 +179,7 @@ export default function StudentValidation() {
               }
             }}
           >
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-foreground">
               الاسم
               <input
                 required
@@ -226,10 +189,10 @@ export default function StudentValidation() {
                 onChange={(event) =>
                   setMessage({ ...message, name: event.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-foreground">
               رقم الهاتف
               <input
                 required
@@ -241,10 +204,10 @@ export default function StudentValidation() {
                 onChange={(event) =>
                   setMessage({ ...message, phone: event.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-foreground">
               البريد الإلكتروني
               <input
                 required
@@ -255,17 +218,17 @@ export default function StudentValidation() {
                 onChange={(event) =>
                   setMessage({ ...message, email: event.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-foreground">
               نوع الرسالة
               <select
                 value={message.messageType}
                 onChange={(event) =>
                   setMessage({ ...message, messageType: event.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               >
                 <option value="complaint">شكوى</option>
                 <option value="suggestion">اقتراح</option>
@@ -273,7 +236,7 @@ export default function StudentValidation() {
                 <option value="other">أخرى</option>
               </select>
             </label>
-            <label className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-foreground">
               محتوى الرسالة
               <textarea
                 required
@@ -284,13 +247,13 @@ export default function StudentValidation() {
                 onChange={(event) =>
                   setMessage({ ...message, content: event.target.value })
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
             <button
               type="submit"
               disabled={sending}
-              className="w-full rounded-lg bg-[#04CDF9] px-4 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+              className="w-full rounded-lg bg-primary px-4 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
             >
               {sending ? "جاري الإرسال..." : "إرسال"}
             </button>

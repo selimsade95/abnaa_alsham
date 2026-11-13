@@ -9,7 +9,7 @@ const PAGE_SIZE = 50;
 const METHOD_STYLES = {
   DELETE: "bg-red-100 text-red-700",
   POST: "bg-yellow-100 text-yellow-800",
-  PUT: "bg-cyan-100 text-cyan-800",
+  PUT: "bg-accent text-accent-foreground",
   PATCH: "bg-blue-100 text-blue-800",
 };
 const STATUS_OPTIONS = [200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 500];
@@ -106,10 +106,10 @@ export default function AuditLogs() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             {t("auditLog.title")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t("auditLog.description")}
           </p>
         </div>
@@ -117,7 +117,7 @@ export default function AuditLogs() {
           type="button"
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -130,21 +130,21 @@ export default function AuditLogs() {
 
       <form
         onSubmit={applyFilters}
-        className="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-6"
+        className="grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-6"
       >
-        <label className="space-y-1 text-sm text-gray-700">
+        <label className="space-y-1 text-sm text-foreground">
           <span>{t("auditLog.filterUser")}</span>
           <input
             type="text"
             value={filters.user}
             onChange={updateFilter("user")}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            className="w-full rounded-lg border border-input px-3 py-2"
           />
         </label>
-        <label className="space-y-1 text-sm text-gray-700">
+        <label className="space-y-1 text-sm text-foreground">
           <span>{t("auditLog.filterStatus")}</span>
           <details className="group relative">
-            <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 marker:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg border border-input bg-card px-3 py-2 marker:hidden">
               <span>
                 {filters.statuses.length
                   ? t("general.selectedCount", {
@@ -154,11 +154,11 @@ export default function AuditLogs() {
               </span>
               <span aria-hidden="true">⌄</span>
             </summary>
-            <div className="absolute right-0 z-30 mt-1 max-h-64 w-full min-w-40 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+            <div className="absolute right-0 z-30 mt-1 max-h-64 w-full min-w-40 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-lg">
               {statusOptions.map((statusCode) => (
                 <label
                   key={statusCode}
-                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-foreground hover:bg-muted"
                 >
                   <input
                     type="checkbox"
@@ -173,7 +173,7 @@ export default function AuditLogs() {
                             ),
                       }))
                     }
-                    className="rounded border-gray-300"
+                    className="rounded border-input"
                   />
                   {statusCode}
                 </label>
@@ -181,32 +181,32 @@ export default function AuditLogs() {
             </div>
           </details>
         </label>
-        <label className="space-y-1 text-sm text-gray-700">
+        <label className="space-y-1 text-sm text-foreground">
           <span>{t("auditLog.filterDateFrom")}</span>
           <input
             type="date"
             value={filters.dateFrom}
             max={filters.dateTo || undefined}
             onChange={updateFilter("dateFrom")}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            className="w-full rounded-lg border border-input px-3 py-2"
           />
         </label>
-        <label className="space-y-1 text-sm text-gray-700">
+        <label className="space-y-1 text-sm text-foreground">
           <span>{t("auditLog.filterDateTo")}</span>
           <input
             type="date"
             value={filters.dateTo}
             min={filters.dateFrom || undefined}
             onChange={updateFilter("dateTo")}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            className="w-full rounded-lg border border-input px-3 py-2"
           />
         </label>
-        <label className="space-y-1 text-sm text-gray-700">
+        <label className="space-y-1 text-sm text-foreground">
           <span>{t("auditLog.filterType")}</span>
           <select
             value={filters.type}
             onChange={updateFilter("type")}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            className="w-full rounded-lg border border-input bg-card px-3 py-2"
           >
             <option value="">{t("auditLog.allTypes")}</option>
             {Object.keys(METHOD_STYLES).map((method) => (
@@ -226,16 +226,16 @@ export default function AuditLogs() {
           <button
             type="button"
             onClick={clearFilters}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-input px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             {t("auditLog.clearFilters")}
           </button>
         </div>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className="min-w-full text-right text-sm">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+          <thead className="bg-muted text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">{t("auditLog.method")}</th>
               <th className="px-4 py-3 font-medium">{t("auditLog.request")}</th>
@@ -251,7 +251,7 @@ export default function AuditLogs() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-4 py-10 text-center text-gray-500"
+                  className="px-4 py-10 text-center text-muted-foreground"
                 >
                   <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                   {t("auditLog.loading")}
@@ -267,7 +267,7 @@ export default function AuditLogs() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-4 py-10 text-center text-gray-500"
+                  className="px-4 py-10 text-center text-muted-foreground"
                 >
                   {t("auditLog.empty")}
                 </td>
@@ -276,22 +276,22 @@ export default function AuditLogs() {
               items.map((item) => (
                 <tr
                   key={item.id}
-                  className="border-t border-gray-100 hover:bg-gray-50"
+                  className="border-t border-border hover:bg-muted"
                 >
                   <td className="whitespace-nowrap px-4 py-3">
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
                         METHOD_STYLES[item.method] ||
-                        "bg-gray-100 text-gray-700"
+                        "bg-secondary text-foreground"
                       }`}
                     >
                       {item.method}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-gray-700">{requestLabel(item)}</span>
+                    <span className="text-foreground">{requestLabel(item)}</span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-3 text-foreground">
                     <span
                       title={
                         item.username
@@ -308,7 +308,7 @@ export default function AuditLogs() {
                       {item.statusCode}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                     {formatDate(item.createdAt)}
                   </td>
                 </tr>
@@ -319,7 +319,7 @@ export default function AuditLogs() {
       </div>
 
       <div className="flex items-center justify-between gap-4">
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-muted-foreground">
           {t("auditLog.page", { count: page + 1 })} / {pageCount}
           {" · "}
           {t("auditLog.entryCount", { count: total })}
@@ -329,7 +329,7 @@ export default function AuditLogs() {
             type="button"
             onClick={() => setPage((current) => current - 1)}
             disabled={page === 0 || loading}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 disabled:opacity-50"
+            className="rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             {t("auditLog.previous")}
           </button>
@@ -337,7 +337,7 @@ export default function AuditLogs() {
             type="button"
             onClick={() => setPage((current) => current + 1)}
             disabled={page + 1 >= pageCount || loading}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 disabled:opacity-50"
+            className="rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50"
           >
             {t("auditLog.next")}
           </button>

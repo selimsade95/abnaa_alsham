@@ -62,6 +62,43 @@ Resend and `CONTACT_EMAILS` to a comma-separated list of one to five recipient
 addresses. The first address is the primary recipient and the remaining
 addresses are copied (CC).
 
+## Private files and deployment
+
+Keep the uploads directory outside any public web root or static-file mount.
+The API checks the existing document permissions and the student's branch,
+class, and applicable student scopes before serving a file. The public card
+check displays no student photo.
+
+Set `CORS_ORIGINS` to the frontend origins when hosting the frontend and API
+on separate origins. Local development defaults to port 3000 on localhost.
+Set `SEED_ADMIN_PASSWORD` before starting with an empty user database. For
+existing installations, change any administrator password previously set to
+the old default.
+
+## Grade announcements
+
+Grant `announcements.manage` to staff who should prepare and track WhatsApp
+announcements for their active branch. Grant `announcements.configure` as
+well to staff who maintain group invite links. Grades 1 and 2 use one
+combined group each. Grades 3 through 9 have separate girls’ and boys’ groups.
+The history stores the message and separate staff confirmations per group.
+Confirm a group after posting in WhatsApp. The system does not send the
+message or receive delivery receipts.
+
+## Parent access on student cards
+
+Staff with `students.print` and `students.parentAccess.manage` can enable,
+replace, or revoke parent access from the student card print view. Verify the
+guardian in person before handing over the printout. Print the student card
+when enabling access, since the private code is only shown at issuance.
+Replacing or revoking access disables both the old QR and its manual code.
+
+The card QR opens the Arabic parent portal directly. Parents can also open
+`/parent-access` and enter the private code printed on the student card.
+Both methods show the child's recent attendance, grades published by
+staff with `grades.accept`, and notes marked **Share with parent**. Existing
+grades and notes start private unless explicitly shared.
+
 ## Branch and student access
 
 On startup, existing records are assigned to a new default branch named

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import arabic from "./i18n/ar.json";
+import english from "./i18n/en.json";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Mail,
@@ -17,6 +19,17 @@ const EMPTY_FORM = {
 };
 
 export default function ContactForm() {
+  const [language, setLanguage] = useState(() => localStorage.getItem("abnaa-contact-language") === "en" ? "en" : "ar");
+  const copy = language === "en" ? english : arabic;
+  const direction = language === "en" ? "ltr" : "rtl";
+
+  useEffect(() => {
+    localStorage.setItem("abnaa-contact-language", language);
+    document.documentElement.lang = language;
+    document.documentElement.dir = direction;
+    document.title = copy.officeTitle;
+  }, [language, direction, copy.officeTitle]);
+
   const [form, setForm] = useState(EMPTY_FORM);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +50,8 @@ export default function ContactForm() {
     try {
       const backendUrl = process.env.REACT_APP_BACKEND_URL?.replace(/\/+$/, "");
       if (!backendUrl) {
-        throw new Error("عنوان خادم النماذج غير مضبوط");
+        setError("serverMissing");
+        return;
       }
       const response = await fetch(
         `${backendUrl}/api/public/contact-messages`,
@@ -47,16 +61,13 @@ export default function ContactForm() {
           body: JSON.stringify(form),
         },
       );
-      const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.detail || "تعذر إرسال الرسالة");
+        throw new Error("Submission failed");
       }
       setForm(EMPTY_FORM);
       setSent(true);
-    } catch (submitError) {
-      setError(
-        submitError.message || "تعذر إرسال الرسالة. يرجى المحاولة مرة أخرى.",
-      );
+    } catch {
+      setError("failed");
     } finally {
       setSending(false);
     }
@@ -65,23 +76,27 @@ export default function ContactForm() {
   return (
     <main
       className="min-h-screen bg-gradient-to-b from-cyan-50 via-slate-50 to-white px-4 py-10 sm:py-16"
-      dir="rtl"
+      dir={direction} lang={language}
     >
       <div className="mx-auto max-w-2xl">
         <header className="mb-7 text-center">
+          <button type="button" onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+            lang={language === "ar" ? "en" : "ar"} className="mb-3 rounded-lg border bg-white px-3 py-2 text-sm">
+            {language === "ar" ? "English" : "العربية"}
+          </button>
           <img
             src="/assets/logo.png"
-            alt="مؤسسة اقرأ الخيرية - مكتب الشكاوى"
+            alt={copy.officeTitle}
             className="mx-auto mb-4 h-20 w-20 object-contain"
           />
           <p className="text-sm font-bold text-cyan-800">
-            مؤسسة اقرأ الخيرية - مكتب الشكاوى
+            {copy.officeTitle}
           </p>
           <h1 className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">
-            تواصل معنا
+            {copy.heading}
           </h1>
           <p className="mt-3 text-slate-600">
-            أرسل استفسارك أو اقتراحك أو شكواك، وسيتابع فريقنا رسالتك.
+            {copy.intro}
           </p>
         </header>
 
@@ -90,24 +105,24 @@ export default function ContactForm() {
             <div className="py-8 text-center" role="status">
               <CheckCircle2 className="mx-auto h-14 w-14 text-emerald-500" />
               <h2 className="mt-4 text-2xl font-bold text-slate-900">
-                تم استلام رسالتك
+                {copy.received}
               </h2>
               <p className="mt-2 text-slate-600">
-                شكراً لتواصلك مع مؤسسة اقرأ الخيرية - مكتب الشكاوى.
+                {copy.thanks}
               </p>
               <button
                 type="button"
                 onClick={() => setSent(false)}
                 className="mt-6 rounded-lg bg-cyan-600 px-5 py-2.5 font-bold text-white transition hover:bg-cyan-700"
               >
-                إرسال رسالة أخرى
+                {copy.another}
               </button>
             </div>
           ) : (
             <form className="space-y-5" onSubmit={handleSubmit}>
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm font-semibold text-slate-700">
-                  الاسم <span className="text-red-500">*</span>
+                  {copy.name} <span className="text-red-500">*</span>
                   <input
                     name="name"
                     required
@@ -119,9 +134,9 @@ export default function ContactForm() {
                   />
                 </label>
                 <label className="block text-sm font-semibold text-slate-700">
-                  رقم الهاتف <span className="text-red-500">*</span>
+                  {copy.phone} <span className="text-red-500">*</span>
                   <span className="relative mt-1.5 block">
-                    <Phone className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+                    <Phone className="pointer-events-none absolute end-3 top-3 h-4 w-4 text-slate-400" />
                     <input
                       name="phone"
                       required
@@ -139,8 +154,8 @@ export default function ContactForm() {
 
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm font-semibold text-slate-700">
-                  البريد الإلكتروني{" "}
-                  <span className="font-normal text-slate-500">(اختياري)</span>
+                  {copy.email}{" "}
+                  <span className="font-normal text-slate-500">{copy.optional}</span>
                   <input
                     name="email"
                     type="email"
@@ -152,8 +167,8 @@ export default function ContactForm() {
                   />
                 </label>
                 <label className="block text-sm font-semibold text-slate-700">
-                  المكتب{" "}
-                  <span className="font-normal text-slate-500">(اختياري)</span>
+                  {copy.office}{" "}
+                  <span className="font-normal text-slate-500">{copy.optional}</span>
                   <input
                     name="office"
                     maxLength={150}
@@ -165,7 +180,7 @@ export default function ContactForm() {
               </div>
 
               <label className="block text-sm font-semibold text-slate-700">
-                نوع الرسالة <span className="text-red-500">*</span>
+                {copy.type} <span className="text-red-500">*</span>
                 <select
                   name="messageType"
                   required
@@ -173,15 +188,15 @@ export default function ContactForm() {
                   onChange={updateField}
                   className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 font-normal outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                 >
-                  <option value="complaint">شكوى</option>
-                  <option value="suggestion">اقتراح</option>
-                  <option value="inquiry">استفسار</option>
-                  <option value="other">أخرى</option>
+                  <option value="complaint">{copy.complaint}</option>
+                  <option value="suggestion">{copy.suggestion}</option>
+                  <option value="inquiry">{copy.inquiry}</option>
+                  <option value="other">{copy.other}</option>
                 </select>
               </label>
 
               <label className="block text-sm font-semibold text-slate-700">
-                الموضوع <span className="text-red-500">*</span>
+                {copy.subject} <span className="text-red-500">*</span>
                 <input
                   name="subject"
                   required
@@ -193,9 +208,9 @@ export default function ContactForm() {
               </label>
 
               <label className="block text-sm font-semibold text-slate-700">
-                الرسالة <span className="text-red-500">*</span>{" "}
+                {copy.message} <span className="text-red-500">*</span>{" "}
                 <span className="text-xs text-[#BBB]">
-                  (يرجى الكتابة بإيجاز)
+                  {copy.brief}
                 </span>
                 <span className="relative mt-1.5 block">
                   <textarea
@@ -215,7 +230,7 @@ export default function ContactForm() {
                   className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
                   role="alert"
                 >
-                  {error}
+                  {copy[error]}
                 </p>
               )}
 
@@ -225,7 +240,7 @@ export default function ContactForm() {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-5 py-3 font-bold text-white transition hover:bg-cyan-700 disabled:cursor-wait disabled:opacity-60"
               >
                 <Send className="h-4 w-4" />
-                {sending ? "جارٍ إرسال الرسالة..." : "إرسال الرسالة"}
+                {sending ? copy.sending : copy.send}
               </button>
             </form>
           )}

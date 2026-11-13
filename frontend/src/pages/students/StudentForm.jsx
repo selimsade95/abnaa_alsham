@@ -1,3 +1,4 @@
+import { t as translate } from "@/i18n";
 import { Loader2, Plus, Trash2, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
@@ -10,23 +11,23 @@ import {
 } from "@/lib/studentDefaults";
 
 const Section = ({ title, children }) => (
-  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+  <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+    <h3 className="text-lg font-semibold text-foreground mb-4 pb-3 border-b border-border">
       {title}
     </h3>
     <div className="space-y-4">{children}</div>
   </div>
 );
 const Label = ({ children, required }) => (
-  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+  <label className="block text-sm font-medium text-foreground mb-1.5">
     {children} {required && <span className="text-red-500">*</span>}
   </label>
 );
 const inputCls =
-  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#04CDF9] focus:border-transparent transition-all";
+  "w-full rounded-lg border border-input bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all";
 const Field = ({ label, required, children }) => (
   <div>
-    <Label required={required}>{label}</Label>
+    <Label required={required}>{translate(label)}</Label>
     {children}
   </div>
 );
@@ -40,7 +41,7 @@ const Radio = ({ name, checked, onChange, label, testid }) => (
       data-testid={testid}
       className="h-4 w-4 accent-[#04CDF9]"
     />
-    <span className="text-sm text-gray-700">{label}</span>
+    <span className="text-sm text-foreground">{translate(label)}</span>
   </label>
 );
 
@@ -72,7 +73,7 @@ export default function StudentForm({ mode }) {
 
   if (loading)
     return (
-      <div className="text-center text-gray-500 py-16">
+      <div className="text-center text-muted-foreground py-16">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
@@ -113,14 +114,14 @@ export default function StudentForm({ mode }) {
           <button
             type="button"
             onClick={() => nav(-1)}
-            className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2"
           >
             <ArrowRight className="h-4 w-4" /> رجوع
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             {mode === "edit" ? "تعديل بيانات طالب" : "تسجيل طالب جديد"}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             الحقول المميزة بـ <span className="text-red-500">*</span> مطلوبة
           </p>
         </div>
@@ -128,7 +129,7 @@ export default function StudentForm({ mode }) {
           type="submit"
           disabled={saving}
           data-testid="save-student-btn"
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>
@@ -144,7 +145,7 @@ export default function StudentForm({ mode }) {
               onChange={(e) => update("student.fullName", e.target.value)}
             />
             {errors.fullName && (
-              <p className="text-xs text-red-600 mt-1">{errors.fullName}</p>
+              <p className="text-xs text-red-600 mt-1">{translate(errors.fullName)}</p>
             )}
           </Field>
           <Field label="تاريخ الميلاد" required>
@@ -156,7 +157,7 @@ export default function StudentForm({ mode }) {
               onChange={(e) => update("student.birthdate", e.target.value)}
             />
             {errors.birthdate && (
-              <p className="text-xs text-red-600 mt-1">{errors.birthdate}</p>
+              <p className="text-xs text-red-600 mt-1">{translate(errors.birthdate)}</p>
             )}
           </Field>
           <Field label="مكان الميلاد">
@@ -184,13 +185,13 @@ export default function StudentForm({ mode }) {
               />
             </div>
             {errors.gender && (
-              <p className="text-xs text-red-600 mt-1">{errors.gender}</p>
+              <p className="text-xs text-red-600 mt-1">{translate(errors.gender)}</p>
             )}
           </Field>
           <Field label="مسار التسجيل الأولي" required>
             <select
               data-testid="select-registrationPath"
-              className={`${inputCls} disabled:bg-gray-50`}
+              className={`${inputCls} disabled:bg-muted`}
               value={s.registrationPath}
               disabled={mode === "edit" && !!s.registrationPath}
               onChange={(e) => {
@@ -205,14 +206,14 @@ export default function StudentForm({ mode }) {
             >
               <option value="">— اختر المسار —</option>
               {pathOptions.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+                <option key={translate(p)} value={translate(p)}>
+                  {translate(p)}
                 </option>
               ))}
             </select>
             {errors.registrationPath && (
               <p className="text-xs text-red-600 mt-1">
-                {errors.registrationPath}
+                {translate(errors.registrationPath)}
               </p>
             )}
           </Field>
@@ -227,14 +228,14 @@ export default function StudentForm({ mode }) {
             >
               <option value="">— اختر المسار —</option>
               {pathOptions.map((p) => (
-                <option key={p} value={p}>
-                  {p}
+                <option key={translate(p)} value={translate(p)}>
+                  {translate(p)}
                 </option>
               ))}
             </select>
             {errors.finalRegistrationPath && (
               <p className="text-xs text-red-600 mt-1">
-                {errors.finalRegistrationPath}
+                {translate(errors.finalRegistrationPath)}
               </p>
             )}
           </Field>
@@ -292,7 +293,7 @@ export default function StudentForm({ mode }) {
               />
             )}
             {errors.newClass && (
-              <p className="text-xs text-red-600 mt-1">{errors.newClass}</p>
+              <p className="text-xs text-red-600 mt-1">{translate(errors.newClass)}</p>
             )}
           </Field>
           <Field label="الوضع" required>
@@ -350,7 +351,7 @@ export default function StudentForm({ mode }) {
                   />
                 </div>
                 {errors.orphanOf && (
-                  <p className="text-xs text-red-600 mt-1">{errors.orphanOf}</p>
+                  <p className="text-xs text-red-600 mt-1">{translate(errors.orphanOf)}</p>
                 )}
               </Field>
               <Field label="نوع وثيقة اليتم">
@@ -364,12 +365,12 @@ export default function StudentForm({ mode }) {
                 >
                   <option value="">— اختر —</option>
                   {ORPHAN_DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                    <option key={translate(t)} value={translate(t)}>
+                      {translate(t)}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   يمكنك رفع الملف من صفحة عرض الطالب بعد الحفظ.
                 </p>
               </Field>
@@ -404,7 +405,7 @@ export default function StudentForm({ mode }) {
                   type="button"
                   key={l}
                   onClick={() => toggleLanguage(l)}
-                  className={`rounded-full border px-3 py-1 text-sm ${active ? "bg-brand-light text-[#036A87] border-[#04CDF9]" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+                  className={`rounded-full border px-3 py-1 text-sm ${active ? "bg-brand-light text-accent-foreground border-ring" : "bg-card text-foreground border-input hover:bg-muted"}`}
                 >
                   {l}
                 </button>
@@ -419,7 +420,7 @@ export default function StudentForm({ mode }) {
             onChange={(e) => setHobbiesInput(e.target.value)}
             placeholder="مثال: قراءة، رسم، رياضة"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             افصل بين الهوايات بفاصلة (،).
           </p>
         </Field>
@@ -427,7 +428,7 @@ export default function StudentForm({ mode }) {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {["sector", "block", "minutes", "floor", "apartment"].map((k) => (
               <div key={k}>
-                <label className="block text-xs text-gray-500 mb-1">
+                <label className="block text-xs text-muted-foreground mb-1">
                   {
                     {
                       sector: "القطاع",
@@ -543,7 +544,7 @@ export default function StudentForm({ mode }) {
             />
           </Field>
           <div className="pt-7">
-            <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <label className="inline-flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input
                 type="checkbox"
                 checked={!!fees.busRegistered}
@@ -644,15 +645,15 @@ export default function StudentForm({ mode }) {
           </Field>
         </div>
         {discountAmount > 0 && (
-          <p className="text-sm text-gray-600" data-testid="discount-preview">
+          <p className="text-sm text-muted-foreground" data-testid="discount-preview">
             المستحق الأكاديمي: {academicPayable} | بعد الخصم العام: {subtotal} |
             بعد خصم الإخوة/ الكادر: {netAcademicPayable} | إجمالي الخصم:{" "}
             {discountAmount}
           </p>
         )}
         {mode === "create" && (
-          <div className="rounded-lg border border-gray-200 p-4 bg-gray-50">
-            <div className="text-sm font-medium text-gray-700 mb-3">
+          <div className="rounded-lg border border-border p-4 bg-muted">
+            <div className="text-sm font-medium text-foreground mb-3">
               الدفعة الأولية (اختيارية)
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -693,7 +694,7 @@ export default function StudentForm({ mode }) {
                 />
               </Field>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               إذا كان المبلغ صفراً فلن تُنشأ دفعة أولية.
             </p>
           </div>
@@ -703,7 +704,7 @@ export default function StudentForm({ mode }) {
       <Section title="الإخوة">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+            <thead className="bg-muted text-xs text-muted-foreground uppercase">
               <tr>
                 <th className="px-3 py-2 text-right">#</th>
                 <th className="px-3 py-2 text-right">الاسم الكامل</th>
@@ -717,7 +718,7 @@ export default function StudentForm({ mode }) {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-3 py-4 text-center text-gray-500"
+                    className="px-3 py-4 text-center text-muted-foreground"
                   >
                     لا يوجد إخوة مضافون.
                   </td>
@@ -726,31 +727,31 @@ export default function StudentForm({ mode }) {
               {data.siblings.map((sib, idx) => (
                 <tr
                   key={sib.studentId || idx}
-                  className="border-t border-gray-100"
+                  className="border-t border-border"
                 >
-                  <td className="px-3 py-2 text-gray-600">{sib.order}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{sib.order}</td>
                   <td className="px-3 py-2">
                     {sib.studentId && has("students.view") ? (
                       <Link
                         to={`/students/${sib.studentId}`}
-                        className="text-[#036A87] hover:underline"
+                        className="text-accent-foreground hover:underline"
                       >
                         {sib.fullName || "—"}
                       </Link>
                     ) : (
-                      <span className="text-gray-700">
+                      <span className="text-foreground">
                         {sib.fullName || "—"}
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">
+                  <td className="px-3 py-2 text-muted-foreground">
                     {sib.gender === "male"
                       ? "ذكر"
                       : sib.gender === "female"
                         ? "أنثى"
                         : "—"}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">
+                  <td className="px-3 py-2 text-muted-foreground">
                     {sib.class || "—"}
                   </td>
                   <td className="px-3 py-2">
@@ -866,7 +867,7 @@ export default function StudentForm({ mode }) {
           />
         </Field>
         <div>
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
+          <h4 className="text-sm font-medium text-foreground mb-2">
             جهة الاتصال في حالات الطوارئ
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -904,7 +905,7 @@ export default function StudentForm({ mode }) {
       <Section title="التعليم السابق">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+            <thead className="bg-muted text-xs text-muted-foreground uppercase">
               <tr>
                 <th className="px-3 py-2 text-right">الصفوف</th>
                 <th className="px-3 py-2 text-right">اسم المدرسة</th>
@@ -919,14 +920,14 @@ export default function StudentForm({ mode }) {
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-3 py-4 text-center text-gray-500"
+                    className="px-3 py-4 text-center text-muted-foreground"
                   >
                     لا توجد سجلات.
                   </td>
                 </tr>
               )}
               {data.previousEducation.map((row, idx) => (
-                <tr key={idx} className="border-t border-gray-100">
+                <tr key={idx} className="border-t border-border">
                   <td className="px-3 py-2">
                     <input
                       className={inputCls}
@@ -990,7 +991,7 @@ export default function StudentForm({ mode }) {
           type="button"
           onClick={addEdu}
           data-testid="add-edu-btn"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground hover:bg-muted"
         >
           <Plus className="h-4 w-4" /> إضافة سجل
         </button>
@@ -1014,22 +1015,22 @@ export default function StudentForm({ mode }) {
       </Section>
 
       {/* Full Information (Excel-based) — collapsible */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+      <div className="bg-card rounded-xl border border-border shadow-sm">
         <button
           type="button"
           onClick={() => setShowFullInfo((v) => !v)}
           className="w-full flex items-center justify-between p-6 text-right"
           data-testid="toggle-fullinfo-btn"
         >
-          <span className="text-lg font-semibold text-gray-900">
+          <span className="text-lg font-semibold text-foreground">
             معلومات إضافية (سجل تفصيلي)
           </span>
-          <span className="text-sm text-[#036A87]">
+          <span className="text-sm text-accent-foreground">
             {showFullInfo ? "إخفاء" : "إظهار"}
           </span>
         </button>
         {showFullInfo && (
-          <div className="px-6 pb-6 border-t border-gray-100 pt-4 space-y-4">
+          <div className="px-6 pb-6 border-t border-border pt-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
                 ["fullInfo.serial", "م"],
@@ -1139,11 +1140,11 @@ export default function StudentForm({ mode }) {
       </Section>
 
       <Section title="التوقيع">
-        <p className="text-sm text-gray-600 leading-relaxed border-r-4 border-[#04CDF9] pr-3">
+        <p className="text-sm text-muted-foreground leading-relaxed border-r-4 border-ring pr-3">
           أتعهد أنا ولي أمر الطالب / ابني (في حال قبوله في المدرسة) بالالتزام
           بأنظمة ولوائح المدرسة المرفقة بهذه الاستمارة.
         </p>
-        <p className="text-sm text-gray-600 leading-relaxed border-r-4 border-[#04CDF9] pr-3">
+        <p className="text-sm text-muted-foreground leading-relaxed border-r-4 border-ring pr-3">
           بتوقيعي هنا، أعتبر نفسي مسؤولاً عن صحة المعلومات المذكورة أعلاه. وفي
           حال ثبوت عدم صحتها، أتحمل المسؤولية وأوافق على القرار الذي تتخذه إدارة
           المدرسة.
@@ -1172,7 +1173,7 @@ export default function StudentForm({ mode }) {
         <button
           type="button"
           onClick={() => nav(-1)}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 shadow-sm"
+          className="rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-foreground hover:bg-muted shadow-sm"
         >
           إلغاء
         </button>
@@ -1180,7 +1181,7 @@ export default function StudentForm({ mode }) {
           type="submit"
           disabled={saving}
           data-testid="save-student-btn-bottom"
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60 shadow-sm"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60 shadow-sm"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>

@@ -34,7 +34,7 @@ async def on_startup():
 
     # Old records predate branches. Give them a home before the scoped queries start.
     for collection_name in await raw_db.list_collection_names():
-        if collection_name not in {"branches", "roles", "users", "audit_logs"}:
+        if collection_name not in {"branches", "roles", "users", "audit_logs", "parent_access_attempts", "access_attempts"}:
             await raw_db[collection_name].update_many(
                 {"$or": [{"branchId": {"$exists": False}}, {"branchId": None}]},
                 {"$set": {"branchId": default_branch["id"]}},
@@ -150,6 +150,13 @@ async def on_startup():
     except Exception as e:
         logging.warning(f"index setup: {e}")
 
+    await raw_db.parent_access_cards.create_index("digest", unique=True)
+    await raw_db.access_attempts.create_index("expiresAt", expireAfterSeconds=0)
+    await raw_db.grade_announcements.create_index(
+        [("branchId", 1), ("grade", 1), ("createdAt", -1), ("id", -1)],
+    )
+    await raw_db.attendance_sessions.create_index([("branchId", 1), ("records.studentId", 1), ("attendanceDate", -1)])
+
     # Backfill missing student codes
     async for doc in db.students.find({"code": {"$exists": False}}, {"_id": 0, "id": 1}):
         try:
@@ -160,7 +167,9 @@ async def on_startup():
 
     if await raw_db.users.count_documents({}) == 0:
         u = os.environ.get("SEED_ADMIN_USERNAME", "admin")
-        p = os.environ.get("SEED_ADMIN_PASSWORD", "admin123")
+        p = os.environ.get("SEED_ADMIN_PASSWORD")
+        if not p:
+            raise RuntimeError("Set SEED_ADMIN_PASSWORD before starting with an empty user database.")
         n = os.environ.get("SEED_ADMIN_NAME", "مدير النظام")
         await raw_db.users.insert_one({"id": str(uuid.uuid4()), "name": n, "username": u,
             "password": hash_pw(p), "roles": [admin_role_id],
@@ -168,10 +177,6 @@ async def on_startup():
             "createdAt": now_iso(), "updatedAt": now_iso()})
     else:
         await raw_db.users.update_many({"roles": {"$exists": False}}, {"$set": {"roles": []}})
-        await raw_db.users.update_many(
-            {"username": os.environ.get("SEED_ADMIN_USERNAME", "admin"),
-             "roles": {"$not": {"$elemMatch": {"$eq": admin_role_id}}}},
-            {"$addToSet": {"roles": admin_role_id}})
 
     await get_code_settings()
     await get_grade_settings()

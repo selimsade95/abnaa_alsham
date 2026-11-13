@@ -6,7 +6,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { Toaster } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 import Login from "@/pages/auth/Login";
 import Dashboard from "@/pages/dashboard/Dashboard";
 import StudentsList from "@/pages/students/StudentsList";
@@ -15,6 +15,7 @@ import StudentView from "@/pages/students/StudentView";
 import StudentPrint from "@/pages/students/StudentPrint";
 import StudentCard from "@/pages/students/StudentCard";
 import StudentValidation from "@/pages/students/StudentValidation";
+import ParentAccess from "@/pages/parent-access/ParentAccess";
 import StudentFullInfo from "@/pages/students/StudentFullInfo";
 import Users from "@/pages/users/Users";
 import UserForm from "@/pages/users/UserForm";
@@ -32,6 +33,7 @@ import Settings from "@/pages/settings/Settings";
 import Branches from "@/pages/branches/Branches";
 import Subjects from "@/pages/subjects/Subjects";
 import Grades from "@/pages/grades/Grades";
+import GradeAnnouncements from "@/pages/announcements/GradeAnnouncements";
 import Homework from "@/pages/homework/Homework";
 import Attendance from "@/pages/attendance/Attendance";
 import DailyReports from "@/pages/daily-reports/DailyReports";
@@ -40,6 +42,7 @@ import StudentFullInfoEdit from "@/pages/students/StudentFullInfoEdit";
 import AuditLogs from "@/pages/audit/AuditLogs";
 import AppLayout from "@/components/AppLayout";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { initializeLanguage } from "@/i18n";
 
 initializeLanguage();
@@ -75,11 +78,13 @@ function App() {
         <Toaster position="top-center" richColors closeButton />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/parent-access" element={<ParentAccess />} />
           <Route
             path="/validate/student/:id"
             element={
               <>
-                <div className="fixed end-4 top-4 z-50">
+                <div className="fixed end-4 top-4 z-50 flex gap-2">
+                  <ThemeSwitcher />
                   <LanguageSwitcher />
                 </div>
                 <StudentValidation />
@@ -291,6 +296,10 @@ function App() {
                   <VerificationMessages />
                 </Protected>
               }
+            />
+            <Route
+              path="/grade-announcements"
+              element={<Protected perm="announcements.manage"><GradeAnnouncements /></Protected>}
             />
             <Route
               path="/verification-messages"

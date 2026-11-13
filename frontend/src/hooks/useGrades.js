@@ -17,6 +17,7 @@ export function useGrades(params = {}, enabled = true) {
   const [scores, setScores] = useState({});
   const [accepting, setAccepting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [publishing, setPublishing] = useState(false);
 
   const loadBase = async () => {
     try {
@@ -122,6 +123,21 @@ export function useGrades(params = {}, enabled = true) {
       toast.error(error?.response?.data?.detail || "فشل تحديث فترة القبول");
     }
   };
+  const togglePublication = async (grade) => {
+    setPublishing(true);
+    try {
+      const { data } = await api.patch(`/grades/${grade.id}/parent-publication`, {
+        publishedToParents: !grade.publishedToParents,
+      });
+      const update = (items) => items.map((item) => item.id === grade.id ? { ...item, ...data } : item);
+      setOverviewGrades(update);
+      setGrades(update);
+    } catch {
+      toast.error("تعذر تحديث نشر الدرجة");
+    } finally {
+      setPublishing(false);
+    }
+  };
   const average = useMemo(() => {
     const values = grades.map((g) => Number(g.score)).filter(Number.isFinite);
     return values.length
@@ -177,6 +193,8 @@ export function useGrades(params = {}, enabled = true) {
     activeAssignment,
     save,
     toggleAcceptance,
+    togglePublication,
+    publishing,
     average,
     filteredOverview,
     highest,

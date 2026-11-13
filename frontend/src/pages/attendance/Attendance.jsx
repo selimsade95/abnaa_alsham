@@ -237,8 +237,8 @@ export default function Attendance() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">حضور الطلاب</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-3xl font-bold text-foreground">حضور الطلاب</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             تسجيل حضور الصف مرة واحدة لكل يوم ومتابعة حالات الغياب المتكرر.
           </p>
         </div>
@@ -246,22 +246,22 @@ export default function Attendance() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="no-print inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white hover:bg-[#02556D]"
+            className="no-print inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
           >
             <Printer className="h-4 w-4" /> طباعة التقرير
           </button>
         )}
       </header>
 
-      <div className="no-print flex flex-wrap gap-2 border-b border-gray-200">
+      <div className="no-print flex flex-wrap gap-2 border-b border-border">
         {canViewAttendance && (
           <button
             type="button"
             onClick={() => setTab("attendance")}
             className={`border-b-2 px-4 py-3 text-sm font-medium ${
               tab === "attendance"
-                ? "border-[#04A9CE] text-[#036A87]"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                ? "border-ring text-accent-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             تسجيل الحضور
@@ -273,8 +273,8 @@ export default function Attendance() {
             onClick={() => setTab("reports")}
             className={`border-b-2 px-4 py-3 text-sm font-medium ${
               tab === "reports"
-                ? "border-[#04A9CE] text-[#036A87]"
-                : "border-transparent text-gray-500 hover:text-gray-800"
+                ? "border-ring text-accent-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             تقارير الغياب المتكرر
@@ -284,13 +284,13 @@ export default function Attendance() {
 
       {tab === "attendance" && canViewAttendance && (
         <>
-          <section className="no-print grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2">
-            <label className="text-sm font-medium text-gray-700">
+          <section className="no-print grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid-cols-2">
+            <label className="text-sm font-medium text-foreground">
               الصف
               <select
                 value={classId}
                 onChange={(event) => setClassId(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
                 disabled={!classes.length}
               >
                 <option value="">اختر الصف</option>
@@ -302,25 +302,25 @@ export default function Attendance() {
                 ))}
               </select>
             </label>
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-foreground">
               التاريخ
               <input
                 type="date"
                 value={attendanceDate}
                 max={localDateValue()}
                 onChange={(event) => setAttendanceDate(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
           </section>
 
-          <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4 sm:p-5">
+          <section className="rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 sm:p-5">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-foreground">
                   {className || "قائمة الصف"}
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {attendanceDate ? dateLabel(attendanceDate) : "اختر التاريخ"}
                   {markedAt && " · تم تسجيل الحضور لهذا اليوم"}
                 </p>
@@ -345,7 +345,7 @@ export default function Attendance() {
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-right text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-500">
+                <thead className="bg-muted text-xs text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">#</th>
                     <th className="px-4 py-3">الرمز</th>
@@ -358,7 +358,7 @@ export default function Attendance() {
                     <tr>
                       <td
                         colSpan={4}
-                        className="px-4 py-12 text-center text-gray-500"
+                        className="px-4 py-12 text-center text-muted-foreground"
                       >
                         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                         جاري تحميل الطلاب...
@@ -368,7 +368,7 @@ export default function Attendance() {
                     <tr>
                       <td
                         colSpan={4}
-                        className="px-4 py-12 text-center text-gray-500"
+                        className="px-4 py-12 text-center text-muted-foreground"
                       >
                         {classId
                           ? "لا يوجد طلاب نشطون في هذا الصف."
@@ -379,13 +379,13 @@ export default function Attendance() {
                     students.map((student, index) => (
                       <tr
                         key={student.studentId}
-                        className="border-t border-gray-100"
+                        className="border-t border-border"
                       >
-                        <td className="px-4 py-3 text-gray-500">{index + 1}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                        <td className="px-4 py-3 text-muted-foreground">{index + 1}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {student.studentCode || "—"}
                         </td>
-                        <td className="px-4 py-3 font-medium text-gray-900">
+                        <td className="px-4 py-3 font-medium text-foreground">
                           {student.studentName}
                         </td>
                         <td className="px-4 py-3">
@@ -400,7 +400,7 @@ export default function Attendance() {
                                   )
                                 }
                                 aria-label={`${at("statusForStudent")} ${student.studentName}`}
-                                className="w-full max-w-xs rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                                className="w-full max-w-xs rounded-md border border-input bg-card px-3 py-2 text-sm"
                               >
                                 <option value="">{at("chooseStatus")}</option>
                                 {[
@@ -422,7 +422,7 @@ export default function Attendance() {
                                   ].map(([reason, label]) => (
                                     <label
                                       key={reason}
-                                      className="inline-flex items-center gap-1.5 text-gray-700"
+                                      className="inline-flex items-center gap-1.5 text-foreground"
                                     >
                                       <input
                                         type="radio"
@@ -444,7 +444,7 @@ export default function Attendance() {
                               )}
                               {student.status === "early_dismissal" && (
                                 <div className="grid max-w-2xl grid-cols-1 gap-2 sm:grid-cols-2">
-                                  <label className="text-xs text-gray-600 sm:col-span-2">
+                                  <label className="text-xs text-muted-foreground sm:col-span-2">
                                     {at("earlyDismissalReason")}
                                     <textarea
                                       required
@@ -456,10 +456,10 @@ export default function Attendance() {
                                             event.target.value,
                                         })
                                       }
-                                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5"
+                                      className="mt-1 w-full rounded border border-input px-2 py-1.5"
                                     />
                                   </label>
-                                  <label className="text-xs text-gray-600">
+                                  <label className="text-xs text-muted-foreground">
                                     {at("earlyDismissalRelation")}
                                     <select
                                       required
@@ -472,7 +472,7 @@ export default function Attendance() {
                                             event.target.value,
                                         })
                                       }
-                                      className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-1.5"
+                                      className="mt-1 w-full rounded border border-input bg-card px-2 py-1.5"
                                     >
                                       <option value="">
                                         {at("selectRelation")}
@@ -490,7 +490,7 @@ export default function Attendance() {
                                       ))}
                                     </select>
                                   </label>
-                                  <label className="text-xs text-gray-600">
+                                  <label className="text-xs text-muted-foreground">
                                     {at("earlyDismissalBy")}
                                     <input
                                       required
@@ -501,7 +501,7 @@ export default function Attendance() {
                                           earlyDismissalBy: event.target.value,
                                         })
                                       }
-                                      className="mt-1 w-full rounded border border-gray-300 px-2 py-1.5"
+                                      className="mt-1 w-full rounded border border-input px-2 py-1.5"
                                     />
                                   </label>
                                 </div>
@@ -513,7 +513,7 @@ export default function Attendance() {
                               )}
                               {student.status === "present" && (
                                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                                  <label className="inline-flex items-center gap-1.5 text-gray-700">
+                                  <label className="inline-flex items-center gap-1.5 text-foreground">
                                     <input
                                       type="checkbox"
                                       checked={student.lateMinutes != null}
@@ -529,7 +529,7 @@ export default function Attendance() {
                                     متأخر
                                   </label>
                                   {student.lateMinutes != null && (
-                                    <label className="inline-flex items-center gap-1 text-gray-600">
+                                    <label className="inline-flex items-center gap-1 text-muted-foreground">
                                       <input
                                         type="number"
                                         min="1"
@@ -543,7 +543,7 @@ export default function Attendance() {
                                           })
                                         }
                                         aria-label={`مدة التأخر بالدقائق للطالب ${student.studentName}`}
-                                        className="w-20 rounded border border-gray-300 px-2 py-1"
+                                        className="w-20 rounded border border-input px-2 py-1"
                                       />
                                       دقيقة
                                     </label>
@@ -563,7 +563,7 @@ export default function Attendance() {
                                       ? "bg-red-50 text-red-800"
                                       : student.status === "early_dismissal"
                                         ? "bg-sky-50 text-sky-800"
-                                        : "text-gray-400"
+                                        : "text-muted-foreground"
                                 }`}
                               >
                                 {student.status
@@ -572,14 +572,14 @@ export default function Attendance() {
                               </span>
                               {student.status === "absent" &&
                                 student.absenceReason && (
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-muted-foreground">
                                     {student.absenceReason === "excused"
                                       ? at("excused")
                                       : at("unexcused")}
                                   </div>
                                 )}
                               {student.status === "early_dismissal" && (
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-muted-foreground">
                                   {student.earlyDismissalReason} ·{" "}
                                   {at(student.earlyDismissalRelation)}:{" "}
                                   {student.earlyDismissalBy}
@@ -605,15 +605,15 @@ export default function Attendance() {
             {canManage && students.length > 0 && (
               <form
                 onSubmit={saveAttendance}
-                className="no-print flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 p-4"
+                className="no-print flex flex-wrap items-center justify-between gap-3 border-t border-border p-4"
               >
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   يمكن تصحيح سجل اليوم؛ لكل صف سجل حضور واحد في اليوم.
                 </p>
                 <button
                   type="submit"
                   disabled={saving || attendanceLoading || !allMarked}
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#04A9CE] px-4 py-2 text-sm font-semibold text-white hover:bg-[#038BAB] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -630,25 +630,25 @@ export default function Attendance() {
 
       {tab === "reports" && canViewReports && (
         <>
-          <section className="no-print grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-            <label className="text-sm font-medium text-gray-700">
+          <section className="no-print grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <label className="text-sm font-medium text-foreground">
               من تاريخ (اختياري)
               <input
                 type="date"
                 value={dateFrom}
                 max={dateTo || undefined}
                 onChange={(event) => setDateFrom(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
-            <label className="text-sm font-medium text-gray-700">
+            <label className="text-sm font-medium text-foreground">
               إلى تاريخ (اختياري)
               <input
                 type="date"
                 value={dateTo}
                 min={dateFrom || undefined}
                 onChange={(event) => setDateTo(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input px-3 py-2"
               />
             </label>
             <div className="flex items-center gap-2 text-sm text-amber-800">
@@ -656,21 +656,21 @@ export default function Attendance() {
               يظهر الطالب بعد {threshold} غيابات
             </div>
           </section>
-          <section className="print-area rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-3 border-b border-gray-100 p-4">
+          <section className="print-area rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-border p-4">
               <div>
-                <h2 className="font-semibold text-gray-900">
+                <h2 className="font-semibold text-foreground">
                   سجل الغياب المتكرر
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {reports.length} طالب ضمن معايير التقرير
                 </p>
               </div>
-              <Users className="h-5 w-5 text-gray-400" />
+              <Users className="h-5 w-5 text-muted-foreground" />
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full text-right text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-500">
+                <thead className="bg-muted text-xs text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3">الطالب</th>
                     <th className="px-4 py-3">الرمز</th>
@@ -684,7 +684,7 @@ export default function Attendance() {
                     <tr>
                       <td
                         colSpan={5}
-                        className="px-4 py-12 text-center text-gray-500"
+                        className="px-4 py-12 text-center text-muted-foreground"
                       >
                         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                         جاري إعداد التقرير...
@@ -694,7 +694,7 @@ export default function Attendance() {
                     <tr>
                       <td
                         colSpan={5}
-                        className="px-4 py-12 text-center text-gray-500"
+                        className="px-4 py-12 text-center text-muted-foreground"
                       >
                         لا توجد حالات غياب متكرر ضمن الفترة المحددة.
                       </td>
@@ -703,12 +703,12 @@ export default function Attendance() {
                     reports.map((report) => (
                       <tr
                         key={report.studentId}
-                        className="border-t border-gray-100 align-top"
+                        className="border-t border-border align-top"
                       >
-                        <td className="px-4 py-3 font-medium text-gray-900">
+                        <td className="px-4 py-3 font-medium text-foreground">
                           {report.studentName}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {report.studentCode || "—"}
                         </td>
                         <td className="px-4 py-3 font-semibold text-red-700">
@@ -730,7 +730,7 @@ export default function Attendance() {
                             ))}
                           </ul>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                           {dateLabel(report.lastAbsenceDate)}
                         </td>
                       </tr>

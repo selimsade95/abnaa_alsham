@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -263,11 +263,15 @@ export function useStudentsList() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const filterSearch = searchParams.toString();
+  const filterVisit = `${useLocation().key}:${filterSearch}`;
+  const [appliedUrlSearch, setAppliedUrlSearch] = useSessionStorageState(
+    "students-list-applied-url-search", null,
+  );
   const initialUrlFilters = getFiltersFromSearchParams(
     new URLSearchParams(filterSearch),
   );
   const [syncedFilterSearch, setSyncedFilterSearch] = useState(() =>
-    initialUrlFilters ? null : filterSearch,
+    initialUrlFilters && appliedUrlSearch !== filterVisit ? null : filterSearch,
   );
   const [items, setItems] = useState([]);
   const [registrationPaths, setRegistrationPaths] =
@@ -321,20 +325,21 @@ export function useStudentsList() {
   const [importProgress, setImportProgress] = useState(null);
   const importRef = useRef(null);
   const currentPage = useRef(
-    initialUrlFilters ? 1 : Math.max(1, Number(savedPage) || 1),
+    initialUrlFilters && appliedUrlSearch !== filterVisit ? 1 : Math.max(1, Number(savedPage) || 1),
   );
 
   useEffect(() => {
     const urlFilters = getFiltersFromSearchParams(new URLSearchParams(filterSearch));
-    if (!urlFilters) {
+    if (!urlFilters || appliedUrlSearch === filterVisit) {
       setSyncedFilterSearch(filterSearch);
       return;
     }
     setFilters(urlFilters);
     currentPage.current = 1;
     setSavedPage(1);
+    setAppliedUrlSearch(filterVisit);
     setSyncedFilterSearch(filterSearch);
-  }, [filterSearch, setFilters, setSavedPage]);
+  }, [appliedUrlSearch, filterSearch, filterVisit, setAppliedUrlSearch, setFilters, setSavedPage]);
 
   useEffect(() => {
     const normalized = normalizeFilters(filters);

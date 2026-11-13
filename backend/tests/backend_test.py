@@ -864,6 +864,59 @@ class TestStudents:
         assert d["code"] == created_student["code"]
         assert d["fullName"] == created_student["student"]["fullName"]
         assert d["isActive"] is True
+        assert "grades" not in d
+
+    def test_parent_card_rotation_and_note_visibility(self, admin_headers, reg_staff_headers, created_student):
+        sid = created_student["id"]
+        card_url = f"{API}/students/{sid}/parent-access"
+        notes_url = f"{API}/students/{sid}/notes/class"
+        portal_url = f"{API}/parent-access"
+        assert requests.post(card_url, headers=reg_staff_headers[0]).status_code == 403
+
+        shared = requests.post(notes_url, headers=admin_headers, json={
+            "content": "Parent portal shared note", "shareWithParent": True,
+        })
+        private = requests.post(notes_url, headers=admin_headers, json={
+            "content": "Parent portal private note",
+        })
+        assert shared.status_code == private.status_code == 200
+        note_url = f"{notes_url}/{shared.json()['id']}"
+        try:
+            first = requests.post(card_url, headers=admin_headers)
+            assert first.status_code == 200
+            first_card = first.json()
+            credentials = {key: first_card[key] for key in ("studentCode", "accessCode")}
+            status = requests.get(card_url, headers=admin_headers)
+            assert status.json() == {"issuedAt": first_card["issuedAt"]}
+            assert requests.post(portal_url, json={**credentials, "studentCode": "other"}).status_code == 401
+            records = requests.post(portal_url, json=credentials)
+            assert records.status_code == 200
+            assert requests.post(portal_url, json={"accessCode": credentials["accessCode"]}).json() == records.json()
+            assert records.headers["Cache-Control"] == "no-store"
+            assert set(records.json()) == {"name", "className", "section", "grades", "attendance", "notes"}
+            notes = {note["content"] for note in records.json()["notes"]}
+            assert "Parent portal shared note" in notes
+            assert "Parent portal private note" not in notes
+
+            update = requests.put(note_url, headers=admin_headers, json={
+                "content": "Parent portal shared note", "shareWithParent": False,
+            })
+            assert update.status_code == 200
+            records = requests.post(portal_url, json=credentials)
+            assert all(note["content"] != "Parent portal shared note" for note in records.json()["notes"])
+
+            replacement = requests.post(card_url, headers=admin_headers)
+            assert replacement.status_code == 200
+            assert requests.post(portal_url, json=credentials).status_code == 401
+            credentials["accessCode"] = replacement.json()["accessCode"]
+            assert requests.post(portal_url, json=credentials).status_code == 200
+            assert requests.delete(card_url, headers=admin_headers).status_code == 200
+            assert requests.post(portal_url, json=credentials).status_code == 401
+            assert requests.post(portal_url, json={"accessCode": credentials["accessCode"]}).status_code == 401
+        finally:
+            requests.delete(card_url, headers=admin_headers)
+            requests.delete(note_url, headers=admin_headers)
+            requests.delete(f"{notes_url}/{private.json()['id']}", headers=admin_headers)
 
     def test_get_full_information(self, admin_headers, created_student):
         r = requests.get(f"{API}/students/{created_student['id']}/full-information",
@@ -1590,9 +1643,100 @@ class TestStudentDocument:
         )
         assert download.status_code == 200
         assert download.headers.get("content-type", "").startswith("image/jpeg")
+        assert download.headers["Cache-Control"] == "private, no-store"
+        assert download.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_personal_photo_requires_record_access(self, admin_headers, created_student):
+        sid = created_student["id"]
+        endpoint = f"{API}/students/{sid}/documents/personal_photo"
+        photo = bytes.fromhex("ffd8ffd9")
+        upload = requests.post(endpoint, headers=admin_headers, files={"file": ("photo.jpg", photo, "image/jpeg")})
+        assert upload.status_code == 200
+        role = requests.post(f"{API}/roles", headers=admin_headers, json={
+            "name": f"TEST photo scope {uuid.uuid4().hex}",
+            "permissions": ["students.view"],
+        })
+        assert role.status_code == 200
+        role_id = role.json()["id"]
+        username = f"TEST_photo_{uuid.uuid4().hex}"
+        account = requests.post(f"{API}/users", headers=admin_headers, json={
+            "name": "TEST photo scope", "username": username, "password": "test-pass-1", "roles": [role_id],
+        })
+        assert account.status_code == 200
+        limited = requests.post(f"{API}/auth/login", json={"username": username, "password": "test-pass-1"})
+        limited_headers = {"Authorization": f"Bearer {limited.json()['token']}"}
+        try:
+            assert requests.get(f"{API}/public/students/{sid}/validation/personal-photo").status_code == 404
+            assert requests.get(endpoint).status_code == 401
+            assert requests.get(endpoint, headers=limited_headers).status_code == 403
+            assert "documents" not in requests.get(f"{API}/students/{sid}", headers=limited_headers).json()
+            teacher = requests.post(f"{API}/teachers", headers=admin_headers, json={
+                "fullName": "TEST unassigned photo access", "gender": "male",
+            })
+            assert teacher.status_code == 200
+            teacher_id = teacher.json()["id"]
+            try:
+                assert requests.put(f"{API}/roles/{role_id}", headers=admin_headers, json={
+                    "name": role.json()["name"], "permissions": ["students.view", "students.documents.view"],
+                }).status_code == 200
+                assert requests.put(f"{API}/users/{account.json()['id']}", headers=admin_headers, json={
+                    "teacherId": teacher_id,
+                }).status_code == 200
+                assert requests.get(endpoint, headers=limited_headers).status_code == 404
+            finally:
+                requests.delete(f"{API}/teachers/{teacher_id}", headers=admin_headers, json={"reason": "Test cleanup"})
+            record = requests.get(f"{API}/students/{sid}", headers=admin_headers).json()
+            assert "filePath" not in record["documents"]["personal_photo"]
+            assert requests.get(endpoint, headers=admin_headers).content == photo
+            rejected = requests.post(endpoint, headers=admin_headers, files={"file": ("photo.jpg", b"not an image", "image/jpeg")})
+            assert rejected.status_code == 400
+            assert requests.get(endpoint, headers=admin_headers).content == photo
+        finally:
+            requests.delete(endpoint, headers=admin_headers)
+            requests.delete(f"{API}/users/{account.json()['id']}", headers=admin_headers)
+            requests.delete(f"{API}/roles/{role_id}", headers=admin_headers)
 
 
 # ---------- RBAC ----------
+
+def test_quick_search_by_code_and_name(admin_headers, created_student, created_teacher, created_class):
+    for group, record, name in (
+        ("students", created_student, created_student["student"]["fullName"]),
+        ("teachers", created_teacher, created_teacher["fullName"]),
+        ("classes", created_class, created_class["name"]),
+    ):
+        for query in (record["code"], name):
+            response = requests.get(f"{API}/quick-search", headers=admin_headers, params={"q": query})
+            assert response.status_code == 200, response.text
+            matches = response.json()[group]
+            assert any(item["id"] == record["id"] for item in matches)
+            assert all(set(item) == {"id", "name", "code"} for item in matches)
+    assert requests.get(f"{API}/quick-search", params={"q": "test"}).status_code == 401
+
+def test_grade_announcement_tracks_each_whatsapp_group(admin_headers, reg_staff_headers):
+    base = f"{API}/grade-announcements"
+    assert requests.get(f"{base}/groups", headers=reg_staff_headers[0]).status_code == 403
+    assert requests.get(f"{base}/groups").status_code == 401
+    assert requests.put(f"{base}/groups/2/girls", headers=admin_headers, json={"url": ""}).status_code == 400
+    assert requests.put(f"{base}/groups/9/girls", headers=admin_headers, json={"url": "https://example.org/group"}).status_code == 422
+    for audience in ("girls", "boys"):
+        link = f"https://chat.whatsapp.com/TestInvite{audience}"
+        assert requests.put(f"{base}/groups/9/{audience}", headers=admin_headers, json={"url": link}).status_code == 200
+    announcement_id = str(uuid.uuid4())
+    draft = {"id": announcement_id, "grade": 9, "audiences": ["girls", "boys"], "message": "Grade 9 activity"}
+    prepared = requests.post(base, headers=admin_headers, json=draft)
+    assert prepared.status_code == 200, prepared.text
+    assert all(group["sentAt"] is None for group in prepared.json()["groups"])
+    repeated = requests.post(base, headers=admin_headers, json=draft)
+    assert repeated.json() == prepared.json()
+    marked = requests.put(f"{base}/{announcement_id}/groups/girls/sent", headers=admin_headers)
+    assert marked.status_code == 200, marked.text
+    groups = {group["audience"]: group for group in marked.json()["groups"]}
+    assert groups["girls"]["sentAt"] and groups["girls"]["sentBy"]
+    assert groups["boys"]["sentAt"] is None
+    assert requests.put(f"{base}/{announcement_id}/groups/girls/sent", headers=admin_headers).json() == marked.json()
+    history = requests.get(base, params={"grade": 9}, headers=admin_headers).json()["items"]
+    assert marked.json() in history
 
 class TestRBAC:
     def test_reg_staff_cannot_delete_student(self, reg_staff_headers, created_student):

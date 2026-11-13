@@ -41,12 +41,13 @@ def verify_pw(password, hashed):
         return False
 
 
-def create_token(uid, username, branch_id=None, selection_pending=False):
+def create_token(uid, username, branch_id=None, selection_pending=False, auth_version=None):
     now = datetime.now(timezone.utc)
     return jwt.encode(
         {"sub": uid, "username": username,
          "branchId": branch_id,
          "branchSelectionPending": selection_pending,
+         "authVersion": auth_version,
          "exp": now + timedelta(hours=_jwt_expire_hours), "iat": now},
         _jwt_secret, algorithm=_jwt_algorithm,
     )
@@ -82,7 +83,7 @@ async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depen
         user = await _db.raw.users.find_one(
             {"id": payload["sub"]}, {"_id": 0, "password": 0}
         )
-        if not user:
+        if not user or payload.get("authVersion") != user.get("authVersion"):
             raise HTTPException(401, "مستخدم غير موجود")
         user["permissions"] = await compute_user_permissions(user)
         branches = await accessible_branches(user, user["permissions"])

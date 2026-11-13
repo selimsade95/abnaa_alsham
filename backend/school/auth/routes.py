@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from school.auth.permissions import PERMISSIONS_CATALOG
 from school.auth.schemas import LoginIn
 from school.branches.schemas import SelectBranchIn
 from school.core.database import raw_db
+from school.core.rate_limit import limit_attempts
 from school.core.services import (
     accessible_branches,
     compute_user_permissions,
@@ -35,7 +36,8 @@ def _auth_user_payload(user, branches, active_branch_id=None):
 
 
 @router.post("/auth/login")
-async def login(body: LoginIn):
+async def login(body: LoginIn, request: Request):
+    await limit_attempts(request, "staff", 60)
     user = await raw_db.users.find_one({"username": body.username})
     if not user or not verify_pw(body.password, user.get("password", "")):
         raise HTTPException(401, "اسم المستخدم أو كلمة المرور غير صحيحة")
@@ -50,6 +52,7 @@ async def login(body: LoginIn):
             user["username"],
             active_branch["id"] if active_branch else None,
             selection_pending=active_branch is None,
+            auth_version=user.get("authVersion"),
         ),
         "requiresBranchSelection": active_branch is None,
         "branches": branches,
@@ -71,7 +74,8 @@ async def select_branch(body: SelectBranchIn, current=Depends(get_current_user))
         raise HTTPException(403, "لا تملك صلاحية الوصول إلى هذا الفرع")
     user = {**current, "activeBranch": branch}
     return {
-        "token": create_token(current["id"], current["username"], branch["id"]),
+        "token": create_token(current["id"], current["username"], branch["id"],
+                              auth_version=current.get("authVersion")),
         "user": _auth_user_payload(
             user,
             current["branches"],

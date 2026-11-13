@@ -1,3 +1,4 @@
+import re
 import math
 import uuid
 from typing import Optional
@@ -98,9 +99,9 @@ async def list_classes(search: Optional[str] = None, grade: Optional[str] = None
     if allowed is not None:
         q["id"] = {"$in": allowed}
     elif teacherId:
-        q["$or"] = [{"teacherIds": teacherId}, {"teacherId": teacherId}]
+        q["$and"] = [{"$or": [{"teacherIds": teacherId}, {"teacherId": teacherId}]}]
     if search:
-        rx = {"$regex": search, "$options": "i"}
+        rx = {"$regex": re.escape(search), "$options": "i"}
         q["$or"] = [{"name": rx}, {"code": rx}, {"grade": rx}, {"section": rx}, {"academicYear": rx}]
     total = await db.classes.count_documents(q)
     docs = await db.classes.find(q, {"_id": 0}).sort("createdAt", -1).skip((page-1)*limit).limit(limit).to_list(limit)

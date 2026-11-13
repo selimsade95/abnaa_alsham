@@ -30,6 +30,8 @@ export default function Grades() {
     activeAssignment,
     save,
     toggleAcceptance,
+    togglePublication,
+    publishing,
     average,
     filteredOverview,
     highest,
@@ -105,7 +107,7 @@ export default function Grades() {
 
   if (loading)
     return (
-      <div className="py-16 text-center text-gray-500">
+      <div className="py-16 text-center text-muted-foreground">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
@@ -113,8 +115,8 @@ export default function Grades() {
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">الدرجات</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">الدرجات</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             إدخال ومراجعة درجات الطلاب حسب الصف والمادة
           </p>
         </div>
@@ -123,7 +125,7 @@ export default function Grades() {
             type="button"
             onClick={exportPdf}
             disabled={!filteredOverview.length}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground disabled:opacity-50"
           >
             <Printer className="h-4 w-4" /> {t("gradesPage.exportPdf")}
           </button>
@@ -131,7 +133,7 @@ export default function Grades() {
             type="button"
             onClick={exportExcel}
             disabled={!filteredOverview.length}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground disabled:opacity-50"
           >
             <FileSpreadsheet className="h-4 w-4" />{" "}
             {t("gradesPage.exportExcel")}
@@ -151,7 +153,7 @@ export default function Grades() {
           فترة قبول الدرجات مغلقة. يمكن للمستخدمين ذوي صلاحية القبول فتحها.
         </div>
       )}
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+      <section className="bg-card rounded-xl border border-border shadow-sm p-5">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <select
             value={selectedClass}
@@ -198,12 +200,12 @@ export default function Grades() {
           />
         </div>
         {activeAssignment && (
-          <p className="text-xs text-gray-500 mt-3">
+          <p className="text-xs text-muted-foreground mt-3">
             المعلمون المخولون: {activeAssignment.teacherIds?.length || 0}
           </p>
         )}
       </section>
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <section className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
         <div className="p-4 border-b flex flex-wrap gap-4 items-center">
           <input
             placeholder="بحث باسم الطالب"
@@ -218,39 +220,48 @@ export default function Grades() {
           <span className="text-sm">الأدنى: {lowest}</span>
         </div>
         <table className="min-w-full text-sm text-right">
-          <thead className="bg-gray-50 text-gray-500">
+          <thead className="bg-muted text-muted-foreground">
             <tr>
               <th className="px-4 py-3">الطالب</th>
               <th className="px-4 py-3">الصف</th>
               <th className="px-4 py-3">المادة</th>
               <th className="px-4 py-3">الدرجة</th>
+              {has("grades.accept") && <th className="px-4 py-3">عرض لولي الأمر</th>}
             </tr>
           </thead>
           <tbody>
             {filteredOverview.map((grade) => (
-              <tr key={grade.id} className="border-t border-gray-100">
+              <tr key={grade.id} className="border-t border-border">
                 <td className="px-4 py-3 font-medium">{grade.studentName}</td>
                 <td className="px-4 py-3">{grade.className}</td>
                 <td className="px-4 py-3">{grade.subjectName}</td>
                 <td className="px-4 py-3">{grade.score}</td>
+                {has("grades.accept") && (
+                  <td className="px-4 py-3">
+                    <button type="button" disabled={publishing} onClick={() => togglePublication(grade)}
+                      className="rounded-md border px-3 py-1 text-accent-foreground disabled:opacity-50">
+                      {grade.publishedToParents ? "إلغاء النشر" : "نشر الدرجة"}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
         {filteredOverview.length === 0 && (
-          <div className="p-8 text-center text-gray-500">
+          <div className="p-8 text-center text-muted-foreground">
             لا توجد درجات مطابقة للفلاتر.
           </div>
         )}
       </section>
       {selectedClass && selectedSubject && (
-        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+        <section className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
           <div className="p-4 border-b flex gap-6 text-sm">
             <span>درجات المادة: {grades.length}</span>
             <span>المتوسط: {average}</span>
           </div>
           <table className="min-w-full text-sm text-right">
-            <thead className="bg-gray-50 text-gray-500">
+            <thead className="bg-muted text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">الطالب</th>
                 <th className="px-4 py-3">الدرجة</th>
@@ -259,7 +270,7 @@ export default function Grades() {
             </thead>
             <tbody>
               {students.map((student) => (
-                <tr key={student.id} className="border-t border-gray-100">
+                <tr key={student.id} className="border-t border-border">
                   <td className="px-4 py-3 font-medium">
                     {student.student?.fullName || student.code}
                   </td>
@@ -286,7 +297,7 @@ export default function Grades() {
                         !accepting ||
                         (!has("grades.create") && !has("grades.edit"))
                       }
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#04CDF9] px-3 py-2 text-white disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-2 text-white disabled:opacity-40"
                     >
                       <Save className="h-4 w-4" /> حفظ
                     </button>
@@ -296,7 +307,7 @@ export default function Grades() {
             </tbody>
           </table>
           {students.length === 0 && (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
               لا يوجد طلاب في هذا الصف.
             </div>
           )}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -98,13 +98,17 @@ export function useTeachersList() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const filterSearch = searchParams.toString();
+  const filterVisit = `${useLocation().key}:${filterSearch}`;
+  const [appliedUrlSearch, setAppliedUrlSearch] = useSessionStorageState(
+    "teachers-list-applied-url-search", null,
+  );
   const initialFilterParams = new URLSearchParams(filterSearch);
   const hasInitialFilterParams =
     initialFilterParams.has("filterSource") ||
     initialFilterParams.has("gender") ||
     initialFilterParams.has("employmentStatus");
   const [syncedFilterSearch, setSyncedFilterSearch] = useState(() =>
-    hasInitialFilterParams ? null : filterSearch,
+    hasInitialFilterParams && appliedUrlSearch !== filterVisit ? null : filterSearch,
   );
   const [items, setItems] = useState([]);
   const [savedPage, setSavedPage] = useSessionStorageState(
@@ -136,11 +140,9 @@ export function useTeachersList() {
 
   useEffect(() => {
     const params = new URLSearchParams(filterSearch);
-    if (
-      !params.has("filterSource") &&
-      !params.has("gender") &&
-      !params.has("employmentStatus")
-    ) {
+    if (appliedUrlSearch === filterVisit || (
+      !params.has("filterSource") && !params.has("gender") && !params.has("employmentStatus")
+    )) {
       setSyncedFilterSearch(filterSearch);
       return;
     }
@@ -151,8 +153,9 @@ export function useTeachersList() {
     });
     currentPage.current = 1;
     setSavedPage(1);
+    setAppliedUrlSearch(filterVisit);
     setSyncedFilterSearch(filterSearch);
-  }, [filterSearch, setFilters, setSavedPage]);
+  }, [appliedUrlSearch, filterSearch, filterVisit, setAppliedUrlSearch, setFilters, setSavedPage]);
 
   const load = useCallback(
     async (page = 1) => {

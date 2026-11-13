@@ -15,3 +15,7 @@ class GradeIn(BaseModel):
 
 class GradeSettingsIn(BaseModel):
     accepting: bool = False
+
+
+class GradePublicationIn(BaseModel):
+    publishedToParents: bool

@@ -12,6 +12,7 @@ PERMISSIONS_CATALOG = [
     ("students.scope.upperGrades.female.view", "عرض الإناث من الصف الثالث إلى التاسع", "students.scope", "upperGrades.female.view"),
     ("students.create", "إضافة طلاب", "students", "create"),
     ("students.update", "تعديل الطلاب", "students", "update"),
+    ("students.parentAccess.manage", "إدارة بطاقات أولياء الأمور", "students", "manage"),
     ("students.delete", "حذف الطلاب", "students", "delete"),
     ("students.print", "طباعة الطلاب", "students", "print"),
     ("students.fullInformation.view", "عرض المعلومات الكاملة للطالب", "students", "fullInformation.view"),
@@ -72,6 +73,8 @@ PERMISSIONS_CATALOG = [
     ("dailyReports.print", "طباعة الإحصائيات اليومية وسجل المناوبة", "dailyReports", "print"),
     ("messages.view", "عرض الرسائل", "messages", "view"),
     ("messages.reply", "الرد على الرسائل", "messages", "reply"),
+    ("announcements.manage", "إدارة إعلانات الصفوف في الفرع", "announcements", "manage"),
+    ("announcements.configure", "إعداد روابط مجموعات الصفوف", "announcements", "configure"),
 ]
 
 

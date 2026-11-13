@@ -5,6 +5,7 @@ import "@/index.css";
 import "@/App.css";
 import App from "@/App";
 import { I18nextProvider } from "react-i18next";
+import { ThemeProvider } from "next-themes";
 import { i18n } from "@/i18n";
 
 const queryClient = new QueryClient({
@@ -21,7 +22,9 @@ root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <I18nextProvider i18n={i18n}>
-        <App />
+        <ThemeProvider attribute="class" storageKey="abnaa-theme" defaultTheme="system">
+          <App />
+        </ThemeProvider>
       </I18nextProvider>
     </QueryClientProvider>
   </React.StrictMode>,

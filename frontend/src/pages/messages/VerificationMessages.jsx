@@ -1,3 +1,6 @@
+import { whatsappUrl } from "@/lib/whatsapp";
+import WhatsAppPhone from "@/components/WhatsAppPhone";
+import { t as translate } from "@/i18n";
 import { useCallback, useEffect, useState } from "react";
 import {
   Filter,
@@ -19,12 +22,11 @@ const TYPE_LABELS = {
   other: "أخرى",
 };
 
-function whatsappUrl(phone, response) {
-  const number = phone.replace(/\D/g, "");
+function replyWhatsAppUrl(phone, response) {
   const text = response
     ? `رد مدرسة أبناء الشام:\n${response}`
     : "مرحباً، بخصوص رسالتك إلى مدرسة أبناء الشام.";
-  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  return whatsappUrl(phone, text);
 }
 
 export default function VerificationMessages() {
@@ -146,35 +148,35 @@ export default function VerificationMessages() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">الرسائل</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-3xl font-bold text-foreground">الرسائل</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           عرض الرسائل الواردة والبحث فيها والرد عليها.
         </p>
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="relative">
-            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="ابحث بالاسم أو الهاتف أو البريد أو محتوى الرسالة..."
               aria-label="البحث في الرسائل"
-              className="w-full rounded-lg border border-gray-300 py-2 pe-9 ps-3 text-sm"
+              className="w-full rounded-lg border border-input py-2 pe-9 ps-3 text-sm"
             />
           </div>
           <select
             value={typeFilter}
             onChange={(event) => setTypeFilter(event.target.value)}
             aria-label="تصفية حسب نوع الرسالة"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-input px-3 py-2 text-sm"
           >
             <option value="">كل أنواع الرسائل</option>
             {Object.entries(TYPE_LABELS).map(([type, label]) => (
               <option key={type} value={type}>
-                {label}
+                {translate(label)}
               </option>
             ))}
           </select>
@@ -182,34 +184,34 @@ export default function VerificationMessages() {
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
             aria-label="تصفية حسب حالة الرد"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-input px-3 py-2 text-sm"
           >
             <option value="">كل الحالات</option>
             <option value="open">بحاجة إلى رد</option>
             <option value="responded">تم الرد</option>
           </select>
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="shrink-0">من تاريخ</span>
             <input
               type="date"
               value={dateFrom}
               max={dateTo || undefined}
               onChange={(event) => setDateFrom(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              className="min-w-0 flex-1 rounded-lg border border-input px-3 py-2"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="shrink-0">إلى تاريخ</span>
             <input
               type="date"
               value={dateTo}
               min={dateFrom || undefined}
               onChange={(event) => setDateTo(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              className="min-w-0 flex-1 rounded-lg border border-input px-3 py-2"
             />
           </label>
           <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1 text-sm text-gray-500">
+            <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
               <Filter className="h-4 w-4" />
               {`${filteredMessages.length} رسالة`}
             </span>
@@ -217,7 +219,7 @@ export default function VerificationMessages() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1 text-sm text-[#036A87] hover:underline"
+                className="inline-flex items-center gap-1 text-sm text-accent-foreground hover:underline"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 مسح الفلاتر
@@ -232,22 +234,22 @@ export default function VerificationMessages() {
           role="alert"
           className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         >
-          {error}
+          {translate(error)}
         </div>
       )}
 
       {loading ? (
-        <div className="py-16 text-center text-gray-500">
+        <div className="py-16 text-center text-muted-foreground">
           <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
           جاري تحميل الرسائل...
         </div>
       ) : messages.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500">
-          <MessageSquareText className="mx-auto mb-3 h-8 w-8 text-gray-400" />
+        <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">
+          <MessageSquareText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
           لا توجد رسائل حتى الآن.
         </div>
       ) : filteredMessages.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-10 text-center text-gray-500">
+        <div className="rounded-xl border border-border bg-card p-10 text-center text-muted-foreground">
           لا توجد رسائل مطابقة للبحث والفلاتر المحددة.
         </div>
       ) : (
@@ -255,24 +257,24 @@ export default function VerificationMessages() {
           {filteredMessages.map((message) => (
             <article
               key={message.id}
-              className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+              className="rounded-xl border border-border bg-card p-5 shadow-sm"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <span className="inline-flex rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800">
-                    {TYPE_LABELS[message.messageType] || "أخرى"}
+                  <span className="inline-flex rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground">
+                    {translate(TYPE_LABELS[message.messageType] || "أخرى")}
                   </span>
-                  <h2 className="mt-2 text-lg font-bold text-gray-900">
+                  <h2 className="mt-2 text-lg font-bold text-foreground">
                     {message.name}
                   </h2>
                   {(message.studentName || message.studentCode) && (
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-muted-foreground">
                       {message.studentName}
                       {message.studentCode ? ` (${message.studentCode})` : ""}
                     </p>
                   )}
                 </div>
-                <time className="text-xs text-gray-500">
+                <time className="text-xs text-muted-foreground">
                   {new Date(message.createdAt)}
                 </time>
               </div>
@@ -281,7 +283,7 @@ export default function VerificationMessages() {
                 <div>
                   <dt className="inline font-semibold">الهاتف: </dt>
                   <dd className="inline" dir="ltr">
-                    {message.phone}
+                    <WhatsAppPhone phone={message.phone} />
                   </dd>
                 </div>
                 <div>
@@ -289,7 +291,7 @@ export default function VerificationMessages() {
                   <dd className="inline">{message.email}</dd>
                 </div>
               </dl>
-              <div className="mt-4 whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-800">
+              <div className="mt-4 whitespace-pre-wrap rounded-lg bg-muted p-4 text-sm leading-6 text-foreground">
                 {message.content}
               </div>
 
@@ -299,16 +301,16 @@ export default function VerificationMessages() {
                     رد {message.responseBy || "المدرسة"} —{" "}
                     {message.responseAt ? new Date(message.responseAt) : ""}
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800">
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
                     {message.response}
                   </p>
                 </div>
               )}
 
               <div className="mt-4 flex flex-wrap gap-2">
-                {message.phone && (
+                {whatsappUrl(message.phone) && (
                   <a
-                    href={whatsappUrl(message.phone, message.response)}
+                    href={replyWhatsAppUrl(message.phone, message.response)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-lg border border-green-600 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
@@ -337,10 +339,10 @@ export default function VerificationMessages() {
               </div>
 
               {canReply && (
-                <div className="mt-5 border-t border-gray-100 pt-4">
+                <div className="mt-5 border-t border-border pt-4">
                   <label
                     htmlFor={`reply-${message.id}`}
-                    className="mb-2 block text-sm font-semibold text-gray-700"
+                    className="mb-2 block text-sm font-semibold text-foreground"
                   >
                     {message.response ? "إضافة رد جديد" : "الرد على الرسالة"}
                   </label>
@@ -355,13 +357,13 @@ export default function VerificationMessages() {
                         [message.id]: event.target.value,
                       }))
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+                    className="w-full rounded-lg border border-input px-3 py-2 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-cyan-100"
                   />
                   <button
                     type="button"
                     disabled={sendingId === message.id}
                     onClick={() => sendReply(message)}
-                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
                   >
                     <Send className="h-4 w-4" />
                     {sendingId === message.id

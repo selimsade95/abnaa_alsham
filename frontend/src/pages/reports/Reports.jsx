@@ -85,7 +85,7 @@ function DataTableContent({ headers, rows, emptyMessage }) {
   return (
     <div className="max-h-96 overflow-auto">
       <table className="min-w-full text-start text-sm">
-        <thead className="sticky top-0 z-10 bg-gray-50 text-gray-600 shadow-sm">
+        <thead className="sticky top-0 z-10 bg-muted text-muted-foreground shadow-sm">
           <tr>
             <th className="whitespace-nowrap px-4 py-3 text-start font-medium">
               {i18n.t("reports.orderColumn")}
@@ -105,7 +105,7 @@ function DataTableContent({ headers, rows, emptyMessage }) {
                 <button
                   type="button"
                   onClick={() => sortBy(index)}
-                  className="inline-flex items-center gap-1 hover:text-gray-900"
+                  className="inline-flex items-center gap-1 hover:text-foreground"
                   title={i18n.t("reports.sortBy", { 0: header })}
                 >
                   {header}
@@ -118,8 +118,8 @@ function DataTableContent({ headers, rows, emptyMessage }) {
         <tbody>
           {sortedRows.length ? (
             sortedRows.map((row, index) => (
-              <tr key={row.key || index} className="border-t border-gray-100">
-                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-gray-500">
+              <tr key={row.key || index} className="border-t border-border">
+                <td className="whitespace-nowrap px-4 py-3 tabular-nums text-muted-foreground">
                   {index + 1}
                 </td>
                 {row.cells.map((cell, cellIndex) => (
@@ -138,7 +138,7 @@ function DataTableContent({ headers, rows, emptyMessage }) {
             <tr>
               <td
                 colSpan={headers.length + 1}
-                className="px-4 py-8 text-center text-gray-500"
+                className="px-4 py-8 text-center text-muted-foreground"
               >
                 {emptyMessage}
               </td>
@@ -157,17 +157,17 @@ const Panel = ({ title, description, visible = true, children }) => {
     <details
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+      className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-5 py-3 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-border bg-muted px-5 py-3 [&::-webkit-details-marker]:hidden">
         <div>
-          <h2 className="font-semibold text-gray-800">{title}</h2>
+          <h2 className="font-semibold text-foreground">{title}</h2>
           {description && (
-            <p className="mt-1 text-xs text-gray-500">{description}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{description}</p>
           )}
         </div>
         <ChevronDown
-          className="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180"
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
           aria-hidden="true"
         />
       </summary>
@@ -781,7 +781,7 @@ export default function Reports() {
       green: "bg-emerald-50 text-emerald-700 border-emerald-200",
       amber: "bg-amber-50 text-amber-700 border-amber-200",
       rose: "bg-rose-50 text-rose-700 border-rose-200",
-      slate: "bg-slate-50 text-slate-700 border-slate-200",
+      slate: "bg-muted text-foreground border-border",
     };
     return (
       <div className={`rounded-xl border p-4 ${tones[tone] || tones.sky}`}>
@@ -803,10 +803,10 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             {tr("financialReport")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {tr("reportsDescription")}
           </p>
         </div>
@@ -814,14 +814,14 @@ export default function Reports() {
           <button
             onClick={exportPdf}
             disabled={!selectedSections.length || loading || loadingOverview}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
           >
             <Printer className="h-4 w-4" /> PDF
           </button>
           <button
             onClick={exportXlsx}
             disabled={!selectedSections.length || loading || loadingOverview}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
           >
             <FileSpreadsheet className="h-4 w-4" /> Excel
           </button>
@@ -835,7 +835,7 @@ export default function Reports() {
         >
           <div className="space-y-4 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-muted-foreground">
                 {tr("selectedReportSectionsCount", {
                   0: selectedSections.length,
                   1: availableSections.length,
@@ -847,14 +847,14 @@ export default function Reports() {
                   onClick={() =>
                     setSelectedSectionIds(availableSections.map(({ id }) => id))
                   }
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
                 >
                   {tr("selectAllReportSections")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedSectionIds([])}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
                 >
                   {tr("clearReportSectionSelection")}
                 </button>
@@ -868,7 +868,7 @@ export default function Reports() {
               {availableSections.map((section) => (
                 <label
                   key={section.id}
-                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-border p-3 text-sm text-foreground hover:bg-muted"
                 >
                   <input
                     type="checkbox"
@@ -876,7 +876,7 @@ export default function Reports() {
                       ({ id }) => id === section.id,
                     )}
                     onChange={() => toggleSection(section.id)}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                    className="mt-0.5 h-4 w-4 rounded border-input text-sky-600 focus:ring-sky-500"
                   />
                   <span>{section.title}</span>
                 </label>
@@ -887,7 +887,7 @@ export default function Reports() {
       )}
 
       {loadingOverview ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
           <div className="mt-2">{tr("loadingOverview")}</div>
         </div>
@@ -1037,7 +1037,7 @@ export default function Reports() {
                   >
                     <span>{money(total)} $</span>
                     {row.busApplicable && (
-                      <span className="mt-0.5 block text-xs font-normal text-gray-500">
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
                         ({money(academic)} + {money(bus)})
                       </span>
                     )}
@@ -1153,9 +1153,9 @@ export default function Reports() {
                 </div>
                 <form
                   onSubmit={saveSponsorship}
-                  className="grid grid-cols-1 gap-3 border-b border-gray-100 p-4 md:grid-cols-[2fr_2fr_auto] md:items-end"
+                  className="grid grid-cols-1 gap-3 border-b border-border p-4 md:grid-cols-[2fr_2fr_auto] md:items-end"
                 >
-                  <label className="text-sm text-gray-700">
+                  <label className="text-sm text-foreground">
                     {tr("orphanStudent")}
                     <select
                       required
@@ -1163,7 +1163,7 @@ export default function Reports() {
                       onChange={(event) =>
                         selectSponsorshipStudent(event.target.value)
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
                     >
                       <option value="">{tr("selectOrphanStudent")}</option>
                       {(financial.orphanStudents || []).map((student) => (
@@ -1177,7 +1177,7 @@ export default function Reports() {
                       ))}
                     </select>
                   </label>
-                  <label className="text-sm text-gray-700">
+                  <label className="text-sm text-foreground">
                     {tr("donorName")}
                     <input
                       required
@@ -1189,7 +1189,7 @@ export default function Reports() {
                           donorName: event.target.value,
                         }))
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                      className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
                     />
                   </label>
                   <button
@@ -1197,7 +1197,7 @@ export default function Reports() {
                     disabled={
                       savingSponsorship || !financial.orphanStudents?.length
                     }
-                    className="rounded-lg bg-[#036A87] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
                     {savingSponsorship
                       ? tr("savingAssignment")
@@ -1230,7 +1230,7 @@ export default function Reports() {
             )}
             {isSectionSelected("orphanFinancialByClass") && (
               <>
-                <div className="border-t border-gray-100 px-5 py-3 text-sm font-semibold text-gray-700">
+                <div className="border-t border-border px-5 py-3 text-sm font-semibold text-foreground">
                   {tr("orphanFinancialByClass")}
                 </div>
                 <DataTable
@@ -1455,7 +1455,7 @@ export default function Reports() {
       <Panel title={tr("reportFilter")}>
         <div className="p-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("monthLabel")}
               <input
                 type="month"
@@ -1468,10 +1468,10 @@ export default function Reports() {
                     setDateTo("");
                   }
                 }}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               />
             </label>
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("from")}
               <input
                 type="date"
@@ -1481,10 +1481,10 @@ export default function Reports() {
                   setDateFrom(event.target.value);
                   if (event.target.value) setMonth("");
                 }}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               />
             </label>
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("to")}
               <input
                 type="date"
@@ -1494,15 +1494,15 @@ export default function Reports() {
                   setDateTo(event.target.value);
                   if (event.target.value) setMonth("");
                 }}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               />
             </label>
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("paymentType")}
               <select
                 value={paymentType}
                 onChange={(event) => setPaymentType(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               >
                 {PAYMENT_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -1511,13 +1511,13 @@ export default function Reports() {
                 ))}
               </select>
             </label>
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("path")}
               <input
                 value={course}
                 onChange={(event) => setCourse(event.target.value)}
                 placeholder={tr("searchPath")}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               />
             </label>
           </div>
@@ -1525,7 +1525,7 @@ export default function Reports() {
       </Panel>
 
       {loading ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
           <div className="mt-2">{tr("loadingReport")}</div>
         </div>
@@ -1535,7 +1535,7 @@ export default function Reports() {
             title={tr("filteredPaymentReport")}
             visible={isSectionSelected("filteredPaymentReport")}
           >
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarRange className="h-4 w-4" />
               <span>{activePeriodLabel}</span>
               <span className="rounded-full bg-sky-50 px-2 py-1 font-medium text-sky-700">
@@ -1621,15 +1621,15 @@ export default function Reports() {
           isSectionSelected("classStudentFinancialDetails")
         }
       >
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-gray-100 p-4">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border p-4">
           <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("className")}
               <select
                 value={classReportId}
                 onChange={(event) => setClassReportId(event.target.value)}
                 disabled={loadingOverview}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 disabled:bg-gray-50"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 disabled:bg-muted"
               >
                 <option value="">{tr("selectClassReport")}</option>
                 {reportClasses.map((item) => (
@@ -1639,14 +1639,14 @@ export default function Reports() {
                 ))}
               </select>
             </label>
-            <label className="text-sm text-gray-700">
+            <label className="text-sm text-foreground">
               {tr("paymentType")}
               <select
                 value={classReportPaymentType}
                 onChange={(event) =>
                   setClassReportPaymentType(event.target.value)
                 }
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
               >
                 {PAYMENT_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -1659,7 +1659,7 @@ export default function Reports() {
         </div>
         {classReportId ? (
           classReportLoading ? (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-muted-foreground">
               <Loader2 className="mx-auto h-5 w-5 animate-spin" />
               <div className="mt-2">{tr("loadingReport")}</div>
             </div>

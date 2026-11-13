@@ -24,8 +24,6 @@ ORPHAN_DIR.mkdir(parents=True, exist_ok=True)
 STUDENT_DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 TEACHER_DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_BYTES = int(os.environ.get('MAX_UPLOAD_MB', '10')) * 1024 * 1024
-ALLOWED_MIMES = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
-ALLOWED_EXTS = {".pdf", ".jpg", ".jpeg", ".png"}
 
 client = AsyncIOMotorClient(MONGO_URL)
 raw_db = client[DB_NAME]

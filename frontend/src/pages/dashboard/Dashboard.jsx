@@ -112,10 +112,10 @@ const DashboardDonut = ({ data, total, centerLabel, height = 190 }) => (
     </ResponsiveContainer>
     {total !== undefined && (
       <div className="pointer-events-none absolute inset-0 mb-7 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold tabular-nums text-gray-900">
+        <span className="text-xl font-bold tabular-nums text-foreground">
           {total}
         </span>
-        <span className="text-[10px] text-gray-500">{centerLabel}</span>
+        <span className="text-[10px] text-muted-foreground">{centerLabel}</span>
       </div>
     )}
   </div>
@@ -176,12 +176,12 @@ const StatCard = ({
 }) => (
   <div
     data-testid={testid}
-    className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-shadow"
+    className="bg-card rounded-xl border border-border shadow-sm p-4 hover:shadow-md transition-shadow"
   >
     <div className="flex items-start justify-between">
       <div>
-        <div className="text-xs font-medium text-gray-500 mb-2">{title}</div>
-        <div className="text-2xl font-extrabold text-gray-900 tabular-nums">
+        <div className="text-xs font-medium text-muted-foreground mb-2">{title}</div>
+        <div className="text-2xl font-extrabold text-foreground tabular-nums">
           {value}
         </div>
       </div>
@@ -197,7 +197,7 @@ const StatCard = ({
           aria-label={linkLabel || i18n.t("dashboard.showList", { 0: title })}
           title={linkLabel || i18n.t("dashboard.showList", { 0: title })}
           data-testid={testid ? `${testid}-link` : undefined}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-[#036A87]"
+          className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-accent-foreground"
         >
           <ArrowUpRight className="h-4 w-4" />
         </Link>
@@ -215,7 +215,7 @@ const FinanceRow = ({
   viewMode,
 }) => (
   <div>
-    <h3 className="mb-3 text-sm font-semibold text-gray-700">{title}</h3>
+    <h3 className="mb-3 text-sm font-semibold text-foreground">{title}</h3>
     {viewMode === "charts" ? (
       <FinanceBarChart totals={totals} />
     ) : (
@@ -632,13 +632,13 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">لوحة التحكم</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">لوحة التحكم</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             نظرة عامة على تسجيلات الطلاب
           </p>
         </div>
         <div
-          className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm"
+          className="inline-flex rounded-lg border border-border bg-card p-1 shadow-sm"
           role="group"
           aria-label="طريقة عرض لوحة التحكم"
         >
@@ -648,8 +648,8 @@ export default function Dashboard() {
             aria-pressed={viewMode === "numbers"}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
               viewMode === "numbers"
-                ? "bg-[#036A87] text-white"
-                : "text-gray-600 hover:bg-gray-50"
+                ? "bg-primary text-white"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             <LayoutGrid className="h-4 w-4" />
@@ -661,8 +661,8 @@ export default function Dashboard() {
             aria-pressed={viewMode === "charts"}
             className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
               viewMode === "charts"
-                ? "bg-[#036A87] text-white"
-                : "text-gray-600 hover:bg-gray-50"
+                ? "bg-primary text-white"
+                : "text-muted-foreground hover:bg-muted"
             }`}
           >
             <BarChart3 className="h-4 w-4" />
@@ -674,7 +674,7 @@ export default function Dashboard() {
             type="button"
             onClick={exportDashboardPdf}
             disabled={!stats || loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             <Printer className="h-4 w-4" />
             PDF
@@ -683,7 +683,7 @@ export default function Dashboard() {
             type="button"
             onClick={exportDashboardXlsx}
             disabled={!stats || loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             Excel
@@ -691,17 +691,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="mb-3">
-          <h2 className="text-sm font-semibold text-gray-900">
+          <h2 className="text-sm font-semibold text-foreground">
             تصفية الإحصائيات
           </h2>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             تتحدث الإحصائيات تلقائياً عند تغيير أي خيار.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-xs font-medium text-muted-foreground">
             الصف
             <select
               value={filters.classId}
@@ -711,7 +711,7 @@ export default function Dashboard() {
                   classId: event.target.value,
                 }))
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <option value="">كل الصفوف</option>
               {filterOptions.classes.map((classItem) => (
@@ -723,7 +723,7 @@ export default function Dashboard() {
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-xs font-medium text-muted-foreground">
             العام الدراسي
             <select
               value={filters.academicYear}
@@ -733,7 +733,7 @@ export default function Dashboard() {
                   academicYear: event.target.value,
                 }))
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <option value="">كل الأعوام</option>
               {filterOptions.academicYears.map((year) => (
@@ -743,7 +743,7 @@ export default function Dashboard() {
               ))}
             </select>
           </label>
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-xs font-medium text-muted-foreground">
             الجنس
             <select
               value={filters.gender}
@@ -753,14 +753,14 @@ export default function Dashboard() {
                   gender: event.target.value,
                 }))
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <option value="">الكل</option>
               <option value="male">ذكور</option>
               <option value="female">إناث</option>
             </select>
           </label>
-          <label className="text-xs font-medium text-gray-600">
+          <label className="text-xs font-medium text-muted-foreground">
             مسار التسجيل النهائي
             <select
               value={filters.finalRegistrationPath}
@@ -770,7 +770,7 @@ export default function Dashboard() {
                   finalRegistrationPath: event.target.value,
                 }))
               }
-              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800"
+              className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <option value="">كل المسارات</option>
               {filterOptions.registrationPaths.map((path) => (
@@ -782,13 +782,13 @@ export default function Dashboard() {
           </label>
         </div>
         {has("payments.view") && (
-          <label className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-gray-600">
+          <label className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <input
               type="checkbox"
               checked={includeDropped}
               onChange={(event) => setIncludeDropped(event.target.checked)}
               data-testid="dashboard-include-dropped"
-              className="rounded border-gray-300 text-[#036A87] focus:ring-[#04CDF9]"
+              className="rounded border-input text-accent-foreground focus:ring-ring"
             />
             تضمين الطلاب المنسحبين في إجمالي المستحق
           </label>
@@ -805,7 +805,7 @@ export default function Dashboard() {
               });
               setIncludeDropped(false);
             }}
-            className="mt-3 text-xs font-medium text-[#036A87] hover:underline"
+            className="mt-3 text-xs font-medium text-accent-foreground hover:underline"
           >
             مسح التصفية
           </button>
@@ -819,13 +819,13 @@ export default function Dashboard() {
       )}
 
       <div className="space-y-6">
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+        <section className="rounded-2xl border border-border bg-card shadow-sm p-5">
           <div className="mb-5">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 إحصائيات الطلاب
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 أعداد الطلاب حسب الجنس والمسار وحالة التسجيل
               </p>
             </div>
@@ -833,8 +833,8 @@ export default function Dashboard() {
 
           {viewMode === "charts" ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                <h3 className="text-sm font-semibold text-gray-700">
+              <div className="rounded-xl border border-border bg-muted/70 p-3">
+                <h3 className="text-sm font-semibold text-foreground">
                   توزيع الطلاب حسب الجنس
                 </h3>
                 <DashboardDonut
@@ -886,14 +886,14 @@ export default function Dashboard() {
           )}
 
           {viewMode !== "charts" && (
-            <h3 className="mb-3 mt-5 text-sm font-semibold text-gray-700">
+            <h3 className="mb-3 mt-5 text-sm font-semibold text-foreground">
               الطلاب حسب المسار
             </h3>
           )}
           {viewMode === "charts" ? (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                <h3 className="text-sm font-semibold text-gray-700">
+              <div className="rounded-xl border border-border bg-muted/70 p-3">
+                <h3 className="text-sm font-semibold text-foreground">
                   الطلاب حسب المسار
                 </h3>
                 <DashboardChart
@@ -904,8 +904,8 @@ export default function Dashboard() {
                   series={[{ key: "total", name: "عدد الطلاب" }]}
                 />
               </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                <h3 className="text-sm font-semibold text-gray-700">
+              <div className="rounded-xl border border-border bg-muted/70 p-3">
+                <h3 className="text-sm font-semibold text-foreground">
                   المنسحبون حسب المسار
                 </h3>
                 <DashboardChart
@@ -943,7 +943,7 @@ export default function Dashboard() {
 
           {viewMode !== "charts" && (
             <>
-              <h3 className="mb-3 mt-5 text-sm font-semibold text-gray-700">
+              <h3 className="mb-3 mt-5 text-sm font-semibold text-foreground">
                 الطلاب المنسحبون حسب المسار
               </h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -969,16 +969,16 @@ export default function Dashboard() {
         </section>
 
         {has("teachers.view") && (
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+          <section className="rounded-2xl border border-border bg-card shadow-sm p-5">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 إحصائيات المعلمين
               </h2>
             </div>
             {viewMode === "charts" ? (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                  <h3 className="text-sm font-semibold text-gray-700">
+                <div className="rounded-xl border border-border bg-muted/70 p-3">
+                  <h3 className="text-sm font-semibold text-foreground">
                     توزيع المعلمين حسب الجنس
                   </h3>
                   <DashboardDonut
@@ -1031,12 +1031,12 @@ export default function Dashboard() {
         )}
 
         {has("payments.view") && (
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+          <section className="rounded-2xl border border-border bg-card shadow-sm p-5">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 الإحصائيات المالية
               </h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 المستحق والمدفوع والمتبقي للرسوم الدراسية والحافلات
               </p>
             </div>
@@ -1045,7 +1045,7 @@ export default function Dashboard() {
               <div className="mb-4">
                 <Link
                   to="/reports"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-3 py-2 text-sm font-medium text-white hover:bg-[#02556d]"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-[#02556d]"
                 >
                   فتح تقارير المدفوعات
                 </Link>
@@ -1054,7 +1054,7 @@ export default function Dashboard() {
 
             <div className="space-y-6">
               <div>
-                <h3 className="mb-4 text-base font-semibold text-gray-800">
+                <h3 className="mb-4 text-base font-semibold text-foreground">
                   جميع المسارات
                 </h3>
                 <div
@@ -1085,7 +1085,7 @@ export default function Dashboard() {
 
               {(stats?.finance?.byPath || []).map((pathStats, index) => (
                 <div key={pathStats.path}>
-                  <h3 className="mb-4 text-base font-semibold text-gray-800">
+                  <h3 className="mb-4 text-base font-semibold text-foreground">
                     مسار {pathStats.path}
                   </h3>
                   <div
@@ -1119,30 +1119,30 @@ export default function Dashboard() {
         )}
 
         {hasAny(["attendance.view", "attendance.manage"]) && (
-          <section className="rounded-2xl border border-gray-200 bg-white shadow-sm p-5">
+          <section className="rounded-2xl border border-border bg-card shadow-sm p-5">
             <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-foreground">
                   إحصائيات الحضور اليوم
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {stats?.attendance?.date || ""}
                 </p>
               </div>
               <Link
                 to="/attendance"
-                className="text-sm font-medium text-[#036A87] hover:underline whitespace-nowrap"
+                className="text-sm font-medium text-accent-foreground hover:underline whitespace-nowrap"
               >
                 فتح الحضور
               </Link>
             </div>
             {viewMode === "charts" ? (
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                  <h3 className="text-sm font-semibold text-gray-700">
+                <div className="rounded-xl border border-border bg-muted/70 p-3">
+                  <h3 className="text-sm font-semibold text-foreground">
                     حالة حضور الطلاب
                   </h3>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     نسبة الحضور: {stats?.attendance?.attendanceRate ?? 0}%
                   </p>
                   <DashboardDonut
@@ -1174,8 +1174,8 @@ export default function Dashboard() {
                     centerLabel="سجلات الحضور"
                   />
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-3">
-                  <h3 className="text-sm font-semibold text-gray-700">
+                <div className="rounded-xl border border-border bg-muted/70 p-3">
+                  <h3 className="text-sm font-semibold text-foreground">
                     تسجيل الحضور حسب الصفوف
                   </h3>
                   <DashboardChart
@@ -1245,8 +1245,8 @@ export default function Dashboard() {
 
         {has("attendance.reports.view") &&
           (viewMode === "charts" ? (
-            <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h2 className="mb-3 text-lg font-semibold text-gray-900">
+            <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <h2 className="mb-3 text-lg font-semibold text-foreground">
                 تقارير الغياب المتكرر
               </h2>
               <DashboardChart
@@ -1267,7 +1267,7 @@ export default function Dashboard() {
               />
               <Link
                 to="/attendance?tab=reports"
-                className="text-sm font-medium text-[#036A87] hover:underline"
+                className="text-sm font-medium text-accent-foreground hover:underline"
                 data-testid="stat-repeated-absence-reports"
               >
                 فتح التقارير
@@ -1280,7 +1280,7 @@ export default function Dashboard() {
               data-testid="stat-repeated-absence-reports"
             >
               <span className="font-medium">تقارير الغياب المتكرر</span>
-              <span className="rounded-full bg-white px-3 py-1 font-bold tabular-nums">
+              <span className="rounded-full bg-card px-3 py-1 font-bold tabular-nums">
                 {loading ? "…" : (stats?.repeatedAbsenceReports ?? 0)}
               </span>
             </Link>

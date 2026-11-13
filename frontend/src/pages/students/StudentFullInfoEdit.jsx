@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "@/lib/api";
@@ -6,11 +7,11 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { emptyStudent } from "@/lib/studentDefaults";
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#04CDF9] focus:border-transparent";
+  "w-full rounded-lg border border-input bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent";
 
 const Section = ({ title, children }) => (
-  <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-    <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+  <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+    <h3 className="text-lg font-semibold text-foreground mb-4 pb-3 border-b border-border">
       {title}
     </h3>
     <div className="space-y-4">{children}</div>
@@ -19,7 +20,7 @@ const Section = ({ title, children }) => (
 
 const Field = ({ label, children }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+    <label className="block text-sm font-medium text-foreground mb-1.5">
       {label}
     </label>
     {children}
@@ -35,7 +36,7 @@ const Radio = ({ name, checked, onChange, label }) => (
       onChange={onChange}
       className="h-4 w-4 accent-[#04CDF9]"
     />
-    <span className="text-sm text-gray-700">{label}</span>
+    <span className="text-sm text-foreground">{label}</span>
   </label>
 );
 
@@ -170,7 +171,7 @@ export default function StudentFullInfoEdit() {
 
   if (loading || !data)
     return (
-      <div className="text-center text-gray-500 py-16">
+      <div className="text-center text-muted-foreground py-16">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
@@ -188,14 +189,14 @@ export default function StudentFullInfoEdit() {
           <button
             type="button"
             onClick={() => nav(`/students/${id}/full-information`)}
-            className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2"
           >
             <ArrowRight className="h-4 w-4" /> رجوع
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             تعديل المعلومات الكاملة
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             تحديث الحقول التفصيلية للسجل الشامل — {data.student?.fullName}
           </p>
         </div>
@@ -203,20 +204,20 @@ export default function StudentFullInfoEdit() {
           type="submit"
           disabled={saving}
           data-testid="fullinfo-save-btn"
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>
       </div>
 
       <Section title="حقول السجل التفصيلي (Excel)">
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-xs text-muted-foreground mb-2">
           للحقول الأساسية للطالب (الاسم، الجنس، تاريخ الميلاد ...) استخدم صفحة
           تعديل الطالب العادية.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {FULL_INFO_FIELDS.map(([k, label]) => (
-            <Field key={k} label={label}>
+            <Field key={k} label={t(label)}>
               <input
                 data-testid={`fi-${k}`}
                 className={inputCls}
@@ -248,14 +249,14 @@ export default function StudentFullInfoEdit() {
         <button
           type="button"
           onClick={() => nav(`/students/${id}/full-information`)}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 shadow-sm"
+          className="rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-foreground hover:bg-muted shadow-sm"
         >
           إلغاء
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60 shadow-sm"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60 shadow-sm"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>

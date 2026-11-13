@@ -87,6 +87,34 @@
   z-index: 1;
 }
 
+.student-card--parent .student-card__qr {
+  bottom: 5.5%;
+  width: 14%;
+  padding: 0;
+}
+
+.student-card__parent-code {
+  position: absolute;
+  bottom: 3%;
+  left: 5%;
+  display: grid;
+  gap: 1px;
+  max-width: 70%;
+  padding: 0.35em 0.8em;
+  border-radius: 0.4em;
+  background: white;
+  color: #0f172a;
+  text-align: center;
+  overflow-wrap: anywhere;
+  font-size: clamp(8px, 1.15vw, 15px);
+  z-index: 1;
+}
+
+.student-card__parent-code strong {
+  font-family: monospace;
+  font-size: 1.2em;
+}
+
 @media print {
   .student-card-page {
     min-height: auto;

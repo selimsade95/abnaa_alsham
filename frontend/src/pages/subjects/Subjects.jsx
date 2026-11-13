@@ -96,10 +96,10 @@ export default function Subjects() {
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             المواد والإسنادات
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             حدد المواد، معلميها، والمواد المتاحة لكل صف
           </p>
         </div>
@@ -108,15 +108,15 @@ export default function Subjects() {
             onClick={() =>
               setEditing({ name: "", code: "", status: "active", notes: "" })
             }
-            className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
           >
             <Plus className="h-4 w-4" /> مادة جديدة
           </button>
         )}
       </div>
-      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <section className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
         <table className="min-w-full text-sm text-right">
-          <thead className="bg-gray-50 text-gray-500">
+          <thead className="bg-muted text-muted-foreground">
             <tr>
               <th className="px-4 py-3">المادة</th>
               <th className="px-4 py-3">الرمز</th>
@@ -133,9 +133,9 @@ export default function Subjects() {
               </tr>
             ) : (
               subjects.map((subject) => (
-                <tr key={subject.id} className="border-t border-gray-100">
+                <tr key={subject.id} className="border-t border-border">
                   <td className="px-4 py-3 font-medium">{subject.name}</td>
-                  <td className="px-4 py-3 text-gray-500">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {subject.code || "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -145,7 +145,7 @@ export default function Subjects() {
                     {has("subjects.update") && (
                       <button
                         onClick={() => setEditing(subject)}
-                        className="p-1.5 text-gray-500"
+                        className="p-1.5 text-muted-foreground"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -170,7 +170,7 @@ export default function Subjects() {
       </section>
       {has("subjects.update") && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <section className="bg-card rounded-xl border border-border shadow-sm p-5">
             <h2 className="font-semibold mb-4">إسناد مادة لمعلم</h2>
             <form onSubmit={addTeacherAssignment} className="space-y-3">
               <select
@@ -207,7 +207,7 @@ export default function Subjects() {
                     </option>
                   ))}
               </select>
-              <button className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white">
+              <button className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">
                 إسناد
               </button>
             </form>
@@ -230,7 +230,7 @@ export default function Subjects() {
               ))}
             </div>
           </section>
-          <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <section className="bg-card rounded-xl border border-border shadow-sm p-5">
             <h2 className="font-semibold mb-4">إسناد مادة لصف ومعلمين</h2>
             <form onSubmit={addClassAssignment} className="space-y-3">
               <select
@@ -288,7 +288,7 @@ export default function Subjects() {
                     </option>
                   ))}
               </select>
-              <button className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white">
+              <button className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white">
                 إسناد
               </button>
             </form>
@@ -316,10 +316,10 @@ export default function Subjects() {
         </div>
       )}
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-4">
           <form
             onSubmit={saveSubject}
-            className="bg-white rounded-xl p-6 w-full max-w-md space-y-4"
+            className="bg-card rounded-xl p-6 w-full max-w-md space-y-4"
           >
             <h2 className="text-lg font-bold">
               {editing.id ? "تعديل مادة" : "مادة جديدة"}
@@ -345,7 +345,7 @@ export default function Subjects() {
               >
                 إلغاء
               </button>
-              <button className="rounded-lg bg-[#04CDF9] px-4 py-2 text-white">
+              <button className="rounded-lg bg-primary px-4 py-2 text-white">
                 حفظ
               </button>
             </div>

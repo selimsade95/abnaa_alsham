@@ -19,6 +19,7 @@ jest.mock("@/hooks/useClasses", () => ({
   useClasses: () => ({ classes: [] }),
 }));
 jest.mock("react-router-dom", () => ({
+  useLocation: () => ({ key: "test-entry" }),
   useNavigate: () => jest.fn(),
   useSearchParams: () => [mockSearchParams],
 }), { virtual: true });
@@ -199,6 +200,18 @@ describe("student list pagination persistence", () => {
         gender: "female",
       }),
     );
+  });
+
+  it("keeps the saved page when returning to a filtered history entry", async () => {
+    mockSearchParams = new URLSearchParams("gender=female");
+    await act(async () => root.render(<ListHarness />));
+    await act(async () => window.studentListState.load(3));
+    await act(async () => root.render(null));
+    api.get.mockClear();
+    await act(async () => root.render(<ListHarness />));
+    expect(api.get).toHaveBeenCalledWith("/students", {
+      params: expect.objectContaining({ page: 3, gender: "female" }),
+    });
   });
 
   it("tracks upload progress and switches to processing while the import runs", async () => {

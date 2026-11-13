@@ -21,4 +21,5 @@ class StudentIn(BaseModel):
 
 
 class StudentNoteIn(BaseModel):
+    shareWithParent: Optional[bool] = None
     content: str

@@ -50,8 +50,8 @@ export default function Users() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">المستخدمون</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-3xl font-bold text-foreground">المستخدمون</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             إدارة حسابات الوصول والأدوار والفروع المسموح بها
           </p>
         </div>
@@ -59,7 +59,7 @@ export default function Users() {
           <Link
             to="/users/new"
             data-testid="add-user-btn"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
           >
             <Plus className="h-4 w-4" />
             إضافة مستخدم
@@ -67,9 +67,9 @@ export default function Users() {
         )}
       </header>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <table className="min-w-full text-right text-sm">
-          <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+          <thead className="bg-muted text-xs uppercase text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">الاسم</th>
               <th className="px-4 py-3 font-medium">اسم المستخدم</th>
@@ -82,14 +82,14 @@ export default function Users() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                   جاري التحميل...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                   لا يوجد مستخدمون.
                 </td>
               </tr>
@@ -97,18 +97,18 @@ export default function Users() {
               items.map((account) => (
                 <tr
                   key={account.id}
-                  className="border-t border-gray-100 hover:bg-gray-50"
+                  className="border-t border-border hover:bg-muted"
                   data-testid={`user-row-${account.id}`}
                 >
-                  <td className="px-4 py-3 font-medium text-gray-900">
+                  <td className="px-4 py-3 font-medium text-foreground">
                     <Link
                       to={`/users/${account.id}`}
-                      className="hover:text-[#036A87] hover:underline"
+                      className="hover:text-accent-foreground hover:underline"
                     >
                       {account.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-4 py-3 text-muted-foreground">
                     @{account.username}
                   </td>
                   <td className="px-4 py-3">
@@ -116,13 +116,13 @@ export default function Users() {
                       {(account.roles || []).map((roleId) => (
                         <span
                           key={roleId}
-                          className="inline-flex rounded-full border border-[#04CDF9]/30 bg-brand-light px-2 py-0.5 text-xs text-[#036A87]"
+                          className="inline-flex rounded-full border border-[#04CDF9]/30 bg-brand-light px-2 py-0.5 text-xs text-accent-foreground"
                         >
                           {roleName(roleId)}
                         </span>
                       ))}
                       {!account.roles?.length && (
-                        <span className="text-xs text-gray-400">لا يوجد</span>
+                        <span className="text-xs text-muted-foreground">لا يوجد</span>
                       )}
                     </div>
                   </td>
@@ -131,7 +131,7 @@ export default function Users() {
                       {(account.branchIds || []).map((branchId) => (
                         <span
                           key={branchId}
-                          className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600"
+                          className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs text-muted-foreground"
                         >
                           {user?.branches?.find(
                             (branch) => branch.id === branchId,
@@ -140,7 +140,7 @@ export default function Users() {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {account.createdAt?.slice(0, 10)}
                   </td>
                   <td className="px-4 py-3 text-left">
@@ -150,7 +150,7 @@ export default function Users() {
                           to={`/users/${account.id}/edit`}
                           aria-label={`تعديل ${account.name}`}
                           data-testid={`edit-user-${account.id}`}
-                          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
                         >
                           <Pencil className="h-4 w-4" />
                         </Link>
@@ -176,18 +176,18 @@ export default function Users() {
       </div>
 
       {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl">
-            <h2 className="mb-2 text-lg font-bold text-gray-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+            <h2 className="mb-2 text-lg font-bold text-foreground">
               تأكيد الحذف
             </h2>
-            <p className="mb-6 text-sm text-gray-600">
+            <p className="mb-6 text-sm text-muted-foreground">
               هل أنت متأكد من حذف هذا المستخدم؟
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmId(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700"
+                className="rounded-lg border border-input px-4 py-2 text-sm text-foreground"
               >
                 إلغاء
               </button>

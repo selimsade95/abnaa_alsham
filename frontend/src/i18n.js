@@ -5,6 +5,7 @@ import { initReactI18next } from "react-i18next";
 
 const STORAGE_KEY = "abnaa-language";
 const phraseLookup = new Map();
+const normalizePhrase = (phrase) => phrase.trim().replace(/\s+/g, " ");
 
 function indexPhrases(ar, en, prefix = "") {
   Object.keys(ar).forEach((key) => {
@@ -18,6 +19,7 @@ function indexPhrases(ar, en, prefix = "") {
       indexPhrases(arabicValue, englishValue || {}, `${prefix}${key}.`);
     } else if (typeof arabicValue === "string" && englishValue) {
       phraseLookup.set(arabicValue, `${prefix}${key}`);
+      phraseLookup.set(normalizePhrase(arabicValue), `${prefix}${key}`);
     }
   });
 }
@@ -76,6 +78,7 @@ export function t(key, options = {}) {
   const section = key.split(".", 1)[0];
   const translationKey =
     phraseLookup.get(key) ||
+    phraseLookup.get(normalizePhrase(key)) ||
     (Object.prototype.hasOwnProperty.call(arabic, section) ? key : null);
   return translationKey ? i18next.t(translationKey, options) : key;
 }

@@ -48,4 +48,13 @@ describe("frontend localization", () => {
   test("keeps the Arabic and English catalog structures in sync", () => {
     expect(catalogKeys(english).sort()).toEqual(catalogKeys(arabic).sort());
   });
+
+  test("translates parent access, confirmations, and multiline copy", () => {
+    setLanguage("en");
+    expect(t("بوابة ولي الأمر")).toBe("Parent portal");
+    expect(t("استبدال الوثيقة")).toBe("Replace document");
+    expect(t("جاري\n          التحميل...")).toBe("Loading...");
+    expect(t("تحديد {{0}}", { 0: "Ali" })).toBe("Select Ali");
+    expect(t("controls.close")).toBe("Close");
+  });
 });

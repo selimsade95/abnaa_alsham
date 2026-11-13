@@ -1,15 +1,14 @@
-import os
+import re
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 
 from school.core.csv_upload import _read_csv_rows
 from school.core.database import db, TEACHER_DOCUMENTS_DIR
 from school.core.schemas import DeactivationIn
 from school.core.services import generate_code, get_current_user, now_iso, require_permission
-from school.core.uploads import _save_upload
+from school.core.uploads import _save_upload, private_download, remove_upload
 from school.teachers.schemas import TeacherIn
 
 
@@ -36,12 +35,12 @@ async def list_teachers(search: Optional[str] = None, gender: Optional[str] = No
     if gender: q["gender"] = gender
     if specialization:
         q.setdefault("$and", []).append({"$or": [
-            {"specialization": {"$regex": specialization, "$options": "i"}},
-            {"department": {"$regex": specialization, "$options": "i"}},
-            {"jobDescription": {"$regex": specialization, "$options": "i"}},
+            {"specialization": {"$regex": re.escape(specialization), "$options": "i"}},
+            {"department": {"$regex": re.escape(specialization), "$options": "i"}},
+            {"jobDescription": {"$regex": re.escape(specialization), "$options": "i"}},
         ]})
     if search:
-        rx = {"$regex": search, "$options": "i"}
+        rx = {"$regex": re.escape(search), "$options": "i"}
         q.setdefault("$and", []).append({"$or": [
             {"fullName": rx}, {"phone": rx}, {"contactPhone": rx}, {"address": rx},
             {"code": rx}, {"specialization": rx}, {"department": rx}, {"jobDescription": rx},
@@ -129,9 +128,7 @@ async def upload_teacher_certificate(tid: str, file: UploadFile = File(...),
     teacher = await db.teachers.find_one({"id": tid})
     if not teacher:
         raise HTTPException(404, "المعلم غير موجود")
-    fname, fpath, mime, size = await _save_upload(
-        file, TEACHER_DOCUMENTS_DIR, teacher.get("code") or tid
-    )
+    fname, fpath, mime, size = await _save_upload(file, TEACHER_DOCUMENTS_DIR)
     old_path = (teacher.get("certificateFile") or {}).get("filePath")
     certificate = {
         "fileName": fname,
@@ -146,12 +143,8 @@ async def upload_teacher_certificate(tid: str, file: UploadFile = File(...),
         {"id": tid},
         {"$set": {"certificateFile": certificate, "updatedAt": now_iso()}},
     )
-    if old_path:
-        try:
-            os.remove(old_path)
-        except OSError:
-            pass
-    return await _teacher_out(certificate)
+    remove_upload(TEACHER_DOCUMENTS_DIR, old_path)
+    return (await _teacher_out({"certificateFile": certificate}))["certificateFile"]
 
 
 @router.get("/teachers/{tid}/certificate")
@@ -159,15 +152,7 @@ async def get_teacher_certificate(tid: str, current=Depends(require_permission("
     teacher = await db.teachers.find_one({"id": tid})
     if not teacher:
         raise HTTPException(404, "المعلم غير موجود")
-    certificate = teacher.get("certificateFile") or {}
-    path = certificate.get("filePath")
-    if not path or not os.path.exists(path):
-        raise HTTPException(404, "لا توجد شهادة مرفقة")
-    return FileResponse(
-        path,
-        media_type=certificate.get("mimeType") or "application/octet-stream",
-        filename=certificate.get("originalName") or certificate.get("fileName"),
-    )
+    return private_download(TEACHER_DOCUMENTS_DIR, teacher.get("certificateFile"))
 
 
 @router.delete("/teachers/{tid}")

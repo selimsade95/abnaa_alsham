@@ -52,7 +52,7 @@ const PaymentBadge = ({ semester }) => {
   };
   return (
     <span
-      className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${styles[semester] || "bg-gray-50 text-gray-600 border-gray-200"}`}
+      className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${styles[semester] || "bg-muted text-muted-foreground border-border"}`}
     >
       {SEMESTER_LABELS[semester] || semester}
     </span>
@@ -413,15 +413,15 @@ export default function Payments() {
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">المدفوعات</h1>
-          <p className="text-sm text-gray-500 mt-1">سجل مدفوعات رسوم التسجيل</p>
+          <h1 className="text-3xl font-bold text-foreground">المدفوعات</h1>
+          <p className="text-sm text-muted-foreground mt-1">سجل مدفوعات رسوم التسجيل</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {has("payments.create") && (
             <button
               onClick={openNew}
               data-testid="add-payment-btn"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
             >
               <Plus className="h-4 w-4" /> إضافة دفعة
             </button>
@@ -438,7 +438,7 @@ export default function Payments() {
           {has("payments.view") && (
             <button
               onClick={exportPayments}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <Download className="h-4 w-4" /> تصدير
             </button>
@@ -446,7 +446,7 @@ export default function Payments() {
           {has("payments.print") && (
             <button
               onClick={printAllPayments}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <Printer className="h-4 w-4" /> طباعة السجل
             </button>
@@ -476,27 +476,27 @@ export default function Payments() {
           return (
             <div
               key={key}
-              className="bg-white rounded-lg border border-gray-200 p-4"
+              className="bg-card rounded-lg border border-border p-4"
               data-testid={`payments-summary-${key}`}
             >
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">
+              <h2 className="text-sm font-semibold text-foreground mb-3">
                 {label}
               </h2>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">المستحق</dt>
+                  <dt className="text-muted-foreground">المستحق</dt>
                   <dd className="font-semibold tabular-nums">
                     {totals ? Number(totals.payable || 0) : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">المدفوع</dt>
+                  <dt className="text-muted-foreground">المدفوع</dt>
                   <dd className="font-semibold text-emerald-700 tabular-nums">
                     {totals ? Number(totals.paid || 0) : "—"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-gray-500">المتبقي</dt>
+                  <dt className="text-muted-foreground">المتبقي</dt>
                   <dd className="font-semibold text-amber-700 tabular-nums">
                     {totals ? Number(totals.remaining || 0) : "—"}
                   </dd>
@@ -507,16 +507,16 @@ export default function Payments() {
         })}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-3">
+      <div className="bg-card rounded-xl border border-border shadow-sm">
+        <div className="p-4 border-b border-border flex flex-wrap gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               data-testid="payments-search-input"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث باسم الطالب..."
-              className="w-full rounded-lg border border-gray-300 pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-[#04CDF9]"
+              className="w-full rounded-lg border border-input pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-ring"
             />
           </div>
           <input
@@ -526,7 +526,7 @@ export default function Payments() {
               setPage(1);
             }}
             placeholder="سنة دراسية (مثال 2026-2027)"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-input px-3 py-2 text-sm"
             data-testid="payments-year-filter"
           />
           <select
@@ -535,7 +535,7 @@ export default function Payments() {
               setSem(e.target.value);
               setPage(1);
             }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-input px-3 py-2 text-sm"
             data-testid="payments-semester-filter"
           >
             <option value="">كل الفصول</option>
@@ -549,7 +549,7 @@ export default function Payments() {
               setFeeType(e.target.value);
               setPage(1);
             }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-input px-3 py-2 text-sm"
             data-testid="payments-fee-type-filter"
             aria-label="نوع الرسوم"
           >
@@ -569,7 +569,7 @@ export default function Payments() {
             }}
             placeholder="أقل مبلغ"
             aria-label="أقل مبلغ"
-            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-32 rounded-lg border border-input px-3 py-2 text-sm"
             data-testid="payments-min-amount-filter"
           />
           <input
@@ -582,11 +582,11 @@ export default function Payments() {
             }}
             placeholder="أعلى مبلغ"
             aria-label="أعلى مبلغ"
-            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="w-32 rounded-lg border border-input px-3 py-2 text-sm"
             data-testid="payments-max-amount-filter"
           />
         </div>
-        <div className="flex justify-end border-b border-gray-200 p-3">
+        <div className="flex justify-end border-b border-border p-3">
           <ColumnSelector
             columns={PAYMENT_LIST_COLUMNS}
             selectedColumns={selectedColumns}
@@ -595,7 +595,7 @@ export default function Payments() {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="bg-muted text-xs uppercase text-muted-foreground">
               <tr>
                 {hasColumn("student") && <th className="px-4 py-3 font-medium">الطالب</th>}
                 {hasColumn("academicYear") && <th className="px-4 py-3 font-medium">السنة الدراسية</th>}
@@ -614,7 +614,7 @@ export default function Payments() {
                 <tr>
                   <td
                     colSpan={selectedColumns.length + 1}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
                     جاري التحميل...
@@ -624,7 +624,7 @@ export default function Payments() {
                 <tr>
                   <td
                     colSpan={selectedColumns.length + 1}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     لا توجد مدفوعات.
                   </td>
@@ -633,14 +633,14 @@ export default function Payments() {
                 items.map((p) => (
                   <tr
                     key={p.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="border-t border-border hover:bg-muted"
                     data-testid={`payment-row-${p.id}`}
                   >
-                    {hasColumn("student") && <td className="px-4 py-3 font-medium text-gray-900">
+                    {hasColumn("student") && <td className="px-4 py-3 font-medium text-foreground">
                       {has("students.view") ? (
                         <Link
                           to={`/students/${p.student}`}
-                          className="text-[#036A87] hover:underline"
+                          className="text-accent-foreground hover:underline"
                         >
                           {p.studentName}
                         </Link>
@@ -648,34 +648,34 @@ export default function Payments() {
                         p.studentName
                       )}
                     </td>}
-                    {hasColumn("academicYear") && <td className="px-4 py-3 text-gray-600">
+                    {hasColumn("academicYear") && <td className="px-4 py-3 text-muted-foreground">
                       {p.academicYear || "—"}
                     </td>}
                     {hasColumn("semester") && <td className="px-4 py-3">
                       <PaymentBadge semester={p.semester} />
                     </td>}
-                    {hasColumn("feeType") && <td className="px-4 py-3 text-gray-700">
+                    {hasColumn("feeType") && <td className="px-4 py-3 text-foreground">
                       {FEE_TYPE_LABELS[p.feeType || "academic"]}
                     </td>}
                     {hasColumn("amount") && <td
                       className={`px-4 py-3 font-semibold tabular-nums ${
                         p.type === "refund" || Number(p.amount) < 0
                           ? "text-red-600"
-                          : "text-gray-900"
+                          : "text-foreground"
                       }`}
                     >
                       {p.amount}
                     </td>}
-                    {hasColumn("totalPayable") && <td className="px-4 py-3 font-semibold text-gray-900 tabular-nums">
+                    {hasColumn("totalPayable") && <td className="px-4 py-3 font-semibold text-foreground tabular-nums">
                       {p.totalPayable ?? 0}
                     </td>}
                     {hasColumn("totalRemaining") && <td className="px-4 py-3 font-semibold text-amber-700 tabular-nums">
                       {p.totalRemaining ?? 0}
                     </td>}
-                    {hasColumn("paymentDate") && <td className="px-4 py-3 text-gray-600">
+                    {hasColumn("paymentDate") && <td className="px-4 py-3 text-muted-foreground">
                       {(p.paymentDate || "").slice(0, 10)}
                     </td>}
-                    {hasColumn("createdBy") && <td className="px-4 py-3 text-gray-600">
+                    {hasColumn("createdBy") && <td className="px-4 py-3 text-muted-foreground">
                       {p.createdByName}
                     </td>}
                     <td className="px-4 py-3 text-left">
@@ -684,7 +684,7 @@ export default function Payments() {
                           <button
                             onClick={() => openEdit(p)}
                             data-testid={`edit-payment-${p.id}`}
-                            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -696,7 +696,7 @@ export default function Payments() {
                             }
                             data-testid={`print-payment-${p.id}`}
                             title="طباعة سجل الطالب"
-                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                            className="p-1.5 rounded-md text-accent-foreground hover:bg-brand-light"
                           >
                             <Printer className="h-4 w-4" />
                           </button>
@@ -727,20 +727,20 @@ export default function Payments() {
       </div>
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-4">
               {editing.id ? "تعديل دفعة" : "إضافة دفعة"}
             </h3>
             <form onSubmit={save} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   {editing.id ? "الطالب" : "الطلاب"}
                 </label>
                 {editing.id ? (
                   <div
                     data-testid="payment-student-select"
-                    className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700"
+                    className="rounded-lg border border-border bg-muted px-3 py-2 text-foreground"
                   >
                     {editing.studentName || "—"}
                   </div>
@@ -781,9 +781,9 @@ export default function Payments() {
                         return (
                           <div
                             key={allocation.student}
-                            className="flex items-center gap-2 rounded-lg border border-gray-200 p-2"
+                            className="flex items-center gap-2 rounded-lg border border-border p-2"
                           >
-                            <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                               {student?.student?.fullName || "طالب"}
                             </span>
                             <input
@@ -806,7 +806,7 @@ export default function Payments() {
                                   ),
                                 })
                               }
-                              className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                              className="w-28 rounded-md border border-input px-2 py-1.5 text-sm"
                             />
                             <button
                               type="button"
@@ -862,7 +862,7 @@ export default function Payments() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   نوع الرسوم
                 </label>
                 <select
@@ -871,7 +871,7 @@ export default function Payments() {
                   onChange={(e) =>
                     setEditing({ ...editing, feeType: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className="w-full rounded-lg border border-input px-3 py-2"
                   data-testid="payment-fee-type-select"
                 >
                   {FEE_TYPE_ORDER.filter((feeType) => {
@@ -899,7 +899,7 @@ export default function Payments() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   السنة الدراسية
                 </label>
                 <input
@@ -910,11 +910,11 @@ export default function Payments() {
                     setEditing({ ...editing, academicYear: e.target.value })
                   }
                   placeholder="2026-2027"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   الفصل
                 </label>
                 <select
@@ -924,7 +924,7 @@ export default function Payments() {
                   onChange={(e) =>
                     setEditing({ ...editing, semester: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                 >
                   <option value="first">الفصل الأول</option>
                   <option value="second">الفصل الثاني</option>
@@ -933,7 +933,7 @@ export default function Payments() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     {editing.split ? "إجمالي المبلغ" : "المبلغ"}
                   </label>
                   <input
@@ -964,11 +964,11 @@ export default function Payments() {
                           : {}),
                       });
                     }}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                    className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     تاريخ الدفع
                   </label>
                   <input
@@ -979,12 +979,12 @@ export default function Payments() {
                     onChange={(e) =>
                       setEditing({ ...editing, paymentDate: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                    className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   ملاحظات
                 </label>
                 <textarea
@@ -993,21 +993,21 @@ export default function Payments() {
                   onChange={(e) =>
                     setEditing({ ...editing, notes: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-[#04CDF9]"
+                  className="w-full rounded-lg border border-input px-3 py-2 focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   data-testid="save-payment-btn"
-                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
                 >
                   حفظ
                 </button>
@@ -1018,14 +1018,14 @@ export default function Payments() {
       )}
 
       {refund && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-4">
               استرداد دفعة
             </h3>
             <form onSubmit={saveRefund} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   الطالب
                 </label>
                 <StudentSearchSelect
@@ -1057,7 +1057,7 @@ export default function Payments() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     نوع الرسوم
                   </label>
                   <select
@@ -1066,7 +1066,7 @@ export default function Payments() {
                     onChange={(e) =>
                       setRefund({ ...refund, feeType: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                     data-testid="refund-fee-type-select"
                   >
                     {FEE_TYPE_ORDER.filter(
@@ -1085,7 +1085,7 @@ export default function Payments() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     السنة
                   </label>
                   <input
@@ -1094,11 +1094,11 @@ export default function Payments() {
                     onChange={(e) =>
                       setRefund({ ...refund, academicYear: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     الفصل
                   </label>
                   <select
@@ -1106,7 +1106,7 @@ export default function Payments() {
                     onChange={(e) =>
                       setRefund({ ...refund, semester: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   >
                     <option value="first">الفصل الأول</option>
                     <option value="second">الفصل الثاني</option>
@@ -1119,7 +1119,7 @@ export default function Payments() {
                 <strong>{refundLoading ? "جاري الحساب..." : refundPaid}</strong>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   مبلغ الاسترداد
                 </label>
                 <input
@@ -1132,11 +1132,11 @@ export default function Payments() {
                   onChange={(e) =>
                     setRefund({ ...refund, amount: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className="w-full rounded-lg border border-input px-3 py-2"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-foreground mb-1">
                   التاريخ
                 </label>
                 <input
@@ -1146,7 +1146,7 @@ export default function Payments() {
                   onChange={(e) =>
                     setRefund({ ...refund, paymentDate: e.target.value })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                  className="w-full rounded-lg border border-input px-3 py-2"
                 />
               </div>
               <textarea
@@ -1156,13 +1156,13 @@ export default function Payments() {
                   setRefund({ ...refund, notes: e.target.value })
                 }
                 placeholder="ملاحظات الاسترداد"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                className="w-full rounded-lg border border-input px-3 py-2"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setRefund(null)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+                  className="rounded-lg border border-input px-4 py-2 text-sm"
                 >
                   إلغاء
                 </button>
@@ -1187,18 +1187,18 @@ export default function Payments() {
       )}
 
       {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-2">
               تأكيد الحذف
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               هل أنت متأكد من حذف هذه الدفعة؟
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
                 onClick={() => setConfirmId(null)}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>

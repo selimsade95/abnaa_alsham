@@ -14,6 +14,7 @@ AUDIT_IGNORED_PATHS = {
     "/api/auth/login",
     "/api/auth/select-branch",
     "/api/auth/logout",
+    "/api/parent-access",
     "/api/settings/code-generation/preview",
 }
 

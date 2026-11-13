@@ -22,21 +22,21 @@ const Pagination = ({
     <nav
       aria-label="التنقل بين الصفحات"
       data-testid={testId}
-      className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 p-4"
+      className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4"
     >
-      <div className="text-xs text-gray-500">
+      <div className="text-xs text-muted-foreground">
         صفحة {page} من {totalPages}
         {total !== undefined && <> • الإجمالي {total}</>}
       </div>
       <div className="flex flex-wrap items-center gap-1">
         {canChangePageSize && (
-          <label className="me-2 flex items-center gap-2 text-xs text-gray-600">
+          <label className="me-2 flex items-center gap-2 text-xs text-muted-foreground">
             عدد العناصر
             <select
               value={pagination.limit}
               onChange={(event) => onPageSizeChange(Number(event.target.value))}
               aria-label="عدد العناصر في الصفحة"
-              className="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm"
+              className="rounded-lg border border-input bg-card px-2 py-1.5 text-sm"
             >
               {[10, 20, 50, 100].map((size) => (
                 <option key={size} value={size}>
@@ -53,7 +53,7 @@ const Pagination = ({
               disabled={page <= 1}
               onClick={() => onPageChange(page - 1)}
               aria-label="الصفحة السابقة"
-              className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+              className={`${buttonClass} border-input bg-card text-foreground`}
             >
               السابق
             </button>
@@ -63,12 +63,12 @@ const Pagination = ({
                   type="button"
                   onClick={() => onPageChange(1)}
                   aria-label="الصفحة 1"
-                  className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+                  className={`${buttonClass} border-input bg-card text-foreground`}
                 >
                   1
                 </button>
                 {firstVisible > 2 && (
-                  <span className="px-1 text-gray-400" aria-hidden="true">
+                  <span className="px-1 text-muted-foreground" aria-hidden="true">
                     …
                   </span>
                 )}
@@ -84,8 +84,8 @@ const Pagination = ({
                 disabled={number === page}
                 className={`${buttonClass} ${
                   number === page
-                    ? "border-[#036A87] bg-[#036A87] text-white"
-                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    ? "border-ring bg-primary text-white"
+                    : "border-input bg-card text-foreground hover:bg-muted"
                 }`}
               >
                 {number}
@@ -94,7 +94,7 @@ const Pagination = ({
             {lastVisible < totalPages && (
               <>
                 {lastVisible < totalPages - 1 && (
-                  <span className="px-1 text-gray-400" aria-hidden="true">
+                  <span className="px-1 text-muted-foreground" aria-hidden="true">
                     …
                   </span>
                 )}
@@ -102,7 +102,7 @@ const Pagination = ({
                   type="button"
                   onClick={() => onPageChange(totalPages)}
                   aria-label={`الصفحة ${totalPages}`}
-                  className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+                  className={`${buttonClass} border-input bg-card text-foreground`}
                 >
                   {totalPages}
                 </button>
@@ -113,7 +113,7 @@ const Pagination = ({
               disabled={page >= totalPages}
               onClick={() => onPageChange(page + 1)}
               aria-label="الصفحة التالية"
-              className={`${buttonClass} border-gray-300 bg-white text-gray-700`}
+              className={`${buttonClass} border-input bg-card text-foreground`}
             >
               التالي
             </button>

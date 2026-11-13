@@ -169,7 +169,6 @@ async def update_student(sid: str, body: StudentIn, current=Depends(require_perm
     await _clean_reg_path(student_data.get("registrationPath"), existing_student.get("registrationPath"))
     await _clean_reg_path(student_data.get("finalRegistrationPath"), existing_student.get("finalRegistrationPath") or existing_student.get("registrationPath"))
     p["fees"] = _normalize_student_fees(p.get("fees") or {})
-    if existing.get("orphanDocument"): p["orphanDocument"] = existing["orphanDocument"]
     if existing.get("code"): p["code"] = existing["code"]
     if p.get("currentClassId"):
         if not await db.classes.find_one({"id": p["currentClassId"]}):
@@ -218,7 +217,7 @@ async def create_student_note(sid: str, category: str, body: StudentNoteIn,
     timestamp = now_iso()
     note = {"id": str(uuid.uuid4()), "content": content, "authorId": current["id"],
             "authorName": current.get("name") or current.get("username") or "—",
-            "createdAt": timestamp, "updatedAt": timestamp}
+            "createdAt": timestamp, "updatedAt": timestamp, "shareWithParent": body.shareWithParent is True}
     await db.students.update_one({"id": sid}, {"$push": {field: note}})
     return note
 
@@ -239,7 +238,13 @@ async def update_student_note(sid: str, category: str, note_id: str, body: Stude
         raise HTTPException(404, "الملاحظة غير موجودة")
     note["content"] = content
     note["updatedAt"] = now_iso()
-    await db.students.update_one({"id": sid}, {"$set": {field: notes}})
+    changes = {f"{field}.$.content": content, f"{field}.$.updatedAt": note["updatedAt"]}
+    if body.shareWithParent is not None:
+        note["shareWithParent"] = body.shareWithParent
+        changes[f"{field}.$.shareWithParent"] = body.shareWithParent
+    result = await db.students.update_one({"id": sid, f"{field}.id": note_id}, {"$set": changes})
+    if not result.matched_count:
+        raise HTTPException(404, "الملاحظة غير موجودة")
     return note
 
 
@@ -252,7 +257,7 @@ async def delete_student_note(sid: str, category: str, note_id: str,
     note = next((item for item in notes if item.get("id") == note_id), None)
     if not note or (current.get("teacherId") and note.get("authorId") != current["id"]):
         raise HTTPException(404, "الملاحظة غير موجودة")
-    await db.students.update_one({"id": sid}, {"$set": {field: [item for item in notes if item.get("id") != note_id]}})
+    await db.students.update_one({"id": sid}, {"$pull": {field: {"id": note_id}}})
     return {"ok": True}
 
 

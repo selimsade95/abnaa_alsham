@@ -5,11 +5,11 @@ import { toast } from "sonner";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#04CDF9]";
+  "w-full rounded-lg border border-input bg-card px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 const Field = ({ label, required, children }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+    <label className="block text-sm font-medium text-foreground mb-1.5">
       {label} {required && <span className="text-red-500">*</span>}
     </label>
     {children}
@@ -132,7 +132,7 @@ export default function TeacherForm({ mode }) {
 
   if (loading)
     return (
-      <div className="text-center text-gray-500 py-16">
+      <div className="text-center text-muted-foreground py-16">
         <Loader2 className="inline h-4 w-4 animate-spin ms-2" /> جاري التحميل...
       </div>
     );
@@ -144,15 +144,15 @@ export default function TeacherForm({ mode }) {
           <button
             type="button"
             onClick={() => nav("/teachers")}
-            className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1 mb-2"
+            className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-2"
           >
             <ArrowRight className="h-4 w-4" /> رجوع
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             {mode === "edit" ? "تعديل بيانات معلم" : "إضافة معلم جديد"}
           </h1>
           {code && (
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-muted-foreground mt-1">
               الكود: <span className="font-mono">{code}</span>
             </p>
           )}
@@ -161,14 +161,14 @@ export default function TeacherForm({ mode }) {
           type="submit"
           disabled={saving}
           data-testid="save-teacher-btn"
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+      <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4 pb-3 border-b border-border">
           المعلومات الشخصية
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -270,8 +270,8 @@ export default function TeacherForm({ mode }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100">
+      <div className="bg-card rounded-xl border border-border shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4 pb-3 border-b border-border">
           المعلومات الوظيفية
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -355,7 +355,7 @@ export default function TeacherForm({ mode }) {
                   setCertificateUpload(e.target.files?.[0] || null)
                 }
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {certificateUpload?.name ||
                   certificateFile?.originalName ||
                   data.certificate ||
@@ -380,14 +380,14 @@ export default function TeacherForm({ mode }) {
         <button
           type="button"
           onClick={() => nav("/teachers")}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-input bg-card px-4 py-2.5 text-sm text-foreground hover:bg-muted"
         >
           إلغاء
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-[#04CDF9] px-5 py-2.5 font-semibold text-white hover:bg-[#03A9D1] disabled:opacity-60"
+          className="rounded-lg bg-primary px-5 py-2.5 font-semibold text-white hover:bg-brand-hover disabled:opacity-60"
         >
           {saving ? "جاري الحفظ..." : "حفظ"}
         </button>

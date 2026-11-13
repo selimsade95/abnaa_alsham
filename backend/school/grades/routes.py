@@ -11,7 +11,7 @@ from school.core.services import (
     now_iso,
     require_permission,
 )
-from school.grades.schemas import GradeIn, GradeSettingsIn
+from school.grades.schemas import GradeIn, GradePublicationIn, GradeSettingsIn
 from school.grades.services import get_grade_settings
 
 
@@ -92,3 +92,20 @@ async def update_grade(grade_id: str, body: GradeIn,
         raise HTTPException(400, "لا يمكن تغيير الطالب أو الصف أو المادة")
     await db.grades.update_one({"id": grade_id}, {"$set": {"score": body.score, "notes": body.notes or "", "updatedAt": now_iso(), "updatedBy": current["id"]}})
     return await db.grades.find_one({"id": grade_id}, {"_id": 0})
+
+
+@router.patch("/grades/{grade_id}/parent-publication")
+async def publish_grade(grade_id: str, body: GradePublicationIn,
+                        current=Depends(require_permission("grades.accept"))):
+    grade = await db.grades.find_one({"id": grade_id})
+    if not grade:
+        raise HTTPException(404, "الدرجة غير موجودة")
+    await ensure_student_access(grade["studentId"], current)
+    allowed = await grade_scope(current)
+    if allowed is not None and (grade["classId"], grade["subjectId"]) not in allowed:
+        raise HTTPException(404, "الدرجة غير موجودة")
+    await db.grades.update_one(
+        {"id": grade_id},
+        {"$set": {"publishedToParents": body.publishedToParents}},
+    )
+    return body.model_dump()

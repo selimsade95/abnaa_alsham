@@ -1,5 +1,8 @@
+import { useListScrollPosition } from "@/hooks/useListScrollPosition";
+import WhatsAppPhone from "@/components/WhatsAppPhone";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useClassesList } from "@/hooks/useClassesList";
 import api from "@/lib/api";
 import {
@@ -15,6 +18,7 @@ import {
   Upload,
   GraduationCap,
   ClipboardPlus,
+  MessageSquareText,
   X,
 } from "lucide-react";
 import { downloadTemplate } from "@/lib/csv";
@@ -22,6 +26,7 @@ import { toast } from "sonner";
 import Pagination from "@/components/Pagination";
 
 export default function Classes() {
+  const { t } = useTranslation();
   const [classDetails, setClassDetails] = useState(null);
   const [classDetailsLoading, setClassDetailsLoading] = useState(false);
   const [classDetailsError, setClassDetailsError] = useState("");
@@ -71,6 +76,7 @@ export default function Classes() {
     hasActiveFilters,
     load,
   } = useClassesList();
+  useListScrollPosition(loading);
 
   const openHomeworkModal = async (classItem) => {
     setHomeworkModal({ classItem, students: [], subjects: [] });
@@ -164,15 +170,24 @@ export default function Classes() {
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">الصفوف</h1>
-          <p className="text-sm text-gray-500 mt-1">إدارة الصفوف والشعب</p>
+          <h1 className="text-3xl font-bold text-foreground">الصفوف</h1>
+          <p className="text-sm text-muted-foreground mt-1">إدارة الصفوف والشعب</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {has("announcements.manage") && (
+            <Link
+              to="/grade-announcements"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
+            >
+              <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+              {t("announcements.title")}
+            </Link>
+          )}
           {has("classes.create") && (
             <button
               onClick={openNew}
               data-testid="add-class-btn"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
             >
               <Plus className="h-4 w-4" /> إضافة صف
             </button>
@@ -180,7 +195,7 @@ export default function Classes() {
           {has("classes.view") && (
             <button
               onClick={exportClasses}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+              className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
             >
               <Download className="h-4 w-4" /> تصدير
             </button>
@@ -191,13 +206,13 @@ export default function Classes() {
                 onClick={() =>
                   downloadTemplate("classes-template.csv", classTemplate)
                 }
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground"
               >
                 <Download className="h-4 w-4" /> قالب الاستيراد
               </button>
               <button
                 onClick={() => importRef.current?.click()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-3 py-2 text-sm font-semibold text-white"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white"
               >
                 <Upload className="h-4 w-4" /> استيراد
               </button>
@@ -213,35 +228,35 @@ export default function Classes() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-3 items-center">
+      <div className="bg-card rounded-xl border border-border shadow-sm">
+        <div className="p-4 border-b border-border flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               data-testid="classes-search-input"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="ابحث بالاسم / الكود / الصف..."
-              className="w-full rounded-lg border border-gray-300 pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-[#04CDF9]"
+              className="w-full rounded-lg border border-input pr-9 pl-3 py-2 text-sm focus:ring-2 focus:ring-ring"
             />
           </div>
           <button
             onClick={() => setShowFilters((s) => !s)}
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${hasActiveFilters ? "border-[#04CDF9] text-[#036A87] bg-brand-light" : "border-gray-300 text-gray-700"}`}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${hasActiveFilters ? "border-ring text-accent-foreground bg-brand-light" : "border-input text-foreground"}`}
           >
             <Filter className="h-4 w-4" /> فلاتر
           </button>
         </div>
 
         {showFilters && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50 grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="p-4 border-b border-border bg-muted grid grid-cols-1 md:grid-cols-5 gap-3">
             <input
               value={filters.grade}
               onChange={(e) =>
                 setFilters({ ...filters, grade: e.target.value })
               }
               placeholder="الصف"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-input px-3 py-2 text-sm"
             />
             <input
               value={filters.section}
@@ -249,7 +264,7 @@ export default function Classes() {
                 setFilters({ ...filters, section: e.target.value })
               }
               placeholder="الشعبة"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-input px-3 py-2 text-sm"
             />
             <input
               value={filters.academicYear}
@@ -257,14 +272,14 @@ export default function Classes() {
                 setFilters({ ...filters, academicYear: e.target.value })
               }
               placeholder="السنة"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-input px-3 py-2 text-sm"
             />
             <select
               value={filters.teacherId}
               onChange={(e) =>
                 setFilters({ ...filters, teacherId: e.target.value })
               }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-input px-3 py-2 text-sm"
             >
               <option value="">كل المعلمين</option>
               {teachers.map((t) => (
@@ -278,7 +293,7 @@ export default function Classes() {
               onChange={(e) =>
                 setFilters({ ...filters, status: e.target.value })
               }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="rounded-lg border border-input px-3 py-2 text-sm"
             >
               <option value="">النشطون فقط</option>
               <option value="active">نشط</option>
@@ -288,7 +303,7 @@ export default function Classes() {
             <div className="md:col-span-5">
               <button
                 onClick={clearFilters}
-                className="text-sm text-[#036A87] hover:underline"
+                className="text-sm text-accent-foreground hover:underline"
               >
                 مسح الفلاتر
               </button>
@@ -298,7 +313,7 @@ export default function Classes() {
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm text-right">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="bg-muted text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">الكود</th>
                 <th className="px-4 py-3 font-medium">الاسم</th>
@@ -315,7 +330,7 @@ export default function Classes() {
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     <Loader2 className="inline h-4 w-4 animate-spin ms-2" />{" "}
                     جاري التحميل...
@@ -325,7 +340,7 @@ export default function Classes() {
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-10 text-center text-gray-500"
+                    className="px-4 py-10 text-center text-muted-foreground"
                   >
                     لا توجد نتائج.
                   </td>
@@ -334,27 +349,27 @@ export default function Classes() {
                 items.map((c) => (
                   <tr
                     key={c.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="border-t border-border hover:bg-muted"
                     data-testid={`class-row-${c.id}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {c.code}
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                    <td className="px-4 py-3 font-medium text-foreground">
                       <Link
                         to={`/classes/${c.id}`}
-                        className="text-[#036A87] hover:underline"
+                        className="text-accent-foreground hover:underline"
                       >
                         {c.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {c.grade} {c.section ? `— ${c.section}` : ""}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {c.academicYear || "—"}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {has("teachers.view") &&
                       (c.teacherIds || []).length > 0 ? (
                         <div className="flex flex-wrap gap-x-2">
@@ -362,7 +377,7 @@ export default function Classes() {
                             <Link
                               key={teacherId}
                               to={`/teachers/${teacherId}`}
-                              className="text-[#036A87] hover:underline"
+                              className="text-accent-foreground hover:underline"
                             >
                               {c.teacherNames?.[index] || c.teacherName}
                             </Link>
@@ -372,12 +387,12 @@ export default function Classes() {
                         c.teacherName || "—"
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 tabular-nums">
+                    <td className="px-4 py-3 text-muted-foreground tabular-nums">
                       {c.studentCount || 0}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${c.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}
+                        className={`inline-flex text-xs px-2 py-0.5 rounded-full border ${c.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground border-border"}`}
                       >
                         {c.status === "active" ? "نشط" : "غير نشط"}
                       </span>
@@ -398,7 +413,7 @@ export default function Classes() {
                             data-testid={`add-homework-${c.id}`}
                             title="إضافة واجب"
                             aria-label={`إضافة واجب لصف ${c.name}`}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-[#036A87] hover:bg-brand-light"
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-accent-foreground hover:bg-brand-light"
                           >
                             <ClipboardPlus className="h-4 w-4" />
                             إضافة واجب
@@ -409,7 +424,7 @@ export default function Classes() {
                             onClick={() => openClassDetails(c)}
                             data-testid={`class-details-${c.id}`}
                             title="معلومات الصف والطلاب"
-                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                            className="p-1.5 rounded-md text-accent-foreground hover:bg-brand-light"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
@@ -419,7 +434,7 @@ export default function Classes() {
                             onClick={() => openPromotion(c)}
                             data-testid={`promote-class-${c.id}`}
                             title="ترفيع الطلاب"
-                            className="p-1.5 rounded-md text-[#036A87] hover:bg-brand-light"
+                            className="p-1.5 rounded-md text-accent-foreground hover:bg-brand-light"
                           >
                             <GraduationCap className="h-4 w-4" />
                           </button>
@@ -428,7 +443,7 @@ export default function Classes() {
                           <button
                             onClick={() => openEdit(c)}
                             data-testid={`edit-class-${c.id}`}
-                            className="p-1.5 rounded-md text-gray-500 hover:bg-gray-100"
+                            className="p-1.5 rounded-md text-muted-foreground hover:bg-secondary"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -474,14 +489,14 @@ export default function Classes() {
       </div>
 
       {promotion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-lg border border-gray-200 bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-3 sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-lg border border-border bg-card shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border p-5">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">
+                <h3 className="text-lg font-bold text-foreground">
                   ترفيع طلاب {promotion.sourceClass.name}
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   اختر الصف التالي والطلاب المراد نقلهم، ثم حدد المستحق الدراسي
                   الجديد لكل طالب.
                 </p>
@@ -490,7 +505,7 @@ export default function Classes() {
                 type="button"
                 onClick={() => setPromotion(null)}
                 title="إغلاق"
-                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -498,7 +513,7 @@ export default function Classes() {
 
             <div className="space-y-4 overflow-y-auto p-5">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   الصف الجديد
                 </label>
                 <select
@@ -506,7 +521,7 @@ export default function Classes() {
                   onChange={(event) =>
                     updatePromotion({ destinationClassId: event.target.value })
                   }
-                  className="w-full max-w-xl rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full max-w-xl rounded-lg border border-input px-3 py-2 text-sm"
                   data-testid="promotion-destination-class"
                 >
                   <option value="">اختر الصف التالي</option>
@@ -523,18 +538,18 @@ export default function Classes() {
               </div>
 
               {promotionLoading ? (
-                <div className="py-10 text-center text-sm text-gray-500">
+                <div className="py-10 text-center text-sm text-muted-foreground">
                   <Loader2 className="ms-2 inline h-4 w-4 animate-spin" /> جاري
                   تحميل الطلاب...
                 </div>
               ) : promotion.students.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-500">
+                <div className="py-10 text-center text-sm text-muted-foreground">
                   لا يوجد طلاب في هذا الصف.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <div className="overflow-x-auto rounded-lg border border-border">
                   <table className="min-w-full text-sm text-right">
-                    <thead className="bg-gray-50 text-xs text-gray-500">
+                    <thead className="bg-muted text-xs text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2">
                           <input
@@ -563,7 +578,7 @@ export default function Classes() {
                       {promotion.students.map((student) => (
                         <tr
                           key={student.id}
-                          className="border-t border-gray-100"
+                          className="border-t border-border"
                         >
                           <td className="px-3 py-2">
                             <input
@@ -580,14 +595,14 @@ export default function Classes() {
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <div className="font-medium text-gray-900">
+                            <div className="font-medium text-foreground">
                               {student.student?.fullName}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-muted-foreground">
                               {student.code}
                             </div>
                           </td>
-                          <td className="px-3 py-2 tabular-nums text-gray-600">
+                          <td className="px-3 py-2 tabular-nums text-muted-foreground">
                             {Number(student.fees?.totalPayable || 0)}
                           </td>
                           <td className="px-3 py-2">
@@ -604,7 +619,7 @@ export default function Classes() {
                               }
                               data-testid={`promotion-payable-${student.id}`}
                               aria-label={`المستحق الجديد لـ ${student.student?.fullName}`}
-                              className="w-36 rounded-lg border border-gray-300 px-2 py-1.5 tabular-nums disabled:bg-gray-50"
+                              className="w-36 rounded-lg border border-input px-2 py-1.5 tabular-nums disabled:bg-muted"
                             />
                           </td>
                         </tr>
@@ -615,8 +630,8 @@ export default function Classes() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 p-5">
-              <span className="text-sm text-gray-500">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-5">
+              <span className="text-sm text-muted-foreground">
                 المحدد:{" "}
                 {
                   promotion.students.filter((student) => student.selected)
@@ -627,7 +642,7 @@ export default function Classes() {
                 <button
                   type="button"
                   onClick={() => setPromotion(null)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700"
+                  className="rounded-lg border border-input px-4 py-2 text-sm text-foreground"
                 >
                   إلغاء
                 </button>
@@ -639,7 +654,7 @@ export default function Classes() {
                     promotion.students.every((student) => !student.selected)
                   }
                   data-testid="submit-promotion"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   {promotionSaving && (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -653,15 +668,15 @@ export default function Classes() {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 border border-gray-200 my-8">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim overflow-y-auto">
+          <div className="bg-card rounded-xl shadow-xl max-w-lg w-full p-6 border border-border my-8">
+            <h3 className="text-lg font-bold text-foreground mb-4">
               {editing.id ? "تعديل صف" : "إضافة صف"}
             </h3>
             <form onSubmit={save} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     اسم الصف *
                   </label>
                   <input
@@ -671,12 +686,12 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, name: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                     placeholder="مثال: الصف الأول"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     الصف
                   </label>
                   <input
@@ -684,11 +699,11 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, grade: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     الشعبة
                   </label>
                   <input
@@ -696,11 +711,11 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, section: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     السنة الدراسية
                   </label>
                   <input
@@ -709,11 +724,11 @@ export default function Classes() {
                       setEditing({ ...editing, academicYear: e.target.value })
                     }
                     placeholder="2026-2027"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     المعلم
                   </label>
                   <select
@@ -728,7 +743,7 @@ export default function Classes() {
                       })
                     }
                     multiple
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 min-h-24"
+                    className="w-full rounded-lg border border-input px-3 py-2 min-h-24"
                   >
                     {teachers
                       .filter((t) => t.employmentStatus === "active")
@@ -740,7 +755,7 @@ export default function Classes() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     السعة
                   </label>
                   <input
@@ -749,11 +764,11 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, capacity: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     الحالة
                   </label>
                   <select
@@ -761,14 +776,14 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, status: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   >
                     <option value="active">نشط</option>
                     <option value="inactive">غير نشط</option>
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-foreground mb-1">
                     ملاحظات
                   </label>
                   <textarea
@@ -777,7 +792,7 @@ export default function Classes() {
                     onChange={(e) =>
                       setEditing({ ...editing, notes: e.target.value })
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                    className="w-full rounded-lg border border-input px-3 py-2"
                   />
                 </div>
               </div>
@@ -785,14 +800,14 @@ export default function Classes() {
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
                   data-testid="save-class-btn"
-                  className="rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white hover:bg-[#03A9D1]"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
                 >
                   حفظ
                 </button>
@@ -803,15 +818,15 @@ export default function Classes() {
       )}
 
       {confirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 theme-scrim">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full p-6 border border-border">
+            <h3 className="text-lg font-bold text-foreground mb-2">
               تأكيد التعطيل
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-muted-foreground mb-6">
               سيبقى الصف وبياناته محفوظين، لكنه لن يظهر في القوائم العادية.
             </p>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               سبب التعطيل <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -821,7 +836,7 @@ export default function Classes() {
               rows={3}
               data-testid="deactivation-reason-input"
               placeholder="اكتب سبب تعطيل الصف"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-6"
+              className="w-full rounded-lg border border-input px-3 py-2 text-sm mb-6"
             />
             <div className="flex items-center justify-end gap-2">
               <button
@@ -829,7 +844,7 @@ export default function Classes() {
                   setConfirmId(null);
                   setDeactivationReason("");
                 }}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -846,14 +861,14 @@ export default function Classes() {
         </div>
       )}
       {classDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-5">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl">
-            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center theme-scrim p-3 sm:p-5">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-card shadow-xl">
+            <div className="flex items-start justify-between gap-4 border-b border-border p-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-foreground">
                   {classDetails.classItem.name}
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {[
                     classDetails.classItem.grade,
                     classDetails.classItem.section,
@@ -876,7 +891,7 @@ export default function Classes() {
                 type="button"
                 onClick={() => setClassDetails(null)}
                 title="إغلاق"
-                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -884,15 +899,15 @@ export default function Classes() {
 
             <div className="space-y-5 overflow-y-auto p-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm text-gray-500">عدد الطلاب</div>
-                  <div className="mt-1 text-2xl font-bold text-gray-900">
+                <div className="rounded-lg border border-border bg-muted p-4">
+                  <div className="text-sm text-muted-foreground">عدد الطلاب</div>
+                  <div className="mt-1 text-2xl font-bold text-foreground">
                     {classDetailsLoading ? "…" : classDetails.students.length}
                   </div>
                 </div>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm text-gray-500">متوسط درجات الصف</div>
-                  <div className="mt-1 text-2xl font-bold text-gray-900">
+                <div className="rounded-lg border border-border bg-muted p-4">
+                  <div className="text-sm text-muted-foreground">متوسط درجات الصف</div>
+                  <div className="mt-1 text-2xl font-bold text-foreground">
                     {classDetailsLoading
                       ? "…"
                       : classDetails.average === null
@@ -900,19 +915,19 @@ export default function Classes() {
                         : `${classDetails.average.toFixed(1)}%`}
                   </div>
                   {classDetails.gradeCount > 0 && (
-                    <div className="mt-1 text-xs text-gray-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       {classDetails.gradeCount} درجة مسجلة
                     </div>
                   )}
                   {!has("grades.view") && (
-                    <div className="mt-1 text-xs text-gray-500">
+                    <div className="mt-1 text-xs text-muted-foreground">
                       لا توجد صلاحية لعرض الدرجات
                     </div>
                   )}
                 </div>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="text-sm text-gray-500">المعلمون</div>
-                  <div className="mt-1 text-base font-semibold text-gray-900">
+                <div className="rounded-lg border border-border bg-muted p-4">
+                  <div className="text-sm text-muted-foreground">المعلمون</div>
+                  <div className="mt-1 text-base font-semibold text-foreground">
                     {has("teachers.view") &&
                     classDetails.classItem.teacherIds?.length ? (
                       <div className="flex flex-wrap gap-x-2">
@@ -922,7 +937,7 @@ export default function Classes() {
                               key={teacherId}
                               to={`/teachers/${teacherId}`}
                               onClick={() => setClassDetails(null)}
-                              className="text-[#036A87] hover:underline"
+                              className="text-accent-foreground hover:underline"
                             >
                               {classDetails.classItem.teacherNames?.[index] ||
                                 classDetails.classItem.teacherName}
@@ -950,9 +965,9 @@ export default function Classes() {
                   {classDetailsError}
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <div className="overflow-x-auto rounded-lg border border-border">
                   <table className="min-w-full text-right text-sm">
-                    <thead className="bg-gray-50 text-xs text-gray-500">
+                    <thead className="bg-muted text-xs text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3">كود الطالب</th>
                         <th className="px-4 py-3">اسم الطالب</th>
@@ -966,7 +981,7 @@ export default function Classes() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="px-4 py-8 text-center text-gray-500"
+                            className="px-4 py-8 text-center text-muted-foreground"
                           >
                             <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                             جاري تحميل الطلاب...
@@ -976,7 +991,7 @@ export default function Classes() {
                         <tr>
                           <td
                             colSpan={5}
-                            className="px-4 py-8 text-center text-gray-500"
+                            className="px-4 py-8 text-center text-muted-foreground"
                           >
                             لا يوجد طلاب مسجلون في هذا الصف.
                           </td>
@@ -985,34 +1000,32 @@ export default function Classes() {
                         classDetails.students.map((student) => (
                           <tr
                             key={student.id}
-                            className="border-t border-gray-100"
+                            className="border-t border-border"
                           >
-                            <td className="px-4 py-3 font-mono text-xs text-gray-600">
+                            <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                               {student.code || "—"}
                             </td>
-                            <td className="px-4 py-3 font-medium text-gray-900">
+                            <td className="px-4 py-3 font-medium text-foreground">
                               <Link
                                 to={`/students/${student.id}`}
                                 onClick={() => setClassDetails(null)}
-                                className="text-[#036A87] hover:underline"
+                                className="text-accent-foreground hover:underline"
                               >
                                 {student.student?.fullName || "—"}
                               </Link>
                             </td>
-                            <td className="px-4 py-3 text-gray-600">
+                            <td className="px-4 py-3 text-muted-foreground">
                               {student.student?.gender === "female"
                                 ? "أنثى"
                                 : student.student?.gender === "male"
                                   ? "ذكر"
                                   : "—"}
                             </td>
-                            <td className="px-4 py-3 text-gray-600">
+                            <td className="px-4 py-3 text-muted-foreground">
                               {student.student?.busNumber || "—"}
                             </td>
-                            <td className="px-4 py-3 text-gray-600">
-                              {student.father?.phone ||
-                                student.mother?.phone ||
-                                "—"}
+                            <td className="px-4 py-3 text-muted-foreground">
+                              <WhatsAppPhone phone={student.father?.phone || student.mother?.phone} />
                             </td>
                           </tr>
                         ))
@@ -1026,17 +1039,17 @@ export default function Classes() {
         </div>
       )}
       {homeworkModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-3 sm:p-5">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center theme-scrim p-3 sm:p-5">
           <form
             onSubmit={saveHomework}
-            className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-xl"
+            className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-card shadow-xl"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-gray-200 p-5">
+            <div className="flex items-start justify-between gap-4 border-b border-border p-5">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-foreground">
                   إضافة واجب — {homeworkModal.classItem.name}
                 </h2>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   حدد المادة والطلاب الذين لم يؤدوا الواجب.
                 </p>
               </div>
@@ -1045,14 +1058,14 @@ export default function Classes() {
                 onClick={() => setHomeworkModal(null)}
                 disabled={homeworkSaving}
                 title="إغلاق"
-                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100"
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="space-y-5 overflow-y-auto p-5">
               {homeworkLoading ? (
-                <div className="py-10 text-center text-sm text-gray-500">
+                <div className="py-10 text-center text-sm text-muted-foreground">
                   <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
                   جاري تحميل الصف والمواد...
                 </div>
@@ -1061,7 +1074,7 @@ export default function Classes() {
                   <div>
                     <label
                       htmlFor="homework-subject"
-                      className="mb-1 block text-sm font-medium text-gray-700"
+                      className="mb-1 block text-sm font-medium text-foreground"
                     >
                       المادة
                     </label>
@@ -1072,7 +1085,7 @@ export default function Classes() {
                         setHomeworkSubjectId(event.target.value)
                       }
                       required
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      className="w-full rounded-lg border border-input px-3 py-2 text-sm"
                     >
                       <option value="">اختر المادة</option>
                       {homeworkModal.subjects.map((subject) => (
@@ -1090,10 +1103,10 @@ export default function Classes() {
                   <div>
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-800">
+                        <h3 className="text-sm font-semibold text-foreground">
                           الطلاب الذين لم يؤدوا الواجب
                         </h3>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-muted-foreground">
                           المحدد: {undoneStudentIds.length}
                         </p>
                       </div>
@@ -1109,7 +1122,7 @@ export default function Classes() {
                                   ),
                             )
                           }
-                          className="text-xs font-medium text-[#036A87] hover:underline"
+                          className="text-xs font-medium text-accent-foreground hover:underline"
                         >
                           {undoneStudentIds.length ===
                           homeworkModal.students.length
@@ -1119,7 +1132,7 @@ export default function Classes() {
                       )}
                     </div>
                     {homeworkModal.students.length === 0 ? (
-                      <p className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center text-sm text-gray-500">
+                      <p className="rounded-lg border border-border bg-muted p-4 text-center text-sm text-muted-foreground">
                         لا يوجد طلاب نشطون في هذا الصف.
                       </p>
                     ) : (
@@ -1132,7 +1145,7 @@ export default function Classes() {
                               className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${
                                 checked
                                   ? "border-amber-300 bg-amber-50"
-                                  : "border-gray-200 bg-white hover:bg-gray-50"
+                                  : "border-border bg-card hover:bg-muted"
                               }`}
                             >
                               <input
@@ -1150,11 +1163,11 @@ export default function Classes() {
                                 className="h-4 w-4 accent-[#04CDF9]"
                               />
                               <span className="min-w-0">
-                                <span className="block truncate font-medium text-gray-900">
+                                <span className="block truncate font-medium text-foreground">
                                   {student.student?.fullName || "—"}
                                 </span>
                                 {student.code && (
-                                  <span className="block font-mono text-xs text-gray-500">
+                                  <span className="block font-mono text-xs text-muted-foreground">
                                     {student.code}
                                   </span>
                                 )}
@@ -1168,12 +1181,12 @@ export default function Classes() {
                 </>
               )}
             </div>
-            <div className="flex items-center justify-end gap-2 border-t border-gray-200 p-4">
+            <div className="flex items-center justify-end gap-2 border-t border-border p-4">
               <button
                 type="button"
                 onClick={() => setHomeworkModal(null)}
                 disabled={homeworkSaving}
-                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-input bg-card px-4 py-2 text-sm text-foreground hover:bg-muted"
               >
                 إلغاء
               </button>
@@ -1185,7 +1198,7 @@ export default function Classes() {
                   !homeworkSubjectId ||
                   undoneStudentIds.length === 0
                 }
-                className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white hover:bg-[#02566E] disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
               >
                 {homeworkSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                 حفظ الواجب

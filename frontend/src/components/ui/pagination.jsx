@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import * as React from "react"
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 
@@ -10,7 +11,7 @@ const Pagination = ({
 }) => (
   <nav
     role="navigation"
-    aria-label="pagination"
+    aria-label={t("controls.pagination")}
     className={cn("mx-auto flex w-full justify-center", className)}
     {...props} />
 )
@@ -50,12 +51,12 @@ const PaginationPrevious = ({
   ...props
 }) => (
   <PaginationLink
-    aria-label="Go to previous page"
+    aria-label={t("controls.previousPage")}
     size="default"
     className={cn("gap-1 pl-2.5", className)}
     {...props}>
     <ChevronLeft className="h-4 w-4" />
-    <span>Previous</span>
+    <span>{t("controls.previous")}</span>
   </PaginationLink>
 )
 PaginationPrevious.displayName = "PaginationPrevious"
@@ -65,11 +66,11 @@ const PaginationNext = ({
   ...props
 }) => (
   <PaginationLink
-    aria-label="Go to next page"
+    aria-label={t("controls.nextPage")}
     size="default"
     className={cn("gap-1 pr-2.5", className)}
     {...props}>
-    <span>Next</span>
+    <span>{t("controls.next")}</span>
     <ChevronRight className="h-4 w-4" />
   </PaginationLink>
 )
@@ -84,7 +85,7 @@ const PaginationEllipsis = ({
     className={cn("flex h-9 w-9 items-center justify-center", className)}
     {...props}>
     <MoreHorizontal className="h-4 w-4" />
-    <span className="sr-only">More pages</span>
+    <span className="sr-only">{t("controls.morePages")}</span>
   </span>
 )
 PaginationEllipsis.displayName = "PaginationEllipsis"

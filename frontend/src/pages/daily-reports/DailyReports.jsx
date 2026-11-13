@@ -227,10 +227,10 @@ export default function DailyReports() {
     <div className="space-y-6">
       <header className="no-print flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-3xl font-bold text-foreground">
             {t("dailyReport.title")}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t("dailyReport.description")}
           </p>
         </div>
@@ -238,7 +238,7 @@ export default function DailyReports() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-4 py-2 text-sm font-semibold text-white hover:bg-[#02556D]"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-hover"
           >
             <Printer className="h-4 w-4" />
             {t("dailyReport.print")}
@@ -246,8 +246,8 @@ export default function DailyReports() {
         )}
       </header>
 
-      <section className="no-print grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-        <label className="text-sm font-medium text-gray-700">
+      <section className="no-print grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:grid-cols-3">
+        <label className="text-sm font-medium text-foreground">
           {t("dailyReport.class")}
           <select
             value={classKey}
@@ -258,7 +258,7 @@ export default function DailyReports() {
               setClassKey(event.target.value);
               setClassId(nextGroup?.divisions[0]?.id || "");
             }}
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
             disabled={!classGroups.length}
           >
             <option value="">{t("dailyReport.chooseClass")}</option>
@@ -270,12 +270,12 @@ export default function DailyReports() {
             ))}
           </select>
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-foreground">
           {t("dailyReport.division")}
           <select
             value={classId}
             onChange={(event) => setClassId(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-input bg-card px-3 py-2"
             disabled={!selectedGroup?.divisions.length}
           >
             <option value="">{t("dailyReport.chooseDivision")}</option>
@@ -286,33 +286,33 @@ export default function DailyReports() {
             ))}
           </select>
         </label>
-        <label className="text-sm font-medium text-gray-700">
+        <label className="text-sm font-medium text-foreground">
           {t("dailyReport.date")}
           <input
             type="date"
             value={reportDate}
             max={localDateValue()}
             onChange={(event) => setReportDate(event.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-input px-3 py-2"
           />
         </label>
       </section>
 
       <form onSubmit={saveReport} className="space-y-6">
-        <section className="print-area rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 pb-4">
+        <section className="print-area rounded-xl border border-border bg-card p-5 shadow-sm">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">
+              <h2 className="text-xl font-bold text-foreground">
                 {t("dailyReport.title")}
               </h2>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {selectedClass?.name || "—"}
                 {selectedClass?.section ? ` · ${selectedClass.section}` : ""}
                 {reportDate ? ` · ${dateLabel(reportDate)}` : ""}
               </p>
             </div>
             {report?.updatedAt && (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 {t("dailyReport.lastUpdated")}:{" "}
                 {timestampLabel(report.updatedAt)}
                 {report.updatedByName ? ` · ${report.updatedByName}` : ""}
@@ -339,7 +339,7 @@ export default function DailyReports() {
                   type="number"
                   value={displayCounts[key]}
                   readOnly
-                  className="mt-1 block w-full rounded-md border border-current/20 bg-white/70 px-3 py-2 text-lg font-bold"
+                  className="mt-1 block w-full rounded-md border border-current/20 bg-card/70 px-3 py-2 text-lg font-bold"
                 />
               </label>
             ))}
@@ -347,7 +347,7 @@ export default function DailyReports() {
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <h3 className="font-semibold text-gray-900">
+              <h3 className="font-semibold text-foreground">
                 {t("dailyReport.absentNames")}
               </h3>
               {editable && (
@@ -355,7 +355,7 @@ export default function DailyReports() {
                   <select
                     value={newAbsentId}
                     onChange={(event) => setNewAbsentId(event.target.value)}
-                    className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                    className="min-w-0 flex-1 rounded-lg border border-input bg-card px-3 py-2 text-sm"
                   >
                     <option value="">{t("dailyReport.chooseStudent")}</option>
                     {selectableAbsentStudents.map((student) => (
@@ -368,7 +368,7 @@ export default function DailyReports() {
                     type="button"
                     onClick={addAbsentStudent}
                     disabled={!newAbsentId}
-                    className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-lg bg-secondary px-3 py-2 text-sm font-medium text-foreground disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
                     {t("dailyReport.addAbsent")}
@@ -377,9 +377,9 @@ export default function DailyReports() {
               )}
             </div>
             {draft.absences.length ? (
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <div className="overflow-x-auto rounded-lg border border-border">
                 <table className="min-w-full text-start text-sm">
-                  <thead className="bg-gray-50 text-gray-600">
+                  <thead className="bg-muted text-muted-foreground">
                     <tr>
                       <th className="text-start px-4 py-2">
                         {t("dailyReport.studentName")}
@@ -402,9 +402,9 @@ export default function DailyReports() {
                       return (
                         <tr
                           key={absence.studentId}
-                          className="border-t border-gray-100"
+                          className="border-t border-border"
                         >
-                          <td className="px-4 py-2 font-medium text-gray-900">
+                          <td className="px-4 py-2 font-medium text-foreground">
                             {student?.studentName || absence.studentName || "—"}
                           </td>
                           <td className="px-4 py-2">
@@ -422,7 +422,7 @@ export default function DailyReports() {
                                     })
                                   }
                                   required
-                                  className="w-1/4 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm"
+                                  className="w-1/4 rounded-md border border-input bg-card px-3 py-1.5 text-sm"
                                 >
                                   <option value="">
                                     {t("dailyReport.chooseAbsenceType")}
@@ -450,7 +450,7 @@ export default function DailyReports() {
                                       )}
                                       maxLength={1000}
                                       required
-                                      className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+                                      className="w-full rounded-md border border-input px-3 py-1.5 text-sm"
                                     />
                                   </div>
                                 )}
@@ -488,15 +488,15 @@ export default function DailyReports() {
                 </table>
               </div>
             ) : (
-              <p className="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">
+              <p className="rounded-lg bg-muted p-4 text-sm text-muted-foreground">
                 {t("dailyReport.noAbsences")}
               </p>
             )}
           </section>
         </section>
 
-        <section className="print-area space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-900">
+        <section className="print-area space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-foreground">
             {t("dailyReport.dutyTitle")}
           </h2>
           {[
@@ -507,7 +507,7 @@ export default function DailyReports() {
           ].map(([field, labelKey]) => (
             <label
               key={field}
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-foreground"
             >
               {t(`dailyReport.${labelKey}`)}
               <textarea
@@ -516,9 +516,9 @@ export default function DailyReports() {
                 value={draft[field] || ""}
                 onChange={(event) => updateDraft(field, event.target.value)}
                 readOnly={!editable}
-                className="daily-report-edit-text mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm read-only:bg-gray-50"
+                className="daily-report-edit-text mt-1 w-full rounded-lg border border-input px-3 py-2 text-sm read-only:bg-muted"
               />
-              <div className="daily-report-print-text mt-1 rounded-lg border border-gray-300 px-3 py-2 text-sm">
+              <div className="daily-report-print-text mt-1 rounded-lg border border-input px-3 py-2 text-sm">
                 {draft[field] || "—"}
               </div>
             </label>
@@ -530,7 +530,7 @@ export default function DailyReports() {
             <button
               type="submit"
               disabled={saving || loading || !classId || !validAbsences}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#036A87] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#02556D] disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
             >
               <Save className="h-4 w-4" />
               {saving ? t("dailyReport.saving") : t("dailyReport.save")}
@@ -538,12 +538,12 @@ export default function DailyReports() {
           </div>
         )}
         {!report && !loading && !editable && (
-          <p className="no-print rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+          <p className="no-print rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
             {t("dailyReport.noReport")}
           </p>
         )}
         {loading && (
-          <p className="no-print text-center text-sm text-gray-500">
+          <p className="no-print text-center text-sm text-muted-foreground">
             {t("dailyReport.loading")}
           </p>
         )}

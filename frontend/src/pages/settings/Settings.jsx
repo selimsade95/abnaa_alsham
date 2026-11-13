@@ -17,9 +17,9 @@ const ENTITIES = [
 ];
 
 const inputClass =
-  "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#04CDF9] focus:outline-none focus:ring-2 focus:ring-[#04CDF9]/20 disabled:bg-gray-50";
+  "w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-[#04CDF9]/20 disabled:bg-muted";
 const cardClass =
-  "rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6";
+  "rounded-2xl border border-border bg-card p-5 shadow-sm sm:p-6";
 
 export default function Settings() {
   const {
@@ -39,7 +39,7 @@ export default function Settings() {
 
   if (loading || !data)
     return (
-      <div className="py-16 text-center text-gray-500">
+      <div className="py-16 text-center text-muted-foreground">
         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" /> جاري التحميل...
       </div>
     );
@@ -54,7 +54,7 @@ export default function Settings() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-8">
-      <header className="rounded-2xl bg-gradient-to-l from-[#036A87] to-[#04A9CE] p-6 text-white shadow-sm sm:p-8">
+      <header className="rounded-2xl bg-gradient-to-l from-primary to-brand-hover p-6 text-white shadow-sm sm:p-8">
         <div className="flex items-start gap-4">
           <div className="rounded-xl bg-white/15 p-3">
             <Hash className="h-6 w-6" />
@@ -70,19 +70,19 @@ export default function Settings() {
 
       <section className={cardClass}>
         <div className="mb-5 flex items-start gap-3">
-          <div className="rounded-lg bg-cyan-50 p-2 text-[#036A87]">
+          <div className="rounded-lg bg-accent p-2 text-accent-foreground">
             <Hash className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-foreground">
               توليد الأكواد
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               خصص بادئة وصيغة الرمز لكل نوع من السجلات.
             </p>
           </div>
         </div>
-        <div className="mb-4 rounded-lg bg-gray-50 px-4 py-3 text-xs leading-6 text-gray-600">
+        <div className="mb-4 rounded-lg bg-muted px-4 py-3 text-xs leading-6 text-muted-foreground">
           الرموز المدعومة: <code>{"{PREFIX}"}</code> · <code>{"{YEAR}"}</code> ·{" "}
           <code>{"{YEAR2}"}</code> · <code>{"{SEQ}"}</code> ·{" "}
           <code>{"{SEQ:4}"}</code> · <code>{"{SEQ:6}"}</code>
@@ -91,13 +91,13 @@ export default function Settings() {
           {ENTITIES.map((entity) => (
             <div
               key={entity.key}
-              className="rounded-xl border border-gray-200 bg-gray-50/70 p-4"
+              className="rounded-xl border border-border bg-muted/70 p-4"
             >
-              <h3 className="mb-3 text-sm font-semibold text-gray-800">
+              <h3 className="mb-3 text-sm font-semibold text-foreground">
                 {entity.label}
               </h3>
               <div className="space-y-3">
-                <label className="block text-xs text-gray-500">
+                <label className="block text-xs text-muted-foreground">
                   البادئة
                   <input
                     disabled={!canEdit}
@@ -115,7 +115,7 @@ export default function Settings() {
                     className={`${inputClass} mt-1`}
                   />
                 </label>
-                <label className="block text-xs text-gray-500">
+                <label className="block text-xs text-muted-foreground">
                   الصيغة
                   <input
                     disabled={!canEdit}
@@ -136,13 +136,13 @@ export default function Settings() {
                   />
                 </label>
                 <div>
-                  <span className="block text-xs text-gray-500">معاينة</span>
+                  <span className="block text-xs text-muted-foreground">معاينة</span>
                   <div
                     data-testid={`preview-${entity.key}`}
                     className={`mt-1 rounded-lg border px-3 py-2 text-sm font-mono ${
                       preview[entity.key]?.startsWith?.("ERROR")
                         ? "border-red-200 bg-red-50 text-red-700"
-                        : "border-cyan-100 bg-cyan-50 text-[#036A87]"
+                        : "border-border bg-accent text-accent-foreground"
                     }`}
                   >
                     {preview[entity.key] || "..."}
@@ -152,7 +152,7 @@ export default function Settings() {
             </div>
           ))}
         </div>
-        <label className="mt-4 flex items-center gap-3 rounded-lg border border-gray-200 p-4 text-sm text-gray-700">
+        <label className="mt-4 flex items-center gap-3 rounded-lg border border-border p-4 text-sm text-foreground">
           <input
             disabled={!canEdit}
             type="checkbox"
@@ -176,8 +176,8 @@ export default function Settings() {
             <BadgePercent className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">فئات الخصم</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-foreground">فئات الخصم</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               تظهر هذه الخيارات في نموذج الطالب عند تفعيل الخصم.
             </p>
           </div>
@@ -187,9 +187,9 @@ export default function Settings() {
             {discountOptions.map((option, index) => (
               <div
                 key={`${index}-${option.name}`}
-                className="grid gap-3 rounded-xl border border-gray-200 p-3 sm:grid-cols-[1fr_180px_200px_auto] sm:items-end"
+                className="grid gap-3 rounded-xl border border-border p-3 sm:grid-cols-[1fr_180px_200px_auto] sm:items-end"
               >
-                <label className="block text-xs text-gray-500">
+                <label className="block text-xs text-muted-foreground">
                   اسم الفئة
                   <input
                     disabled={!canEdit}
@@ -208,7 +208,7 @@ export default function Settings() {
                     placeholder="مثال: خصم الإخوة"
                   />
                 </label>
-                <label className="block text-xs text-gray-500">
+                <label className="block text-xs text-muted-foreground">
                   نوع الخصم
                   <select
                     disabled={!canEdit}
@@ -229,7 +229,7 @@ export default function Settings() {
                     <option value="siblings_staff">خصم الإخوة/أبناء الكادر</option>
                   </select>
                 </label>
-                <label className="block text-xs text-gray-500">
+                <label className="block text-xs text-muted-foreground">
                   نسبة الخصم
                   <div className="relative mt-1">
                     <input
@@ -251,7 +251,7 @@ export default function Settings() {
                       data-testid={`discount-percentage-${index}`}
                       className={`${inputClass} pe-8`}
                     />
-                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-gray-400">
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-muted-foreground">
                       %
                     </span>
                   </div>
@@ -274,7 +274,7 @@ export default function Settings() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+          <div className="rounded-xl border border-dashed border-input bg-muted px-4 py-6 text-center text-sm text-muted-foreground">
             لم تتم إضافة فئات خصم بعد.
           </div>
         )}
@@ -288,7 +288,7 @@ export default function Settings() {
               ])
             }
             data-testid="add-discount-option"
-            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#04CDF9]/50 px-4 py-2 text-sm font-medium text-[#036A87] hover:bg-cyan-50"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#04CDF9]/50 px-4 py-2 text-sm font-medium text-accent-foreground hover:bg-accent"
           >
             <Plus className="h-4 w-4" /> إضافة فئة خصم
           </button>
@@ -301,10 +301,10 @@ export default function Settings() {
             <Route className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-foreground">
               مسارات التسجيل
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               حدد المسارات المتاحة للاختيار عند تسجيل الطلاب.
             </p>
           </div>
@@ -362,7 +362,7 @@ export default function Settings() {
                 registrationPaths.includes(newRegistrationPath.trim())
               }
               title="إضافة المسار"
-              className="rounded-lg p-2 text-[#036A87] hover:bg-cyan-50 disabled:opacity-40"
+              className="rounded-lg p-2 text-accent-foreground hover:bg-accent disabled:opacity-40"
             >
               <Plus className="h-5 w-5" />
             </button>
@@ -375,7 +375,7 @@ export default function Settings() {
           <button
             onClick={save}
             data-testid="save-settings-btn"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#04A9CE] px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-[#038BAB]"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-semibold text-white shadow-sm hover:bg-brand-hover"
           >
             <Save className="h-4 w-4" /> حفظ الإعدادات
           </button>

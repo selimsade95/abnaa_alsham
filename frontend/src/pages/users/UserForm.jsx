@@ -114,7 +114,7 @@ export default function UserForm() {
 
   if (loading) {
     return (
-      <div className="py-16 text-center text-gray-500">
+      <div className="py-16 text-center text-muted-foreground">
         <Loader2 className="ms-2 inline h-4 w-4 animate-spin" />
         جاري التحميل...
       </div>
@@ -126,25 +126,25 @@ export default function UserForm() {
       <header>
         <Link
           to={isEditing ? `/users/${id}` : "/users"}
-          className="mb-3 inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-900"
+          className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowRight className="h-4 w-4" />
           {isEditing ? "تفاصيل المستخدم" : "المستخدمون"}
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold text-foreground">
           {isEditing ? "تعديل المستخدم" : "إضافة مستخدم"}
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           حدد بيانات الحساب والأدوار والفروع المسموح بها.
         </p>
       </header>
 
       <form
         onSubmit={save}
-        className="space-y-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7"
+        className="space-y-6 rounded-xl border border-border bg-card p-5 shadow-sm sm:p-7"
       >
         <section className="grid gap-4 sm:grid-cols-2">
-          <label className="text-sm font-medium text-gray-700">
+          <label className="text-sm font-medium text-foreground">
             الاسم
             <input
               required
@@ -153,10 +153,10 @@ export default function UserForm() {
                 setForm({ ...form, name: event.target.value })
               }
               data-testid="user-name-input"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-input px-3 py-2"
             />
           </label>
-          <label className="text-sm font-medium text-gray-700">
+          <label className="text-sm font-medium text-foreground">
             اسم المستخدم
             <input
               required
@@ -166,10 +166,10 @@ export default function UserForm() {
                 setForm({ ...form, username: event.target.value })
               }
               data-testid="user-username-input"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-50"
+              className="mt-1 w-full rounded-lg border border-input px-3 py-2 disabled:bg-muted"
             />
           </label>
-          <label className="text-sm font-medium text-gray-700 sm:col-span-2">
+          <label className="text-sm font-medium text-foreground sm:col-span-2">
             {isEditing ? "كلمة مرور جديدة (اختياري)" : "كلمة المرور"}
             <input
               type="password"
@@ -180,18 +180,18 @@ export default function UserForm() {
                 setForm({ ...form, password: event.target.value })
               }
               data-testid="user-password-input"
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="mt-1 w-full rounded-lg border border-input px-3 py-2"
             />
           </label>
         </section>
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold text-gray-800">الأدوار</h2>
-          <div className="grid gap-2 rounded-lg border border-gray-200 p-3 sm:grid-cols-2">
+          <h2 className="mb-2 text-sm font-semibold text-foreground">الأدوار</h2>
+          <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
             {roles.map((role) => (
               <label
                 key={role.id}
-                className="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700"
+                className="flex cursor-pointer items-center gap-2 py-1 text-sm text-foreground"
               >
                 <input
                   type="checkbox"
@@ -202,28 +202,28 @@ export default function UserForm() {
                 />
                 <span>{role.name}</span>
                 {role.description && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     — {role.description}
                   </span>
                 )}
               </label>
             ))}
             {roles.length === 0 && (
-              <p className="text-sm text-gray-500">لا توجد أدوار متاحة.</p>
+              <p className="text-sm text-muted-foreground">لا توجد أدوار متاحة.</p>
             )}
           </div>
         </section>
 
         {user?.branches?.length > 1 && (
           <section>
-            <h2 className="mb-2 text-sm font-semibold text-gray-800">
+            <h2 className="mb-2 text-sm font-semibold text-foreground">
               فروع الوصول
             </h2>
-            <div className="grid gap-2 rounded-lg border border-gray-200 p-3 sm:grid-cols-2">
+            <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
               {user.branches.map((branch) => (
                 <label
                   key={branch.id}
-                  className="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700"
+                  className="flex cursor-pointer items-center gap-2 py-1 text-sm text-foreground"
                 >
                   <input
                     type="checkbox"
@@ -238,14 +238,14 @@ export default function UserForm() {
           </section>
         )}
 
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           ربط بحساب معلم
           <select
             value={form.teacherId}
             onChange={(event) =>
               setForm({ ...form, teacherId: event.target.value })
             }
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-input px-3 py-2"
           >
             <option value="">— بدون ربط —</option>
             {teachers
@@ -262,10 +262,10 @@ export default function UserForm() {
           </select>
         </label>
 
-        <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Link
             to={isEditing ? `/users/${id}` : "/users"}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700"
+            className="rounded-lg border border-input px-4 py-2 text-sm text-foreground"
           >
             إلغاء
           </Link>
@@ -273,7 +273,7 @@ export default function UserForm() {
             type="submit"
             disabled={saving}
             data-testid="user-submit-btn"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#04CDF9] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
