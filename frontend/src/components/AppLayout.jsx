@@ -214,6 +214,13 @@ export default function AppLayout() {
           show: has("settings.codeGeneration.view"),
         },
         {
+          to: "/recitation-settings",
+          label: t("recitation.settings"),
+          icon: SettingsIcon,
+          testid: "nav-recitation-settings",
+          show: has("recitations.configure"),
+        },
+        {
           to: "/audit-logs",
           label: t("navigation.auditLogs"),
           icon: ClipboardList,

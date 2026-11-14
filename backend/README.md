@@ -75,6 +75,19 @@ Set `SEED_ADMIN_PASSWORD` before starting with an empty user database. For
 existing installations, change any administrator password previously set to
 the old default.
 
+## Reading and recitation
+
+Set up rating bands, mistake deductions, and custom books in **Recitation
+settings** for the active branch. Each rating's minimum is inclusive.
+Grant staff the existing role editor entries under Recitations to view, record,
+publish, or configure sessions. Staff record a session from the student's
+profile. Published sessions show page scores, mistakes, and notes in the
+parent portal. Historical scores keep the rules used when the session was saved.
+
+The checked-in Quran page ranges use the first and last verse pages for each
+Juz from the [Quran Foundation Madani Mushaf layout](https://api-docs.quran.foundation/docs/tutorials/fonts/page-layout/).
+Some boundary pages belong to both adjacent Juz and are scored once per session.
+
 ## Grade announcements
 
 Grant `announcements.manage` to staff who should prepare and track WhatsApp

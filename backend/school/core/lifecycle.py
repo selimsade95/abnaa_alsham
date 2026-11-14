@@ -152,6 +152,7 @@ async def on_startup():
 
     await raw_db.parent_access_cards.create_index("digest", unique=True)
     await raw_db.access_attempts.create_index("expiresAt", expireAfterSeconds=0)
+    await raw_db.recitations.create_index([("branchId", 1), ("studentId", 1), ("createdAt", -1), ("id", -1)])
     await raw_db.grade_announcements.create_index(
         [("branchId", 1), ("grade", 1), ("createdAt", -1), ("id", -1)],
     )

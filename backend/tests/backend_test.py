@@ -893,7 +893,7 @@ class TestStudents:
             assert records.status_code == 200
             assert requests.post(portal_url, json={"accessCode": credentials["accessCode"]}).json() == records.json()
             assert records.headers["Cache-Control"] == "no-store"
-            assert set(records.json()) == {"name", "className", "section", "grades", "attendance", "notes"}
+            assert set(records.json()) == {"name", "className", "section", "grades", "attendance", "notes", "recitations"}
             notes = {note["content"] for note in records.json()["notes"]}
             assert "Parent portal shared note" in notes
             assert "Parent portal private note" not in notes
@@ -1698,6 +1698,59 @@ class TestStudentDocument:
 
 
 # ---------- RBAC ----------
+
+def test_recitation_scores_and_publication(admin_headers, created_student, reg_staff_headers):
+    settings_url = f"{API}/recitations/settings"
+    session_url = f"{API}/students/{created_student['id']}/recitations"
+    assert requests.get(settings_url, headers=reg_staff_headers[0]).status_code == 403
+    config = {
+        "books": [{"id": "rashidi", "title": "Rashidi", "pageCount": 16}],
+        "mistakes": [{"id": "ikhfa", "title": "Ikhfa", "deduction": 1.5}],
+        "ratings": [
+            {"id": "practice", "title": "Practice", "minimum": 0},
+            {"id": "excellent", "title": "Excellent", "minimum": 98},
+        ],
+    }
+    settings = requests.put(settings_url, headers=admin_headers, json=config).json()
+    assert len(settings["juz"]) == 30
+    assert settings["juz"][2]["end"] == settings["juz"][3]["start"] == 62
+    body = {
+        "source": "quran", "settingsVersion": settings["version"], "startJuz": 1, "endJuz": 1,
+        "startPage": 15, "endPage": 16, "pages": [
+            {"page": 15, "mistakes": [
+                {"typeId": "ikhfa", "word": "first"},
+                {"typeId": "ikhfa", "word": "second", "note": "Practice this word"},
+            ]},
+            {"page": 16},
+        ],
+    }
+    assert requests.post(session_url, headers=admin_headers, json={**body, "startJuz": 2}).status_code == 422
+    record = requests.post(session_url, headers=admin_headers, json=body)
+    assert record.status_code == 200, record.text
+    session = record.json()
+    assert session["pages"][0]["score"] == 97
+    assert session["score"] == 98.5 and session["rating"] == "Excellent"
+    book = {**body, "source": "book", "bookId": "rashidi", "startJuz": None, "endJuz": None}
+    assert requests.post(session_url, headers=admin_headers, json=book).json()["score"] == 98.5
+    config["mistakes"][0]["deduction"] = 5
+    requests.put(settings_url, headers=admin_headers, json=config).raise_for_status()
+    assert requests.post(session_url, headers=admin_headers, json=body).status_code == 409
+
+    card_url = f"{API}/students/{created_student['id']}/parent-access"
+    access_code = requests.post(card_url, headers=admin_headers).json()["accessCode"]
+    try:
+        portal = f"{API}/parent-access"
+        assert requests.post(portal, json={"accessCode": access_code}).json()["recitations"] == []
+        requests.put(f"{session_url}/{session['id']}/publication", headers=admin_headers, json={
+            "published": True,
+        }).raise_for_status()
+        records = requests.post(portal, json={"accessCode": access_code}).json()["recitations"]
+        assert len(records) == 1 and records[0]["score"] == 98.5
+        assert records[0]["pages"][0]["mistakes"][1] == {
+            "type": "Ikhfa", "deduction": 1.5, "word": "second", "note": "Practice this word",
+        }
+    finally:
+        requests.delete(card_url, headers=admin_headers)
 
 def test_quick_search_by_code_and_name(admin_headers, created_student, created_teacher, created_class):
     for group, record, name in (

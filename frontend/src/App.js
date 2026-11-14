@@ -34,6 +34,8 @@ import Branches from "@/pages/branches/Branches";
 import Subjects from "@/pages/subjects/Subjects";
 import Grades from "@/pages/grades/Grades";
 import GradeAnnouncements from "@/pages/announcements/GradeAnnouncements";
+import StudentRecitations from "@/pages/recitations/StudentRecitations";
+import RecitationSettings from "@/pages/recitations/RecitationSettings";
 import Homework from "@/pages/homework/Homework";
 import Attendance from "@/pages/attendance/Attendance";
 import DailyReports from "@/pages/daily-reports/DailyReports";
@@ -171,6 +173,10 @@ function App() {
                   <StudentForm mode="edit" />
                 </Protected>
               }
+            />
+            <Route
+              path="/students/:id/recitations"
+              element={<Protected perm={["recitations.view", "recitations.create"]}><StudentRecitations /></Protected>}
             />
             <Route
               path="/students/:id/full-information"
@@ -368,6 +374,10 @@ function App() {
                   <Roles />
                 </Protected>
               }
+            />
+            <Route
+              path="/recitation-settings"
+              element={<Protected perm="recitations.configure"><RecitationSettings /></Protected>}
             />
             <Route
               path="/settings"

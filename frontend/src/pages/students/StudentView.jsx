@@ -496,6 +496,11 @@ export default function StudentView() {
         </div>
       )}
       <ConfirmAction action={pendingAction} onClose={() => setPendingAction(null)} />
+      {(has("recitations.view") || has("recitations.create")) && (
+        <Link to={`/students/${id}/recitations`} className="inline-block rounded-lg border bg-card px-3 py-2 text-sm font-semibold text-accent-foreground">
+          {translate("recitation.title")}
+        </Link>
+      )}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <button

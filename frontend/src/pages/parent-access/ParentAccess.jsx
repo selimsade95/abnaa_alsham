@@ -3,6 +3,8 @@ import axios from "axios";
 import { getLanguage, t } from "@/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import { SessionDetails } from "@/pages/recitations/RecitationControls";
+import { useTranslation } from "react-i18next";
 import { API } from "@/lib/api";
 
 const attendanceLabels = { present: "حاضر", absent: "غائب", early_dismissal: "انصراف مبكر", truancy: "غياب أثناء الدوام" };
@@ -46,6 +48,7 @@ function Records({ title, headers, rows, empty }) {
 }
 
 export default function ParentAccess() {
+  const { t: translate } = useTranslation();
   const [scanCode, setScanCode] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("access"));
   const [accessCode, setAccessCode] = useState("");
   const [records, setRecords] = useState(null);
@@ -114,6 +117,12 @@ export default function ParentAccess() {
                 entry.lateMinutes ?? "—",
               ])}
               empty="لا توجد سجلات حضور." />
+            <section className="space-y-3 rounded-xl border bg-card p-5">
+              <h2 className="text-lg font-bold">{translate("recitation.recent")}</h2>
+              {records.recitations?.length
+                ? records.recitations.map((session) => <SessionDetails key={session.id} session={session} />)
+                : <p className="text-sm text-muted-foreground">{translate("recitation.empty")}</p>}
+            </section>
             <section className="rounded-xl border bg-card p-5">
               <h2 className="mb-3 text-lg font-bold">ملاحظات المدرسة</h2>
               {records.notes.length ? records.notes.map((note, index) => (

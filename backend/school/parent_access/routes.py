@@ -8,6 +8,7 @@ from pydantic import BaseModel, SecretStr
 
 from school.core.database import JWT_SECRET, raw_db
 from school.core.rate_limit import limit_attempts
+from school.recitations.routes import parent_sessions
 from school.core.services import ensure_student_access, now_iso, require_permission
 
 
@@ -118,7 +119,9 @@ async def view_student(body: ParentAccessIn, request: Request, response: Respons
         if note.get("shareWithParent") is True and note.get("content")
     ]
     notes.sort(key=lambda note: note["date"] or "", reverse=True)
+    recitations = await parent_sessions(sid, card["branchId"])
     response.headers["Cache-Control"] = "no-store"
     return {"name": student["student"].get("fullName"),
             "className": (classroom or {}).get("name") or student["student"].get("newClass"),
-            "section": (classroom or {}).get("section"), "grades": grades, "attendance": attendance, "notes": notes}
+            "section": (classroom or {}).get("section"), "grades": grades, "attendance": attendance,
+            "notes": notes, "recitations": recitations}

@@ -24,6 +24,7 @@ from school.homework.routes import router as homework_router
 from school.messages.routes import router as messages_router
 from school.parent_access.routes import router as parent_access_router
 from school.payments.routes import router as payments_router
+from school.recitations.routes import router as recitations_router
 from school.reports.financial import router as financial_reports_router
 from school.reports.routes import router as reports_router
 from school.roles.routes import router as roles_router
@@ -69,6 +70,7 @@ for router in (
     grades_router,
     student_documents_router,
     payments_router,
+    recitations_router,
     settings_router,
     dashboard_filters_router,
     daily_reports_router,
